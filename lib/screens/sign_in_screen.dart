@@ -1,5 +1,4 @@
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
-import 'package:deskconn_mobile_app/screens/dashboard_screen.dart';
 import 'package:deskconn_mobile_app/screens/forgot_password_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_up_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
@@ -7,6 +6,8 @@ import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import 'desktop_list_screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -96,8 +97,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                    const DashboardScreen(),
+                                    builder: (_) => const DesktopListScreen(),
                                   ),
                                 );
                               }
