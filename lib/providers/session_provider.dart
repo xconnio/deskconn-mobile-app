@@ -4,6 +4,8 @@ import 'package:xconn/xconn.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
+import '../core/device/cryptosign_keys.dart';
+import '../core/device/device_identity.dart';
 import '../screens/sign_in_screen.dart';
 
 class SessionProvider extends ChangeNotifier {
@@ -56,6 +58,7 @@ class SessionProvider extends ChangeNotifier {
       loggedIn = true;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_email', email);
+      await _registerDeviceIfNeeded();
     } catch (e) {
       error = e.toString();
       _setLoading(false);
@@ -104,6 +107,33 @@ class SessionProvider extends ChangeNotifier {
         builder: (_) => const SignInScreen(),
       ),
           (route) => false,
+    );
+  }
+
+
+  Future<void> _registerDeviceIfNeeded() async {
+    final exists = await DeviceIdentity.exists();
+    if (exists) return;
+
+    final privateKey = CryptoSignKeys.generatePrivateKey();
+    final publicKey = CryptoSignKeys.derivePublicKey(privateKey);
+
+    final deviceId = 'mobile-${DateTime
+        .now()
+        .millisecondsSinceEpoch}';
+
+    final res = await session!.call(
+      'io.xconn.deskconn.device.create',
+      args: [deviceId, publicKey],
+    );
+
+    if (res.args == null || res.args!.isEmpty) {
+      throw Exception('Device registration failed');
+    }
+
+    await DeviceIdentity.save(
+      deviceId: deviceId,
+      privateKey: privateKey,
     );
   }
 }
