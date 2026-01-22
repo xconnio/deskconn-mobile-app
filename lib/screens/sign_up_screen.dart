@@ -7,6 +7,8 @@ import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/validators.dart';
+
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -18,6 +20,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final emailCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+
+  String? emailError;
+  String? nameError;
+  String? passwordError;
+
 
   @override
   Widget build(BuildContext context) {
@@ -55,27 +62,48 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         children: [
                           TextField(
                             controller: emailCtrl,
-                            enabled: !auth.isLoading,
-                            decoration:
-                            const InputDecoration(labelText: 'Email'),
+                            onChanged: (v) {
+                              setState(() {
+                                emailError = Validators.email(v);
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Email',
+                              errorText: emailError,
+                            ),
                           ),
+
                           const SizedBox(height: 16),
 
                           TextField(
                             controller: nameCtrl,
-                            enabled: !auth.isLoading,
-                            decoration:
-                            const InputDecoration(labelText: 'Username'),
+                            onChanged: (v) {
+                              setState(() {
+                                nameError = Validators.name(v);
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Username',
+                              errorText: nameError,
+                            ),
                           ),
+
                           const SizedBox(height: 16),
 
                           TextField(
                             controller: passCtrl,
-                            enabled: !auth.isLoading,
                             obscureText: true,
-                            decoration:
-                            const InputDecoration(labelText: 'Password'),
+                            onChanged: (v) {
+                              setState(() {
+                                passwordError = Validators.password(v);
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              errorText: passwordError,
+                            ),
                           ),
+
 
                           const SizedBox(height: 24),
 
@@ -96,6 +124,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             onPressed: () async {
                               FocusScope.of(context).unfocus();
 
+                              setState(() {
+                                emailError = Validators.email(emailCtrl.text);
+                                nameError = Validators.name(nameCtrl.text);
+                                passwordError = Validators.password(passCtrl.text);
+                              });
+
+                              if (emailError != null || nameError != null || passwordError != null) {
+                                return;
+                              }
+
                               final ok = await auth.createAccount(
                                 email: emailCtrl.text.trim(),
                                 name: nameCtrl.text.trim(),
@@ -107,8 +145,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                    const VerifyOtpScreen(),
+                                    builder: (_) => const VerifyOtpScreen(),
                                   ),
                                 );
                               }

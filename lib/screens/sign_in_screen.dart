@@ -7,6 +7,7 @@ import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/validators.dart';
 import 'desktop_list_screen.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -19,6 +20,10 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  String? emailError;
+  String? passwordError;
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -56,18 +61,33 @@ class _SignInScreenState extends State<SignInScreen> {
                         children: [
                           TextField(
                             controller: emailCtrl,
-                            enabled: !session.isLoading,
-                            decoration: const InputDecoration(labelText: 'Email'),
+                            onChanged: (v) {
+                              setState(() {
+                                emailError = Validators.email(v);
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Email',
+                              errorText: emailError,
+                            ),
                           ),
+
                           const SizedBox(height: 16),
 
                           TextField(
                             controller: passCtrl,
-                            enabled: !session.isLoading,
                             obscureText: true,
-                            decoration:
-                            const InputDecoration(labelText: 'Password'),
+                            onChanged: (v) {
+                              setState(() {
+                                passwordError = Validators.password(v);
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              errorText: passwordError,
+                            ),
                           ),
+
 
                           const SizedBox(height: 24),
 
@@ -87,6 +107,15 @@ class _SignInScreenState extends State<SignInScreen> {
                               : ElevatedButton(
                             onPressed: () async {
                               FocusScope.of(context).unfocus();
+
+                              setState(() {
+                                emailError = Validators.email(emailCtrl.text);
+                                passwordError = Validators.password(passCtrl.text);
+                              });
+
+                              if (emailError != null ||  passwordError != null) {
+                                return;
+                              }
 
                               await session.login(
                                 emailCtrl.text.trim(),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/wamp/ui.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/logo.dart';
+import '../widgets/validators.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -16,6 +17,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailCtrl = TextEditingController();
   final otpCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+
+  String? emailError;
 
   bool _otpSent = false;
   bool _loading = false;
@@ -53,7 +56,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                     TextField(
                       controller: emailCtrl,
-                      decoration: const InputDecoration(labelText: "Email"),
+                      onChanged: (v) {
+                        setState(() {
+                          emailError = Validators.email(v);
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        errorText: emailError,
+                      ),
                     ),
 
                     const SizedBox(height: 16),
@@ -62,6 +73,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _loading
                           ? null
                           : () async {
+                        setState(() {
+                          emailError = Validators.email(emailCtrl.text);
+                        });
+
+                        if (emailError != null) {
+                          return;
+                        }
                         setState(() => _loading = true);
                         final ok = await auth.requestPasswordReset(
                           emailCtrl.text.trim(),
@@ -100,6 +118,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _loading
                           ? null
                           : () async {
+
                         setState(() => _loading = true);
                         final ok = await auth.resetPassword(
                           otp: otpCtrl.text.trim(),
