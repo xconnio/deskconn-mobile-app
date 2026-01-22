@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -14,7 +15,14 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.person),
             title: const Text('Account'),
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AccountScreen(),
+                  ),
+              );
+            },
           ),
         ],
       ),
