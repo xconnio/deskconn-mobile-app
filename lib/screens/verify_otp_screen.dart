@@ -5,6 +5,7 @@ import '../core/wamp/ui.dart';
 import '../providers/auth_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/logo.dart';
+import '../widgets/validators.dart';
 import 'dashboard_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
@@ -17,6 +18,8 @@ class VerifyOtpScreen extends StatefulWidget {
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   final otpCtrl = TextEditingController();
   bool _loading = false;
+
+  String? requiredError;
 
   @override
   Widget build(BuildContext context) {
@@ -53,16 +56,42 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     decoration: const InputDecoration(labelText: "OTP"),
                   ),
 
+                  TextField(
+                    controller: otpCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    enabled: !_loading,
+                    onChanged: (v) {
+                      setState(() {
+                        requiredError = Validators.required(v);
+                      });
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'OTP',
+                      errorText: requiredError,
+                    ),
+                  ),
+
+
                   const SizedBox(height: 12),
 
                   ElevatedButton(
                     onPressed: _loading
                         ? null
                         : () async {
+                      setState(() {
+                        requiredError = Validators.required(otpCtrl.text);
+                      });
+
+                      if (requiredError != null ) {
+                        return;
+                      }
+
                       if (otpCtrl.text.length != 6) return;
 
                       FocusScope.of(context).unfocus(); // ✅ close keyboard
                       setState(() => _loading = true);
+
 
                       final ok =
                       await auth.verifyOtp(otpCtrl.text.trim());
