@@ -6,6 +6,7 @@ import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/validators.dart';
 import 'desktop_list_screen.dart';
@@ -23,7 +24,19 @@ class _SignInScreenState extends State<SignInScreen> {
   String? emailError;
   String? passwordError;
 
+  @override
+  void initState() {
+    super.initState();
+    _restoreEmail();
+  }
 
+  Future<void> _restoreEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('last_email');
+    if (email != null) {
+      emailCtrl.text = email;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

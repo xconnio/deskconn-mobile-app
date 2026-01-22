@@ -1,6 +1,8 @@
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 
 import '../screens/sign_in_screen.dart';
 
@@ -52,6 +54,8 @@ class SessionProvider extends ChangeNotifier {
 
       notifyListeners();
       loggedIn = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_email', email);
     } catch (e) {
       error = e.toString();
       _setLoading(false);
