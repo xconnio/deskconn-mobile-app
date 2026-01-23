@@ -2,6 +2,7 @@ import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'devices_screen.dart';
+import 'organizations_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -38,6 +39,19 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.business),
+            title: const Text('Organizations'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OrganizationsScreen(),
+                ),
+              );
+            },
+          ),
+
 
         ],
       ),
