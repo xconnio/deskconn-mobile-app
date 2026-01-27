@@ -5,7 +5,7 @@ import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'desktop_list_screen.dart';
+import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -16,18 +16,12 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: const [
-            DeskconnLogo(size: 24),
-            SizedBox(width: 12),
-            Text("Deskconn"),
-          ],
-        ),
+        title: Row(children: const [DeskconnLogo(size: 24), SizedBox(width: 12), Text("Deskconn")]),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              context.read<SessionProvider>().logout(context);
+              context.read<SessionProvider>().logout();
             },
           ),
         ],
@@ -39,37 +33,20 @@ class DashboardScreen extends StatelessWidget {
             _DashboardTile(
               icon: Icons.desktop_windows,
               title: "Desktops",
-              subtitle: session.desktopsLoading
-                  ? "Loading..."
-                  : "${session.desktops.length} connected",
+              subtitle: session.desktopsLoading ? "Loading..." : "${session.desktops.length} connected",
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DesktopListScreen(),
-                  ),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
               },
             ),
-            _DashboardTile(
-              icon: Icons.devices,
-              title: "Devices",
-              subtitle: "Manage trusted devices", onTap: () {},
-            ),
+            _DashboardTile(icon: Icons.devices, title: "Devices", subtitle: "Manage trusted devices", onTap: () {}),
             _DashboardTile(
               icon: Icons.person,
               title: "Account",
               subtitle: "Profile & appearance",
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AccountScreen(),
-                  ),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
               },
             ),
-
           ],
         ),
       ),
@@ -83,20 +60,13 @@ class _DashboardTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
-  const _DashboardTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  const _DashboardTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
       child: ListTile(
         leading: Icon(icon, size: 32),
         title: Text(title),

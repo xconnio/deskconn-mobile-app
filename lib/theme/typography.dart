@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 
 class DeskconnTypography {
   static TextStyle title(BuildContext context) {
-    return Theme.of(context).textTheme.headlineSmall!.copyWith(
-      fontWeight: FontWeight.w600,
-    );
+    return Theme.of(context).textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w600);
   }
 
   static TextStyle body(BuildContext context) {
@@ -12,9 +10,6 @@ class DeskconnTypography {
   }
 
   static TextStyle error(BuildContext context) {
-    return Theme.of(context)
-        .textTheme
-        .bodySmall!
-        .copyWith(color: Theme.of(context).colorScheme.error);
+    return Theme.of(context).textTheme.bodySmall!.copyWith(color: Theme.of(context).colorScheme.error);
   }
 }

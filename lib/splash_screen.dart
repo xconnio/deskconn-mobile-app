@@ -9,8 +9,7 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scale;
 
@@ -18,24 +17,15 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
 
-    _scale = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
+    _scale = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
 
     _controller.forward();
 
     Future.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SignInScreen()),
-      );
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
     });
   }
 
@@ -43,10 +33,7 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: ScaleTransition(
-          scale: _scale,
-          child: const DeskconnLogo(size: 72),
-        ),
+        child: ScaleTransition(scale: _scale, child: const DeskconnLogo(size: 72)),
       ),
     );
   }

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/wamp/ui.dart';
-import '../providers/auth_provider.dart';
-import '../widgets/logo.dart';
-import '../widgets/validators.dart';
+import 'package:deskconn_mobile_app/core/wamp/ui.dart';
+import 'package:deskconn_mobile_app/providers/auth_provider.dart';
+import 'package:deskconn_mobile_app/widgets/logo.dart';
+import 'package:deskconn_mobile_app/widgets/validators.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -33,9 +33,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: Center(
         child: Card(
           elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
           child: SizedBox(
             width: DeskconnUI.cardWidth,
             child: Padding(
@@ -48,10 +46,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   const SizedBox(height: 16),
 
                   if (!_otpSent) ...[
-                    const Text(
-                      "Enter your email to receive a reset code",
-                      textAlign: TextAlign.center,
-                    ),
+                    const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
 
                     TextField(
@@ -61,10 +56,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           emailError = Validators.email(v);
                         });
                       },
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        errorText: emailError,
-                      ),
+                      decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                     ),
 
                     const SizedBox(height: 16),
@@ -73,30 +65,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _loading
                           ? null
                           : () async {
-                        setState(() {
-                          emailError = Validators.email(emailCtrl.text);
-                        });
+                              setState(() {
+                                emailError = Validators.email(emailCtrl.text);
+                              });
 
-                        if (emailError != null) {
-                          return;
-                        }
-                        setState(() => _loading = true);
-                        final ok = await auth.requestPasswordReset(
-                          emailCtrl.text.trim(),
-                        );
-                        setState(() => _loading = false);
+                              if (emailError != null) {
+                                return;
+                              }
+                              setState(() => _loading = true);
+                              final ok = await auth.requestPasswordReset(emailCtrl.text.trim());
+                              setState(() => _loading = false);
 
-                        if (ok) {
-                          setState(() => _otpSent = true);
-                        }
-                      },
+                              if (ok) {
+                                setState(() => _otpSent = true);
+                              }
+                            },
                       child: const Text("Send reset code"),
                     ),
                   ] else ...[
-                    const Text(
-                      "Enter the code and your new password",
-                      textAlign: TextAlign.center,
-                    ),
+                    const Text("Enter the code and your new password", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
 
                     TextField(
@@ -109,8 +96,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     TextField(
                       controller: passCtrl,
                       obscureText: true,
-                      decoration:
-                      const InputDecoration(labelText: "New password"),
+                      decoration: const InputDecoration(labelText: "New password"),
                     ),
                     const SizedBox(height: 16),
 
@@ -118,18 +104,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _loading
                           ? null
                           : () async {
+                              setState(() => _loading = true);
+                              final ok = await auth.resetPassword(otp: otpCtrl.text.trim(), newPassword: passCtrl.text);
+                              setState(() => _loading = false);
 
-                        setState(() => _loading = true);
-                        final ok = await auth.resetPassword(
-                          otp: otpCtrl.text.trim(),
-                          newPassword: passCtrl.text,
-                        );
-                        setState(() => _loading = false);
-
-                        if (ok && mounted) {
-                          Navigator.pop(context);
-                        }
-                      },
+                              if (ok && context.mounted) {
+                                Navigator.pop(context);
+                              }
+                            },
                       child: const Text("Reset password"),
                     ),
                   ],

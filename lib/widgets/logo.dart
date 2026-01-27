@@ -8,10 +8,6 @@ class DeskconnLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/logo/deskconn_logo.svg',
-      height: size,
-      width: size,
-    );
+    return SvgPicture.asset('assets/logo/deskconn_logo.svg', height: size, width: size);
   }
 }

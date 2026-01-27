@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/wamp/ui.dart';
-import '../providers/auth_provider.dart';
-import '../providers/session_provider.dart';
-import '../widgets/logo.dart';
-import '../widgets/validators.dart';
-import 'dashboard_screen.dart';
+import 'package:deskconn_mobile_app/core/wamp/ui.dart';
+import 'package:deskconn_mobile_app/providers/auth_provider.dart';
+import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/widgets/logo.dart';
+import 'package:deskconn_mobile_app/widgets/validators.dart';
+import 'package:deskconn_mobile_app/screens/dashboard_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   const VerifyOtpScreen({super.key});
@@ -30,9 +30,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       appBar: AppBar(title: const Text("Verify email")),
       body: Center(
         child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
           child: SizedBox(
             width: DeskconnUI.cardWidth,
             child: Padding(
@@ -42,20 +40,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 children: [
                   const DeskconnLogo(),
                   const SizedBox(height: 16),
-                  const Text(
-                    "Enter the 6-digit code sent to your email",
-                    textAlign: TextAlign.center,
-                  ),
+                  const Text("Enter the 6-digit code sent to your email", textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-
-                  TextField(
-                    controller: otpCtrl,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    enabled: !_loading,
-                    decoration: const InputDecoration(labelText: "OTP"),
-                  ),
-
                   TextField(
                     controller: otpCtrl,
                     keyboardType: TextInputType.number,
@@ -66,79 +52,52 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                         requiredError = Validators.required(v);
                       });
                     },
-                    decoration: InputDecoration(
-                      labelText: 'OTP',
-                      errorText: requiredError,
-                    ),
+                    decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
                   ),
-
-
                   const SizedBox(height: 12),
-
                   ElevatedButton(
                     onPressed: _loading
                         ? null
                         : () async {
-                      setState(() {
-                        requiredError = Validators.required(otpCtrl.text);
-                      });
+                            setState(() {
+                              requiredError = Validators.required(otpCtrl.text);
+                            });
 
-                      if (requiredError != null ) {
-                        return;
-                      }
+                            if (requiredError != null) return;
+                            if (otpCtrl.text.length != 6) return;
 
-                      if (otpCtrl.text.length != 6) return;
+                            FocusScope.of(context).unfocus();
+                            setState(() => _loading = true);
 
-                      FocusScope.of(context).unfocus(); // ✅ close keyboard
-                      setState(() => _loading = true);
+                            final ctx = context;
 
+                            final ok = await auth.verifyOtp(otpCtrl.text.trim());
 
-                      final ok =
-                      await auth.verifyOtp(otpCtrl.text.trim());
+                            if (!ctx.mounted) return;
 
-                      if (ok && mounted) {
-                        await context
-                            .read<SessionProvider>()
-                            .login(
-                          auth.pendingEmail!,
-                          auth.pendingPassword!,
-                        );
+                            if (ok) {
+                              await ctx.read<SessionProvider>().login(auth.pendingEmail!, auth.pendingPassword!);
 
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                            const DashboardScreen(),
-                          ),
-                              (_) => false,
-                        );
-                      }
+                              if (!ctx.mounted) return;
 
-                      if (mounted) {
-                        setState(() => _loading = false);
-                      }
-                    },
+                              Navigator.pushAndRemoveUntil(
+                                ctx,
+                                MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                                (_) => false,
+                              );
+                            } else {
+                              setState(() => _loading = false);
+                            }
+                          },
                     child: _loading
-                        ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Text("Verify"),
                   ),
-
-                  TextButton(
-                    onPressed: _loading ? null : auth.resendOtp,
-                    child: const Text("Resend code"),
-                  ),
-
+                  TextButton(onPressed: _loading ? null : auth.resendOtp, child: const Text("Resend code")),
                   if (auth.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        auth.error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
+                      child: Text(auth.error!, style: const TextStyle(color: Colors.red)),
                     ),
                 ],
               ),
