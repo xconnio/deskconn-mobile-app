@@ -19,13 +19,13 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.32.0
+          flutter-version: 3.38.7
 
       - name: Cache Pub dependencies
         uses: actions/cache@v3
         with:
           path: ${{ github.workspace }}/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}-v2
           restore-keys: |
             ${{ runner.os }}-pub-
 
