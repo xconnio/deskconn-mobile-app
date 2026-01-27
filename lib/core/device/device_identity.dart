@@ -7,10 +7,7 @@ class DeviceIdentity {
 
   static final _secure = const FlutterSecureStorage();
 
-  static Future<void> save({
-    required String deviceId,
-    required String privateKey,
-  }) async {
+  static Future<void> save({required String deviceId, required String privateKey}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_deviceIdKey, deviceId);
     await _secure.write(key: _privateKeyKey, value: privateKey);

@@ -3,7 +3,6 @@ import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/theme/inputs.dart';
 import 'package:flutter/material.dart';
 
-
 class DeskconnTheme {
   static ThemeData light() {
     final scheme = ColorScheme.light(
@@ -21,11 +20,7 @@ class DeskconnTheme {
       textTheme: ThemeData.light().textTheme,
       inputDecorationTheme: DeskconnInputs.light(),
       elevatedButtonTheme: DeskconnButtons.light,
-      appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-        elevation: 0,
-      ),
+      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, elevation: 0),
     );
   }
 
@@ -44,11 +39,7 @@ class DeskconnTheme {
       textTheme: ThemeData.dark().textTheme,
       inputDecorationTheme: DeskconnInputs.dark(),
       elevatedButtonTheme: DeskconnButtons.dark,
-      appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-        elevation: 0,
-      ),
+      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, elevation: 0),
     );
   }
 }

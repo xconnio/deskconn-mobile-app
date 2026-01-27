@@ -30,10 +30,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call(
-        "io.xconn.deskconn.account.create",
-        args: [email, name, role, password],
-      );
+      await _client.session.call("io.xconn.deskconn.account.create", args: [email, name, role, password]);
 
       pendingEmail = email;
       _pendingPassword = password;
@@ -61,10 +58,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call(
-        "io.xconn.deskconn.account.verify",
-        args: [pendingEmail, otp],
-      );
+      await _client.session.call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp]);
 
       await _client.disconnect();
       notifyListeners();
@@ -82,10 +76,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call(
-        "io.xconn.deskconn.account.otp.resend",
-        args: [pendingEmail],
-      );
+      await _client.session.call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail]);
 
       await _client.disconnect();
     } catch (e) {
@@ -101,10 +92,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call(
-        "io.xconn.deskconn.account.password.forget",
-        args: [email],
-      );
+      await _client.session.call("io.xconn.deskconn.account.password.forget", args: [email]);
 
       pendingEmail = email;
       await _client.disconnect();
@@ -117,10 +105,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> resetPassword({
-    required String otp,
-    required String newPassword,
-  }) async {
+  Future<bool> resetPassword({required String otp, required String newPassword}) async {
     if (pendingEmail == null) {
       error = "No pending password reset";
       notifyListeners();
@@ -133,14 +118,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call(
-        "io.xconn.deskconn.account.password.reset",
-        args: [
-          pendingEmail,
-          newPassword,
-          otp,
-        ],
-      );
+      await _client.session.call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp]);
 
       await _client.disconnect();
       notifyListeners();
@@ -151,5 +129,4 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
   }
-
 }

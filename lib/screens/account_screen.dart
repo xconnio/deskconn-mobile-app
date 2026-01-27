@@ -1,8 +1,8 @@
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/session_provider.dart';
-import 'sign_in_screen.dart';
+import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -53,20 +53,21 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final res = await session.session!.call(
         'io.xconn.deskconn.account.update',
-        kwargs: {
-          'name': nameCtrl.text.trim(),
-        },
+        kwargs: {'name': nameCtrl.text.trim()},
       );
 
-      if (res.args != null && res.args!.isNotEmpty) {
-        session.account = Map<String, dynamic>.from(res.args![0]);
-        session.notifyListeners();
+      if (!mounted) return;
+
+      if (res.args.isNotEmpty) {
+        session.updateAccount(Map<String, dynamic>.from(res.args[0]));
       }
     } catch (_) {}
 
-    setState(() {
-      savingProfile = false;
-    });
+    if (mounted) {
+      setState(() {
+        savingProfile = false;
+      });
+    }
   }
 
   Future<void> _changePassword() async {
@@ -74,25 +75,21 @@ class _AccountScreenState extends State<AccountScreen> {
 
     if (!_canChangePassword) return;
 
-    final session = context.read<SessionProvider>();
-
     setState(() {
       savingPassword = true;
     });
 
     try {
-      await session.session!.call(
-        'io.xconn.deskconn.account.update',
-        kwargs: {
-          'password': passCtrl.text,
-        },
-      );
+      final session = context.read<SessionProvider>();
+      await session.session!.call('io.xconn.deskconn.account.update', kwargs: {'password': passCtrl.text});
       passCtrl.clear();
     } catch (_) {}
 
-    setState(() {
-      savingPassword = false;
-    });
+    if (mounted) {
+      setState(() {
+        savingPassword = false;
+      });
+    }
   }
 
   Future<void> _confirmDelete() async {
@@ -103,20 +100,14 @@ class _AccountScreenState extends State<AccountScreen> {
           title: const Text('Delete account'),
           content: const Text('This action cannot be undone.'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
           ],
         );
       },
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       _delete();
     }
   }
@@ -127,17 +118,14 @@ class _AccountScreenState extends State<AccountScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      await session.session!.call(
-        'io.xconn.deskconn.account.delete',
-      );
+      await session.session!.call('io.xconn.deskconn.account.delete');
     } catch (_) {}
 
-    await session.logout(context);
+    await session.logout();
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const SignInScreen()),
-          (_) => false,
-    );
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const SignInScreen()), (_) => false);
   }
 
   @override
@@ -147,109 +135,65 @@ class _AccountScreenState extends State<AccountScreen> {
     final account = session.account;
 
     if (account == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Account'),
-      ),
+      appBar: AppBar(title: const Text('Account')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           SwitchListTile(
             title: const Text('Dark mode'),
-            subtitle: Text(
-              theme.mode == ThemeMode.dark ? 'Enabled' : 'Disabled',
-            ),
+            subtitle: Text(theme.mode == ThemeMode.dark ? 'Enabled' : 'Disabled'),
             value: theme.mode == ThemeMode.dark,
             onChanged: (enabled) {
-              theme.setTheme(
-                enabled ? ThemeMode.dark : ThemeMode.light,
-              );
+              theme.setTheme(enabled ? ThemeMode.dark : ThemeMode.light);
             },
-            secondary: Icon(
-              theme.mode == ThemeMode.dark
-                  ? Icons.dark_mode
-                  : Icons.light_mode,
-            ),
+            secondary: Icon(theme.mode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode),
           ),
-
           const SizedBox(height: 12),
-
           const Text('Email'),
           const SizedBox(height: 4),
           Text(account['email'] ?? ''),
           const SizedBox(height: 12),
-
           const Text('Role'),
           const SizedBox(height: 4),
           Text(account['role'] ?? ''),
           const SizedBox(height: 24),
-
           TextField(
             controller: nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-            ),
+            decoration: const InputDecoration(labelText: 'Name'),
             onChanged: (_) => setState(() {}),
           ),
-
           const SizedBox(height: 16),
-
           savingProfile
-              ? const Center(
-            child: SizedBox(
-              height: 22,
-              width: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
+              ? const Center(child: SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2)))
               : ElevatedButton(
-            onPressed: _canUpdateProfile ? _updateProfile : null,
-            child: const Text('Update profile'),
-          ),
-
+                  onPressed: _canUpdateProfile ? _updateProfile : null,
+                  child: const Text('Update profile'),
+                ),
           const SizedBox(height: 32),
           const Text('Security'),
           const SizedBox(height: 12),
-
           TextField(
             controller: passCtrl,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'New password',
-            ),
+            decoration: const InputDecoration(labelText: 'New password'),
             onChanged: (_) => setState(() {}),
           ),
-
           const SizedBox(height: 16),
-
           savingPassword
-              ? const Center(
-            child: SizedBox(
-              height: 22,
-              width: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
+              ? const Center(child: SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2)))
               : ElevatedButton(
-            onPressed:
-            _canChangePassword ? _changePassword : null,
-            child: const Text('Change password'),
-          ),
-
+                  onPressed: _canChangePassword ? _changePassword : null,
+                  child: const Text('Change password'),
+                ),
           const SizedBox(height: 40),
           const Divider(),
           const SizedBox(height: 16),
-
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: _confirmDelete,
             child: const Text('Delete account'),
           ),

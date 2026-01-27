@@ -10,17 +10,13 @@ class DeskconnLoader extends StatefulWidget {
   State<DeskconnLoader> createState() => _DeskconnLoaderState();
 }
 
-class _DeskconnLoaderState extends State<DeskconnLoader>
-    with SingleTickerProviderStateMixin {
+class _DeskconnLoaderState extends State<DeskconnLoader> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
   }
 
   @override
@@ -33,9 +29,9 @@ class _DeskconnLoaderState extends State<DeskconnLoader>
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: AbsorbPointer(
-        absorbing: true, // blocks interaction underneath
+        absorbing: true,
         child: Container(
-          color: Colors.black.withOpacity(0.05), // very subtle dim
+          color: Colors.orange.withValues(alpha: 0.2),
           child: Center(
             child: FadeTransition(
               opacity: Tween(begin: 0.4, end: 1.0).animate(_controller),
@@ -45,10 +41,7 @@ class _DeskconnLoaderState extends State<DeskconnLoader>
                   const DeskconnLogo(size: 64),
                   if (widget.message != null) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      widget.message!,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
+                    Text(widget.message!, style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ],
               ),

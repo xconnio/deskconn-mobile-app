@@ -44,6 +44,7 @@ dependencies:
   xconn:
     git: https://github.com/xconnio/xconn-dart
 
+  crypto: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -24,10 +24,7 @@ class ThemeProvider extends ChangeNotifier {
 
     if (value == null) return;
 
-    _mode = ThemeMode.values.firstWhere(
-          (e) => e.name == value,
-      orElse: () => ThemeMode.system,
-    );
+    _mode = ThemeMode.values.firstWhere((e) => e.name == value, orElse: () => ThemeMode.system);
 
     notifyListeners();
   }

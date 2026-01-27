@@ -1,12 +1,10 @@
+import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
+import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
-import '../core/device/cryptosign_keys.dart';
-import '../core/device/device_identity.dart';
-import '../screens/sign_in_screen.dart';
 
 class SessionProvider extends ChangeNotifier {
   final _client = WampClient();
@@ -15,10 +13,8 @@ class SessionProvider extends ChangeNotifier {
   Map<String, dynamic>? account;
   String? error;
 
-
   bool _isLoading = false;
   bool loggedIn = false;
-
 
   bool get isLoading => _isLoading;
 
@@ -27,35 +23,34 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateAccount(Map<String, dynamic> newAccountData) {
+    account = newAccountData;
+    notifyListeners();
+  }
+
   List<Map<String, dynamic>> desktops = [];
   bool desktopsLoading = false;
-
 
   Future<void> login(String email, String password) async {
     error = null;
     _setLoading(true);
-    notifyListeners();
 
     try {
-      session = await _client.connectCra(
-        email: email,
-        password: password,
-      );
+      session = await _client.connectCra(email: email, password: password);
 
-      final res = await session!.call(
-        "io.xconn.deskconn.account.get",
-      );
+      final res = await session!.call("io.xconn.deskconn.account.get");
 
-      if (res.args == null || res.args!.isEmpty) {
+      if (res.args.isEmpty) {
         throw Exception("Empty account response");
       }
 
-      account = Map<String, dynamic>.from(res.args![0]);
+      account = Map<String, dynamic>.from(res.args[0]);
 
       await loadDesktops();
 
-      notifyListeners();
       loggedIn = true;
+      notifyListeners();
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_email', email);
       await _registerDeviceIfNeeded();
@@ -77,11 +72,8 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await session!.call(
-        "io.xconn.deskconn.desktop.list",
-      );
-
-      desktops = List<Map<String, dynamic>>.from(res.args ?? []);
+      final res = await session!.call("io.xconn.deskconn.desktop.list");
+      desktops = List<Map<String, dynamic>>.from(res.args);
     } catch (e) {
       error = "Failed to load desktops";
     } finally {
@@ -90,26 +82,19 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout(BuildContext context) async {
+  Future<void> logout() async {
     try {
       await session?.close();
     } catch (_) {}
 
     session = null;
+    account = null;
+    desktops.clear();
     loggedIn = false;
     _setLoading(false);
 
-
     notifyListeners();
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const SignInScreen(),
-      ),
-          (route) => false,
-    );
   }
-
 
   Future<void> _registerDeviceIfNeeded() async {
     final exists = await DeviceIdentity.exists();
@@ -118,22 +103,14 @@ class SessionProvider extends ChangeNotifier {
     final privateKey = CryptoSignKeys.generatePrivateKey();
     final publicKey = CryptoSignKeys.derivePublicKey(privateKey);
 
-    final deviceId = 'mobile-${DateTime
-        .now()
-        .millisecondsSinceEpoch}';
+    final deviceId = 'mobile-${DateTime.now().millisecondsSinceEpoch}';
 
-    final res = await session!.call(
-      'io.xconn.deskconn.device.create',
-      args: [deviceId, publicKey],
-    );
+    final res = await session!.call('io.xconn.deskconn.device.create', args: [deviceId, publicKey]);
 
-    if (res.args == null || res.args!.isEmpty) {
+    if (res.args.isEmpty) {
       throw Exception('Device registration failed');
     }
 
-    await DeviceIdentity.save(
-      deviceId: deviceId,
-      privateKey: privateKey,
-    );
+    await DeviceIdentity.save(deviceId: deviceId, privateKey: privateKey);
   }
 }

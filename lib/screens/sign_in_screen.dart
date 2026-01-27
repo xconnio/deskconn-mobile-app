@@ -8,8 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../widgets/validators.dart';
-import 'desktop_list_screen.dart';
+import 'package:deskconn_mobile_app/widgets/validators.dart';
+import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -34,7 +34,11 @@ class _SignInScreenState extends State<SignInScreen> {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString('last_email');
     if (email != null) {
-      emailCtrl.text = email;
+      if (mounted) {
+        setState(() {
+          emailCtrl.text = email;
+        });
+      }
     }
   }
 
@@ -43,11 +47,7 @@ class _SignInScreenState extends State<SignInScreen> {
     final session = context.watch<SessionProvider>();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: const [ThemeToggleButton()],
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, actions: const [ThemeToggleButton()]),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -62,9 +62,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                 Card(
                   elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: SizedBox(
                     width: 380,
                     child: Padding(
@@ -79,10 +77,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 emailError = Validators.email(v);
                               });
                             },
-                            decoration: InputDecoration(
-                              labelText: 'Email',
-                              errorText: emailError,
-                            ),
+                            decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
 
                           const SizedBox(height: 16),
@@ -95,57 +90,49 @@ class _SignInScreenState extends State<SignInScreen> {
                                 passwordError = Validators.password(v);
                               });
                             },
-                            decoration: InputDecoration(
-                              labelText: 'Password',
-                              errorText: passwordError,
-                            ),
+                            decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
                           ),
-
 
                           const SizedBox(height: 24),
 
-                          session.isLoading
-                              ? const Padding(
-                            padding:
-                            EdgeInsets.symmetric(vertical: 14),
-                            child: Center(
-                              child: SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                          if (session.isLoading)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                              child: Center(
+                                child: SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
                               ),
+                            )
+                          else
+                            ElevatedButton(
+                              onPressed: () async {
+                                FocusScope.of(context).unfocus();
+
+                                setState(() {
+                                  emailError = Validators.email(emailCtrl.text);
+                                  passwordError = Validators.password(passCtrl.text);
+                                });
+
+                                if (emailError != null || passwordError != null) {
+                                  return;
+                                }
+
+                                await session.login(emailCtrl.text.trim(), passCtrl.text);
+
+                                if (!context.mounted) return;
+
+                                if (session.loggedIn) {
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const DesktopListScreen()),
+                                  );
+                                }
+                              },
+                              child: const Text('Sign in'),
                             ),
-                          )
-                              : ElevatedButton(
-                            onPressed: () async {
-                              FocusScope.of(context).unfocus();
-
-                              setState(() {
-                                emailError = Validators.email(emailCtrl.text);
-                                passwordError = Validators.password(passCtrl.text);
-                              });
-
-                              if (emailError != null ||  passwordError != null) {
-                                return;
-                              }
-
-                              await session.login(
-                                emailCtrl.text.trim(),
-                                passCtrl.text,
-                              );
-
-                              if (session.loggedIn && mounted) {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const DesktopListScreen(),
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text('Sign in'),
-                          ),
 
                           if (session.error != null) ...[
                             const SizedBox(height: 12),
@@ -163,14 +150,11 @@ class _SignInScreenState extends State<SignInScreen> {
                               onPressed: session.isLoading
                                   ? null
                                   : () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                    const ForgotPasswordScreen(),
-                                  ),
-                                );
-                              },
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                                      );
+                                    },
                               child: const Text('Forgot password?'),
                             ),
                           ),
@@ -180,14 +164,8 @@ class _SignInScreenState extends State<SignInScreen> {
                             onPressed: session.isLoading
                                 ? null
                                 : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                  const SignUpScreen(),
-                                ),
-                              );
-                            },
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpScreen()));
+                                  },
                             child: const Text('Create account'),
                           ),
                         ],

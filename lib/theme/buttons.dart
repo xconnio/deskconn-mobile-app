@@ -7,9 +7,7 @@ class DeskconnButtons {
       backgroundColor: DeskconnColors.primary,
       foregroundColor: DeskconnColors.onPrimary,
       minimumSize: const Size.fromHeight(48),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
   );
 
@@ -18,9 +16,7 @@ class DeskconnButtons {
       backgroundColor: Colors.white,
       foregroundColor: DeskconnColors.darkBackground,
       minimumSize: const Size.fromHeight(48),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
   );
 }

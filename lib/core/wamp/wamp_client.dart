@@ -7,10 +7,7 @@ class WampClient {
 
   Session get session => _session!;
 
-  Future<Session> connectCra({
-    required String email,
-    required String password,
-  }) async {
+  Future<Session> connectCra({required String email, required String password}) async {
     await disconnect();
 
     _client = Client(
@@ -21,10 +18,7 @@ class WampClient {
       ),
     );
 
-    _session = await _client!.connect(
-      DeskconnConfig.wampUrl,
-      DeskconnConfig.realm,
-    );
+    _session = await _client!.connect(DeskconnConfig.wampUrl, DeskconnConfig.realm);
 
     return _session!;
   }
@@ -35,18 +29,12 @@ class WampClient {
     _client = Client(
       config: ClientConfig(
         serializer: JSONSerializer(),
-        authenticator: CryptoSignAuthenticator(
-          DeskconnConfig.serviceAuthId,
-          DeskconnConfig.servicePrivateKey,
-        ),
+        authenticator: CryptoSignAuthenticator(DeskconnConfig.serviceAuthId, DeskconnConfig.servicePrivateKey),
         keepAliveInterval: const Duration(seconds: 10),
       ),
     );
 
-    _session = await _client!.connect(
-      DeskconnConfig.wampUrl,
-      DeskconnConfig.realm,
-    );
+    _session = await _client!.connect(DeskconnConfig.wampUrl, DeskconnConfig.realm);
 
     return _session!;
   }
