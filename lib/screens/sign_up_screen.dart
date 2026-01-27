@@ -42,7 +42,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 const SizedBox(height: 12),
                 Text('Deskconn', style: DeskconnTypography.title(context)),
                 const SizedBox(height: 32),
-
                 Card(
                   elevation: 1,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -62,9 +61,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
-
                           const SizedBox(height: 16),
-
                           TextField(
                             controller: nameCtrl,
                             onChanged: (v) {
@@ -74,9 +71,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             },
                             decoration: InputDecoration(labelText: 'Username', errorText: nameError),
                           ),
-
                           const SizedBox(height: 16),
-
                           TextField(
                             controller: passCtrl,
                             obscureText: true,
@@ -87,9 +82,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             },
                             decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
                           ),
-
                           const SizedBox(height: 24),
-
                           auth.isLoading
                               ? const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 14),
@@ -131,7 +124,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                   },
                                   child: const Text('Create account'),
                                 ),
-
                           if (auth.error != null) ...[
                             const SizedBox(height: 12),
                             Text(
@@ -140,7 +132,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               style: const TextStyle(color: Colors.red),
                             ),
                           ],
-
                           const Divider(),
                           TextButton(
                             onPressed: auth.isLoading

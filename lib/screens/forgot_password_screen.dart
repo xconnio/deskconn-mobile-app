@@ -44,11 +44,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 children: [
                   const Center(child: DeskconnLogo()),
                   const SizedBox(height: 16),
-
                   if (!_otpSent) ...[
                     const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
-
                     TextField(
                       controller: emailCtrl,
                       onChanged: (v) {
@@ -58,9 +56,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       },
                       decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                     ),
-
                     const SizedBox(height: 16),
-
                     ElevatedButton(
                       onPressed: _loading
                           ? null
@@ -85,21 +81,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ] else ...[
                     const Text("Enter the code and your new password", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
-
                     TextField(
                       controller: otpCtrl,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: "OTP"),
                     ),
                     const SizedBox(height: 12),
-
                     TextField(
                       controller: passCtrl,
                       obscureText: true,
                       decoration: const InputDecoration(labelText: "New password"),
                     ),
                     const SizedBox(height: 16),
-
                     ElevatedButton(
                       onPressed: _loading
                           ? null
@@ -115,7 +108,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       child: const Text("Reset password"),
                     ),
                   ],
-
                   if (auth.error != null) ...[
                     const SizedBox(height: 12),
                     Text(

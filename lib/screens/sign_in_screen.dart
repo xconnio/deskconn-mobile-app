@@ -59,7 +59,6 @@ class _SignInScreenState extends State<SignInScreen> {
                 const SizedBox(height: 12),
                 Text('Deskconn', style: DeskconnTypography.title(context)),
                 const SizedBox(height: 32),
-
                 Card(
                   elevation: 1,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -79,9 +78,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
-
                           const SizedBox(height: 16),
-
                           TextField(
                             controller: passCtrl,
                             obscureText: true,
@@ -92,9 +89,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             },
                             decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
                           ),
-
                           const SizedBox(height: 24),
-
                           if (session.isLoading)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 14),
@@ -133,7 +128,6 @@ class _SignInScreenState extends State<SignInScreen> {
                               },
                               child: const Text('Sign in'),
                             ),
-
                           if (session.error != null) ...[
                             const SizedBox(height: 12),
                             const Text(
@@ -142,7 +136,6 @@ class _SignInScreenState extends State<SignInScreen> {
                               style: TextStyle(color: Colors.red),
                             ),
                           ],
-
                           const SizedBox(height: 12),
                           Align(
                             alignment: Alignment.centerRight,
@@ -158,7 +151,6 @@ class _SignInScreenState extends State<SignInScreen> {
                               child: const Text('Forgot password?'),
                             ),
                           ),
-
                           const Divider(),
                           TextButton(
                             onPressed: session.isLoading

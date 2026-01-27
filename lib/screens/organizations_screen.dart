@@ -70,14 +70,14 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : orgs.isEmpty
-          ? const Center(child: Text('No organizations'))
-          : ListView.builder(
-              itemCount: orgs.length,
-              itemBuilder: (context, i) {
-                final o = orgs[i];
-                return ListTile(leading: const Icon(Icons.business), title: Text(o['name'] ?? ''));
-              },
-            ),
+              ? const Center(child: Text('No organizations'))
+              : ListView.builder(
+                  itemCount: orgs.length,
+                  itemBuilder: (context, i) {
+                    final o = orgs[i];
+                    return ListTile(leading: const Icon(Icons.business), title: Text(o['name'] ?? ''));
+                  },
+                ),
     );
   }
 }
