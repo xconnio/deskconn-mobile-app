@@ -37,7 +37,7 @@ jobs:
         run: make install
 
       - name: Build Release APK
-        run: make build-apk --release
+        run: make build-apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
