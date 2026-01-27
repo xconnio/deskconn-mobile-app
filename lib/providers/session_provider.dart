@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 class SessionProvider extends ChangeNotifier {
   final _client = WampClient();
 
