@@ -1,0 +1,39 @@
+name: CI - Quality Checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.32.0
+
+      - name: Cache Pub dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Verify formatting
+        run: make check-format
+
+      - name: Check lint
+        run: make lint
