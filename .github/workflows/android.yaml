@@ -1,4 +1,4 @@
-name: Build APK with Artifacts
+name: Build & Release APK
 
 on:
   push:
@@ -22,25 +22,25 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.32.0
           channel: stable
-          flutter-version: 3.38.7
-
-      - name: Cache Pub dependencies
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}-v2
-          restore-keys: |
-            ${{ runner.os }}-pub-
 
       - name: Install dependencies
         run: make install
 
-      - name: Build Release APK
+      - name: Build APK
         run: make build-apk
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             deskconn-mobile-app.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: deskconn-mobile-apk
-          path: build/app/outputs/flutter-apk/
+          tag_name: latest
+          name: Deskconn Mobile – Latest
+          files: deskconn-mobile-app.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
