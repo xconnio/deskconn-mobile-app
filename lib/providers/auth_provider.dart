@@ -18,19 +18,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> createAccount({
-    required String email,
-    required String name,
-    required String role,
-    required String password,
-  }) async {
+  Future<bool> createAccount({required String email, required String name, required String password}) async {
     error = null;
     _setLoading(true);
 
     try {
       await _client.connectCryptoSign();
 
-      await _client.session.call("io.xconn.deskconn.account.create", args: [email, name, role, password]);
+      await _client.session.call("io.xconn.deskconn.account.create", args: [email, name, password]);
 
       pendingEmail = email;
       _pendingPassword = password;
