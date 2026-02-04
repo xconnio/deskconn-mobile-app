@@ -118,7 +118,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                     final ok = await auth.createAccount(
                                       email: emailCtrl.text.trim(),
                                       name: nameCtrl.text.trim(),
-                                      role: 'user',
                                       password: passCtrl.text,
                                     );
 
