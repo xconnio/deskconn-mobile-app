@@ -14,7 +14,7 @@ class DesktopListScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Devices'),
+        title: const Text('Desktops'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),

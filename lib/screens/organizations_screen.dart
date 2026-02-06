@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/screens/organization_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -75,7 +76,18 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               itemCount: orgs.length,
               itemBuilder: (context, i) {
                 final o = orgs[i];
-                return ListTile(leading: const Icon(Icons.business), title: Text(o['name'] ?? ''));
+                return ListTile(
+                  leading: const Icon(Icons.business),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OrganizationDetailsScreen(id: o['id'], name: o['name']),
+                      ),
+                    );
+                  },
+                  title: Text(o['name'] ?? ''),
+                );
               },
             ),
     );

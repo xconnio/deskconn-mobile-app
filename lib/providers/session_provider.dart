@@ -12,10 +12,17 @@ class SessionProvider extends ChangeNotifier {
   Map<String, dynamic>? account;
   String? error;
 
+  List<Map<String, dynamic>> organizations = [];
+  List<Map<String, dynamic>> invitationsInbox = [];
+  List<Map<String, dynamic>> invitationsOutbox = [];
+
   bool _isLoading = false;
   bool loggedIn = false;
 
   bool get isLoading => _isLoading;
+
+  bool orgLoading = false;
+  bool invitationLoading = false;
 
   void _setLoading(bool v) {
     _isLoading = v;
@@ -46,6 +53,8 @@ class SessionProvider extends ChangeNotifier {
       account = Map<String, dynamic>.from(res.args[0]);
 
       await loadDesktops();
+      await loadOrganizations();
+      await loadInvitations();
 
       loggedIn = true;
       notifyListeners();
@@ -111,5 +120,58 @@ class SessionProvider extends ChangeNotifier {
     }
 
     await DeviceIdentity.save(deviceId: deviceId, privateKey: privateKey);
+  }
+
+  Future<void> loadOrganizations() async {
+    if (session == null) return;
+
+    orgLoading = true;
+    notifyListeners();
+
+    try {
+      final res = await session!.call("io.xconn.deskconn.organization.list");
+
+      organizations = List<Map<String, dynamic>>.from(res.args);
+    } catch (_) {
+      error = "Failed to load organizations";
+    }
+
+    orgLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadInvitations() async {
+    if (session == null) return;
+
+    invitationLoading = true;
+    notifyListeners();
+
+    try {
+      final inboxRes = await session!.call("io.xconn.deskconn.organization.invitation.inbox.list");
+
+      final outboxRes = await session!.call("io.xconn.deskconn.organization.invitation.outbox.list");
+
+      invitationsInbox = List<Map<String, dynamic>>.from(inboxRes.args);
+
+      invitationsOutbox = List<Map<String, dynamic>>.from(outboxRes.args);
+    } catch (_) {
+      error = "Failed to load invitations";
+    }
+
+    invitationLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> respondInvitation(String invitationId, String action) async {
+    await session!.call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action]);
+
+    await loadInvitations();
+    await loadOrganizations();
+  }
+
+  Future<void> createInvitation(String orgId, String email, String role) async {
+    await session!.call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role]);
+
+    await loadInvitations();
   }
 }

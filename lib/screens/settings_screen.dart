@@ -1,4 +1,5 @@
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
+import 'package:deskconn_mobile_app/screens/invitations_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/screens/devices_screen.dart';
@@ -13,6 +14,13 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.inbox),
+            title: const Text('Invitations'),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const InvitationsScreen()));
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.person),
             title: const Text('Account'),
