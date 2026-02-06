@@ -87,7 +87,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             obscureText: true,
                             onChanged: (v) {
                               setState(() {
-                                passwordError = Validators.password(v);
+                                passwordError = Validators.required(v);
                               });
                             },
                             decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
