@@ -59,10 +59,6 @@ class AppShell extends StatelessWidget {
                 },
               ),
 
-              const Spacer(),
-
-              const Divider(),
-
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
                 title: const Text("Logout", style: TextStyle(color: Colors.red)),

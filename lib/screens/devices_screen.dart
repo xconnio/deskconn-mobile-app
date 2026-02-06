@@ -51,25 +51,39 @@ class _DevicesScreenState extends State<DevicesScreen> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return AppShell(
+        title: 'Devices',
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     return AppShell(
       title: 'Devices',
-      body: ListView.builder(
-        itemCount: devices.length,
-        itemBuilder: (context, i) {
-          final d = devices[i];
-          final isThis = d['device_id'] == currentDeviceId;
+      body: devices.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.smartphone_outlined, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text('No authorized devices yet', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                ],
+              ),
+            )
+          : ListView.builder(
+              itemCount: devices.length,
+              itemBuilder: (context, i) {
+                final d = devices[i];
+                final isThis = d['device_id'] == currentDeviceId;
 
-          return ListTile(
-            leading: const Icon(Icons.smartphone),
-            title: Text(d['name'] ?? d['device_id']),
-            subtitle: isThis ? const Text('This device') : null,
-            trailing: TextButton(onPressed: () => _revoke(d['device_id']), child: const Text('Revoke')),
-          );
-        },
-      ),
+                return ListTile(
+                  leading: const Icon(Icons.smartphone),
+                  title: Text(d['name'] ?? d['device_id']),
+                  subtitle: isThis ? const Text('This device') : null,
+                  trailing: TextButton(onPressed: () => _revoke(d['device_id']), child: const Text('Revoke')),
+                );
+              },
+            ),
     );
   }
 }
