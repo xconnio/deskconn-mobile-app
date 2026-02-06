@@ -24,6 +24,10 @@ class DeskconnApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, theme, _) {
+          if (!theme.initialized) {
+            return const SizedBox.shrink();
+          }
+
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: DeskconnTheme.light(),

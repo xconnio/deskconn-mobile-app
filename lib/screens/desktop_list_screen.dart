@@ -16,6 +16,17 @@ class DesktopListScreen extends StatelessWidget {
       title: 'Desktops',
       body: session.desktopsLoading
           ? const Center(child: CircularProgressIndicator())
+          : session.desktops.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.desktop_windows_outlined, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text('No desktop attached yet', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                ],
+              ),
+            )
           : ListView.builder(
               itemCount: session.desktops.length,
               itemBuilder: (context, i) {
