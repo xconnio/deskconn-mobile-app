@@ -1,5 +1,5 @@
 import 'package:deskconn_mobile_app/screens/desktop_details_screen.dart';
-import 'package:deskconn_mobile_app/screens/settings_screen.dart';
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,18 +12,8 @@ class DesktopListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Desktops'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            },
-          ),
-        ],
-      ),
+    return AppShell(
+      title: 'Desktops',
       body: session.desktopsLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(

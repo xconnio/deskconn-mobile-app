@@ -1,4 +1,4 @@
-import 'package:deskconn_mobile_app/providers/theme_provider.dart';
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -130,7 +130,6 @@ class _AccountScreenState extends State<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
     final session = context.watch<SessionProvider>();
     final account = session.account;
 
@@ -138,32 +137,18 @@ class _AccountScreenState extends State<AccountScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
+    return AppShell(
+      title: 'Account',
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          SwitchListTile(
-            title: const Text('Dark mode'),
-            subtitle: Text(theme.mode == ThemeMode.dark ? 'Enabled' : 'Disabled'),
-            value: theme.mode == ThemeMode.dark,
-            onChanged: (enabled) {
-              theme.setTheme(enabled ? ThemeMode.dark : ThemeMode.light);
-            },
-            secondary: Icon(theme.mode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode),
-          ),
-          const SizedBox(height: 12),
           const Text('Email'),
           const SizedBox(height: 4),
           Text(account['email'] ?? ''),
-          const SizedBox(height: 12),
-          const Text('Role'),
-          const SizedBox(height: 4),
-          Text(account['role'] ?? ''),
           const SizedBox(height: 24),
           TextField(
             controller: nameCtrl,
-            decoration: const InputDecoration(labelText: 'Name'),
+            decoration: const InputDecoration(labelText: 'username'),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),

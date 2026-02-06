@@ -1,6 +1,7 @@
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/session_provider.dart';
+import 'package:deskconn_mobile_app/providers/session_provider.dart';
 
 class InvitationsScreen extends StatefulWidget {
   const InvitationsScreen({super.key});
@@ -27,17 +28,16 @@ class _InvitationsScreenState extends State<InvitationsScreen> with SingleTicker
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Invitations'),
-        bottom: TabBar(
-          controller: tabs,
-          tabs: const [
-            Tab(text: "Inbox"),
-            Tab(text: "Outbox"),
-          ],
-        ),
+    return AppShell(
+      title: 'Invitations',
+      bottom: TabBar(
+        controller: tabs,
+        tabs: const [
+          Tab(text: "Inbox"),
+          Tab(text: "Outbox"),
+        ],
       ),
+
       body: session.invitationLoading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(controller: tabs, children: const [_Inbox(), _Outbox()]),

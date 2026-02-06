@@ -1,5 +1,6 @@
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -53,8 +54,8 @@ class _DevicesScreenState extends State<DevicesScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Devices')),
+    return AppShell(
+      title: 'Devices',
       body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, i) {

@@ -92,12 +92,29 @@ class SessionProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     try {
+      final identity = await DeviceIdentity.deviceId();
+
+      if (identity != null) {
+        try {
+          await session?.call('io.xconn.deskconn.device.delete', args: [identity]);
+        } catch (_) {}
+      }
+
       await session?.close();
     } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    await DeviceIdentity.clear();
 
     session = null;
     account = null;
     desktops.clear();
+    organizations.clear();
+    invitationsInbox.clear();
+    invitationsOutbox.clear();
+
     loggedIn = false;
     _setLoading(false);
 
