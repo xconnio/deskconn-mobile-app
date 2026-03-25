@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,7 +46,7 @@ class SessionProvider extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      session = await _client.connectCra(email: email, password: password);
+      session = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
 
       final res = await session!.call("io.xconn.deskconn.account.get");
 
@@ -56,20 +60,60 @@ class SessionProvider extends ChangeNotifier {
       await loadOrganizations();
       await loadInvitations();
 
+      await _registerDevice(email);
+
       loggedIn = true;
       notifyListeners();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_email', email);
-      await _registerDeviceIfNeeded();
     } catch (e) {
       error = e.toString();
-      _setLoading(false);
       session = null;
       account = null;
       desktops.clear();
+      loggedIn = false;
+
       notifyListeners();
+      rethrow;
     }
+
+    _setLoading(false);
+  }
+
+  Future<void> initialize() async {
+    _setLoading(true);
+
+    try {
+      final hasIdentity = await DeviceIdentity.exists();
+
+      if (!hasIdentity) {
+        loggedIn = false;
+      } else {
+        final privateKey = await DeviceIdentity.privateKey();
+        final email = await DeviceIdentity.lastEmail();
+
+        if (privateKey != null && email != null) {
+          session = await _client.connectCryptoSign(authId: email, privateKey: privateKey, realm: DeskconnConfig.realm);
+
+          final res = await session!.call("io.xconn.deskconn.account.get");
+          if (res.args.isEmpty) throw Exception("Empty account");
+
+          account = Map<String, dynamic>.from(res.args[0]);
+
+          await loadDesktops();
+          await loadOrganizations();
+          await loadInvitations();
+
+          loggedIn = true;
+        } else {
+          loggedIn = false;
+        }
+      }
+    } catch (_) {
+      session = null;
+      account = null;
+      desktops.clear();
+      loggedIn = false;
+    }
+
     _setLoading(false);
   }
 
@@ -93,13 +137,11 @@ class SessionProvider extends ChangeNotifier {
   Future<void> logout() async {
     try {
       final identity = await DeviceIdentity.deviceId();
-
       if (identity != null) {
         try {
           await session?.call('io.xconn.deskconn.device.delete', args: [identity]);
         } catch (_) {}
       }
-
       await session?.close();
     } catch (_) {}
 
@@ -121,22 +163,64 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _registerDeviceIfNeeded() async {
-    final exists = await DeviceIdentity.exists();
-    if (exists) return;
-
-    final privateKey = CryptoSignKeys.generatePrivateKey();
-    final publicKey = CryptoSignKeys.derivePublicKey(privateKey);
-
-    final deviceId = 'mobile-${DateTime.now().millisecondsSinceEpoch}';
-
-    final res = await session!.call('io.xconn.deskconn.device.create', args: [deviceId, publicKey]);
-
-    if (res.args.isEmpty) {
-      throw Exception('Device registration failed');
+  Future<void> _registerDevice(String email) async {
+    if (session == null) {
+      throw Exception('Session is not initialized');
     }
 
-    await DeviceIdentity.save(deviceId: deviceId, privateKey: privateKey);
+    try {
+      final privateKeyHex = await CryptoSignKeys.generatePrivateKey();
+      final publicKeyHex = await CryptoSignKeys.derivePublicKey(privateKeyHex);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final randomSuffix = DateTime.now().microsecondsSinceEpoch;
+      final deviceName = 'android-$timestamp-$randomSuffix';
+      final deviceModel = await _getDeviceModel();
+
+      final res = await session!.call('io.xconn.deskconn.device.create', args: [deviceName, publicKeyHex]);
+
+      if (res.args.isEmpty) {
+        throw Exception('Device registration failed: empty response');
+      }
+
+      final resultData = res.args[0] as Map<String, dynamic>;
+      final deviceId = resultData['device_id'] ?? resultData['id'];
+
+      if (deviceId == null) {
+        throw Exception('Device ID not found in response');
+      }
+
+      await DeviceIdentity.clear();
+
+      await DeviceIdentity.save(
+        deviceId: deviceId,
+        privateKey: privateKeyHex,
+        publicKey: publicKeyHex,
+        email: email,
+        deviceName: deviceName,
+        deviceModel: deviceModel,
+      );
+    } catch (e) {
+      error = 'Device registration failed:';
+    }
+  }
+
+  Future<String> _getDeviceModel() async {
+    final deviceInfoPlugin = DeviceInfoPlugin();
+
+    try {
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfoPlugin.androidInfo;
+        return androidInfo.model;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfoPlugin.iosInfo;
+        return iosInfo.model;
+      }
+    } catch (e) {
+      error = "Error getting device model";
+    }
+
+    return Platform.operatingSystem;
   }
 
   Future<void> loadOrganizations() async {

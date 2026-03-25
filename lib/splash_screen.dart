@@ -1,6 +1,9 @@
+import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,6 +17,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   late Animation<double> _scale;
 
   @override
+  @override
   void initState() {
     super.initState();
 
@@ -23,10 +27,29 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _init();
     });
+  }
+
+  Future<void> _init() async {
+    final sessionProvider = context.read<SessionProvider>();
+
+    await Future.wait([Future.delayed(const Duration(milliseconds: 900)), sessionProvider.initialize()]);
+
+    if (!mounted) return;
+
+    if (sessionProvider.loggedIn) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
+    } else {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
