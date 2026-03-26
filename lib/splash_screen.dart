@@ -35,7 +35,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _init() async {
     final sessionProvider = context.read<SessionProvider>();
 
-    await Future.wait([Future.delayed(const Duration(milliseconds: 900)), sessionProvider.initialize()]);
+    await sessionProvider.initialize();
 
     if (!mounted) return;
 

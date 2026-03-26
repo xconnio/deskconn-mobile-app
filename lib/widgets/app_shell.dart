@@ -32,7 +32,7 @@ class AppShell extends StatelessWidget {
                 leading: const Icon(Icons.account_circle),
                 title: const Text('Account'),
                 onTap: () {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
                 },
               ),
 
@@ -40,14 +40,14 @@ class AppShell extends StatelessWidget {
                 leading: const Icon(Icons.devices),
                 title: const Text('Desktops'),
                 onTap: () {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.devices),
                 title: const Text('Devices'),
                 onTap: () {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DevicesScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DevicesScreen()));
                 },
               ),
 
@@ -55,7 +55,7 @@ class AppShell extends StatelessWidget {
                 leading: const Icon(Icons.business),
                 title: const Text('Organizations'),
                 onTap: () {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OrganizationsScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const OrganizationsScreen()));
                 },
               ),
 
@@ -63,7 +63,7 @@ class AppShell extends StatelessWidget {
                 leading: const Icon(Icons.mail),
                 title: const Text('Invitations'),
                 onTap: () {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const InvitationsScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const InvitationsScreen()));
                 },
               ),
 
