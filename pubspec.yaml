@@ -34,6 +34,8 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  cryptography: ^2.7.0
+  device_info_plus: ^10.1.0
   flutter_login: ^5.0.0
   flutter_native_splash: ^2.3.10
   flutter_secure_storage: ^10.0.0
@@ -41,8 +43,10 @@ dependencies:
   provider: ^6.1.5+1
   shared_preferences: ^2.2.2
 
+  xterm: ^4.0.0
   xconn:
     git: https://github.com/xconnio/xconn-dart
+
 
   crypto: any
 dev_dependencies:

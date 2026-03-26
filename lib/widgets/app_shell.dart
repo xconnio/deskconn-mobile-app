@@ -1,4 +1,5 @@
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
+import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/devices_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -35,6 +36,13 @@ class AppShell extends StatelessWidget {
                 },
               ),
 
+              ListTile(
+                leading: const Icon(Icons.devices),
+                title: const Text('Desktops'),
+                onTap: () {
+                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.devices),
                 title: const Text('Devices'),

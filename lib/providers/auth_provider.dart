@@ -1,6 +1,8 @@
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:flutter/material.dart';
 
+import 'package:deskconn_mobile_app/core/constants.dart';
+
 class AuthProvider extends ChangeNotifier {
   final _client = WampClient();
 
@@ -23,7 +25,11 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      await _client.connectCryptoSign();
+      await _client.connectCryptoSign(
+        authId: DeskconnConfig.serviceAuthId,
+        privateKey: DeskconnConfig.servicePrivateKey,
+        realm: DeskconnConfig.realm,
+      );
 
       await _client.session.call("io.xconn.deskconn.account.create", args: [email, name, password]);
 
@@ -51,7 +57,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign();
+      await _client.connectCryptoSign(
+        authId: DeskconnConfig.serviceAuthId,
+        privateKey: DeskconnConfig.servicePrivateKey,
+        realm: DeskconnConfig.realm,
+      );
 
       await _client.session.call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp]);
 
@@ -69,7 +79,11 @@ class AuthProvider extends ChangeNotifier {
     if (pendingEmail == null) return;
 
     try {
-      await _client.connectCryptoSign();
+      await _client.connectCryptoSign(
+        authId: DeskconnConfig.serviceAuthId,
+        privateKey: DeskconnConfig.servicePrivateKey,
+        realm: DeskconnConfig.realm,
+      );
 
       await _client.session.call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail]);
 
@@ -85,7 +99,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign();
+      await _client.connectCryptoSign(
+        authId: DeskconnConfig.serviceAuthId,
+        privateKey: DeskconnConfig.servicePrivateKey,
+        realm: DeskconnConfig.realm,
+      );
 
       await _client.session.call("io.xconn.deskconn.account.password.forget", args: [email]);
 
@@ -111,7 +129,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign();
+      await _client.connectCryptoSign(
+        authId: DeskconnConfig.serviceAuthId,
+        privateKey: DeskconnConfig.servicePrivateKey,
+        realm: DeskconnConfig.realm,
+      );
 
       await _client.session.call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp]);
 
