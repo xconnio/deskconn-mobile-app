@@ -8,6 +8,7 @@ import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
 
 import 'package:xconn/xconn.dart';
+import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
@@ -39,17 +40,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       appBar: AppBar(
         title: Text(widget.desktop['name'] ?? 'Desktop'),
         actions: [
-          if (_openingShell)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.terminal, size: 28),
-              tooltip: 'Open Shell',
-              onPressed: () => _openShell(context),
-            ),
+          IconButton(
+            icon: const Icon(Icons.terminal, size: 28),
+            tooltip: 'Open Shell',
+            onPressed: _openingShell ? null : () => _openShell(context),
+          ),
         ],
       ),
       body: ListView(
@@ -67,27 +62,25 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     if (_openingShell) return;
 
     setState(() => _openingShell = true);
-    final scaffold = ScaffoldMessenger.of(context);
-    scaffold.showSnackBar(const SnackBar(content: Text("Connecting shell...")));
+    _appendShellLog("Starting shell connection");
+    _showShellLoadingDialog(context);
 
     try {
       final shellSession = await _createShellSession();
       if (!context.mounted) return;
 
-      scaffold.hideCurrentSnackBar();
+      _closeActiveDialog(context);
+      setState(() => _openingShell = false);
+      _appendShellLog("Shell session ready, opening terminal screen");
 
       await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(session: shellSession)));
-
-      try {
-        await shellSession.close();
-      } catch (_) {}
     } catch (e) {
-      scaffold.showSnackBar(
-        SnackBar(
-          content: Text("Failed to open shell: ${e.toString().split('\n').first}"),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      final message = _friendlyShellError(e);
+      _appendShellLog("Shell open failed: $message");
+      if (context.mounted) {
+        _closeActiveDialog(context);
+        await _showShellErrorDialog(context, message);
+      }
     } finally {
       if (mounted) {
         setState(() => _openingShell = false);
@@ -95,18 +88,115 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<Session> _createShellSession() async {
+  Future<dynamic> _createShellSession() async {
     final String? authId = await DeviceIdentity.lastEmail();
     final String? privateKey = await DeviceIdentity.privateKey();
     final String realm = widget.desktop['realm'];
+    _appendShellLog("Loaded device identity for realm $realm");
 
     if (authId == null || privateKey == null) {
       throw Exception("Missing authid or private_key in desktop data");
     }
 
+    _appendShellLog("Connecting to remote realm");
     final session = await _shellClient.connectCryptoSign(authId: authId, privateKey: privateKey, realm: realm);
+    _appendShellLog("Connected to remote realm");
 
-    return session;
+    final config = web_rtc.ClientConfig(
+      realm: realm,
+      procedureWebRTCOffer: "io.xconn.webrtc.offer",
+      topicAnswererOnCandidate: "io.xconn.webrtc.answerer.on_candidate",
+      topicOffererOnCandidate: "io.xconn.webrtc.offerer.on_candidate",
+      serializer: CBORSerializer(),
+      session: session,
+      authenticator: CryptoSignAuthenticator(authId, privateKey),
+    );
+
+    try {
+      _appendShellLog("Attempting WebRTC shell session");
+      final webRtcSession = await web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
+      _appendShellLog("WebRTC shell session established");
+      return webRtcSession;
+    } catch (e) {
+      final errorText = e.toString();
+      _appendShellLog("WebRTC shell session failed: ${errorText.split('\n').first}");
+
+      if (_isMissingProcedureError(errorText)) {
+        await _safeCloseSession(session);
+        throw Exception(
+          "Remote device offline or check internet connection. Shell service is unavailable on the remote device.",
+        );
+      }
+
+      await _safeCloseSession(session);
+      throw Exception(errorText);
+    }
+  }
+
+  void _appendShellLog(String message) {
+    final line = "[${DateTime.now().toIso8601String()}] $message";
+    debugPrint("DesktopDetailsScreen: $line");
+  }
+
+  void _showShellLoadingDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return const AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
+              SizedBox(width: 16),
+              Flexible(child: Text("Connecting to shell...")),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _closeActiveDialog(BuildContext context) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _showShellErrorDialog(BuildContext context, String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text("Shell Unavailable"),
+          content: Text(message),
+          actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close"))],
+        );
+      },
+    );
+  }
+
+  bool _isMissingProcedureError(String errorText) {
+    final normalized = errorText.toLowerCase();
+    return normalized.contains("wamp.error.no_such_procedure");
+  }
+
+  String _friendlyShellError(Object error) {
+    final errorText = error.toString();
+    if (_isMissingProcedureError(errorText)) {
+      return "Remote device offline. Check internet and try again.";
+    }
+    if (errorText.toLowerCase().contains("timeout")) {
+      return "Shell connection timed out. Try again.";
+    }
+    return "Remote device offline or Check internet and try again.";
+  }
+
+  Future<void> _safeCloseSession(dynamic session) async {
+    try {
+      await session.close();
+    } catch (_) {}
   }
 
   Future<void> _setBrightness(SessionProvider sessionProvider) async {
