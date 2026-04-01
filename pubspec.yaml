@@ -46,6 +46,8 @@ dependencies:
   xterm: ^4.0.0
   xconn:
     git: https://github.com/xconnio/xconn-dart
+  xconn_webrtc_dart:
+    git: https://github.com/xconnio/xconn-webrtc-dart.git
 
 
   crypto: any

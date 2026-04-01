@@ -29,7 +29,7 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void dispose() {
     _controller.dispose();
-    widget.session.close().catchError((e) {});
+    widget.session.close().catchError((_) {});
     super.dispose();
   }
 
