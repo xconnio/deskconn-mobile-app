@@ -1,6 +1,7 @@
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/devices_screen.dart';
+import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -64,6 +65,14 @@ class AppShell extends StatelessWidget {
                 title: const Text('Invitations'),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const InvitationsScreen()));
+                },
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Settings'),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                 },
               ),
 
