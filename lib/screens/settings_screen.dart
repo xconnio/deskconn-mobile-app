@@ -1,12 +1,36 @@
-import 'package:deskconn_mobile_app/screens/account_screen.dart';
-import 'package:deskconn_mobile_app/screens/invitations_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:deskconn_mobile_app/screens/devices_screen.dart';
-import 'package:deskconn_mobile_app/screens/organizations_screen.dart';
+const String prefKeyWebRtcEnabled = 'webrtc_enabled';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _webRtcEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+    });
+  }
+
+  Future<void> _setWebRtc(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(prefKeyWebRtcEnabled, value);
+    setState(() => _webRtcEnabled = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,33 +38,11 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          ListTile(
-            leading: const Icon(Icons.inbox),
-            title: const Text('Invitations'),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const InvitationsScreen()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Account'),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.devices),
-            title: const Text('Devices'),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const DevicesScreen()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.business),
-            title: const Text('Organizations'),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const OrganizationsScreen()));
-            },
+          SwitchListTile(
+            secondary: const Icon(Icons.settings_ethernet),
+            title: const Text('Use WebRTC for Shell'),
+            value: _webRtcEnabled,
+            onChanged: _setWebRtc,
           ),
         ],
       ),

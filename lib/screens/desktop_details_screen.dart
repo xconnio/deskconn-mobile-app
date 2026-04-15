@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
@@ -88,7 +90,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<dynamic> _createShellSession() async {
+  Future<Session> _createShellSession() async {
     final String? authId = await DeviceIdentity.lastEmail();
     final String? privateKey = await DeviceIdentity.privateKey();
     final String realm = widget.desktop['realm'];
@@ -102,11 +104,22 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final session = await _shellClient.connectCryptoSign(authId: authId, privateKey: privateKey, realm: realm);
     _appendShellLog("Connected to remote realm");
 
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+
+    if (!webRtcEnabled) {
+      _appendShellLog("WebRTC disabled, using direct WAMP session");
+      return session;
+    }
+
     final config = web_rtc.ClientConfig(
       realm: realm,
       procedureWebRTCOffer: "io.xconn.webrtc.offer",
       topicAnswererOnCandidate: "io.xconn.webrtc.answerer.on_candidate",
       topicOffererOnCandidate: "io.xconn.webrtc.offerer.on_candidate",
+      iceServers: [
+        {"urls": "stun:stun.l.google.com:19302"},
+      ],
       serializer: CBORSerializer(),
       session: session,
       authenticator: CryptoSignAuthenticator(authId, privateKey),
