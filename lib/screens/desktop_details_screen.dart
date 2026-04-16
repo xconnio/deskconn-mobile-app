@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +15,11 @@ import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
+
+const String _prefKeyTurnExpiresAt = 'turn_expires_at';
+const String _prefKeyTurnUsername = 'turn_username';
+const String _prefKeyTurnCredential = 'turn_credential';
+const String _prefKeyTurnUrls = 'turn_urls';
 
 class DesktopDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> desktop;
@@ -112,6 +119,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       return session;
     }
 
+    final turnCredentials = await _getTurnCredentials(authId, privateKey);
     final config = web_rtc.ClientConfig(
       realm: realm,
       procedureWebRTCOffer: "io.xconn.webrtc.offer",
@@ -119,6 +127,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       topicOffererOnCandidate: "io.xconn.webrtc.offerer.on_candidate",
       iceServers: [
         {"urls": "stun:stun.l.google.com:19302"},
+        {
+          "urls": turnCredentials['urls'],
+          "username": turnCredentials['username'],
+          "credential": turnCredentials['credential'],
+        },
       ],
       serializer: CBORSerializer(),
       session: session,
@@ -144,6 +157,42 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       await _safeCloseSession(session);
       throw Exception(errorText);
     }
+  }
+
+  Future<Map<String, dynamic>> _getTurnCredentials(String authID, String privateKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final expiresAt = prefs.getInt(_prefKeyTurnExpiresAt) ?? 0;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    if (expiresAt > nowSeconds + 60) {
+      final username = prefs.getString(_prefKeyTurnUsername)!;
+      final credential = prefs.getString(_prefKeyTurnCredential)!;
+      final urls = jsonDecode(prefs.getString(_prefKeyTurnUrls)!) as List<dynamic>;
+      _appendShellLog("Using cached TURN credentials (expires in ${expiresAt - nowSeconds}s)");
+      return {'username': username, 'credential': credential, 'urls': urls};
+    }
+
+    _appendShellLog("Fetching fresh TURN credentials from server");
+    var session = await _shellClient.connectCryptoSign(
+      authId: authID,
+      privateKey: privateKey,
+      realm: DeskconnConfig.realm,
+    );
+    final result = await session.call("io.xconn.deskconn.coturn.credentials.create");
+    final turnCredential = result.args[0];
+
+    final username = turnCredential['username'] as String;
+    final credential = turnCredential['credential'] as String;
+    final newExpiresAt = turnCredential['expires_at'] as int;
+    final urls = turnCredential['urls'] as List<dynamic>;
+
+    await prefs.setInt(_prefKeyTurnExpiresAt, newExpiresAt);
+    await prefs.setString(_prefKeyTurnUsername, username);
+    await prefs.setString(_prefKeyTurnCredential, credential);
+    await prefs.setString(_prefKeyTurnUrls, jsonEncode(urls));
+
+    _appendShellLog("TURN credentials fetched and cached");
+    return {'username': username, 'credential': credential, 'urls': urls};
   }
 
   void _appendShellLog(String message) {
