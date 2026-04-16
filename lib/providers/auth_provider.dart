@@ -1,10 +1,10 @@
-import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:xconn/xconn.dart';
 
 class AuthProvider extends ChangeNotifier {
-  final _client = WampClient();
+  Session? _session;
 
   String? pendingEmail;
   String? _pendingPassword;
@@ -20,23 +20,25 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Session> _getSession() async {
+    if (_session == null || !_session!.isConnected()) {
+      var client = Client(config: ClientConfig(authenticator: AnonymousAuthenticator(DeskconnConfig.serviceAuthId)));
+      _session = await client.connect(DeskconnConfig.wampUrl, DeskconnConfig.realm);
+    }
+    return _session!;
+  }
+
   Future<bool> createAccount({required String email, required String name, required String password}) async {
     error = null;
     _setLoading(true);
 
     try {
-      await _client.connectCryptoSign(
-        authId: DeskconnConfig.serviceAuthId,
-        privateKey: DeskconnConfig.servicePrivateKey,
-        realm: DeskconnConfig.realm,
-      );
-
-      await _client.session.call("io.xconn.deskconn.account.create", args: [email, name, password]);
+      var session = await _getSession();
+      await session.call("io.xconn.deskconn.account.create", args: [email, name, password]);
 
       pendingEmail = email;
       _pendingPassword = password;
 
-      await _client.disconnect();
       _setLoading(false);
       return true;
     } catch (e) {
@@ -57,15 +59,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign(
-        authId: DeskconnConfig.serviceAuthId,
-        privateKey: DeskconnConfig.servicePrivateKey,
-        realm: DeskconnConfig.realm,
-      );
+      var session = await _getSession();
+      await session.call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp]);
 
-      await _client.session.call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp]);
-
-      await _client.disconnect();
       notifyListeners();
       return true;
     } catch (e) {
@@ -79,15 +75,8 @@ class AuthProvider extends ChangeNotifier {
     if (pendingEmail == null) return;
 
     try {
-      await _client.connectCryptoSign(
-        authId: DeskconnConfig.serviceAuthId,
-        privateKey: DeskconnConfig.servicePrivateKey,
-        realm: DeskconnConfig.realm,
-      );
-
-      await _client.session.call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail]);
-
-      await _client.disconnect();
+      var session = await _getSession();
+      await session.call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail]);
     } catch (e) {
       error = e.toString();
       notifyListeners();
@@ -99,16 +88,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign(
-        authId: DeskconnConfig.serviceAuthId,
-        privateKey: DeskconnConfig.servicePrivateKey,
-        realm: DeskconnConfig.realm,
-      );
-
-      await _client.session.call("io.xconn.deskconn.account.password.forget", args: [email]);
+      var session = await _getSession();
+      await session.call("io.xconn.deskconn.account.password.forget", args: [email]);
 
       pendingEmail = email;
-      await _client.disconnect();
       notifyListeners();
       return true;
     } catch (e) {
@@ -129,15 +112,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _client.connectCryptoSign(
-        authId: DeskconnConfig.serviceAuthId,
-        privateKey: DeskconnConfig.servicePrivateKey,
-        realm: DeskconnConfig.realm,
-      );
+      var session = await _getSession();
+      await session.call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp]);
 
-      await _client.session.call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp]);
-
-      await _client.disconnect();
       notifyListeners();
       return true;
     } catch (e) {
@@ -145,5 +122,11 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _session?.close();
+    super.dispose();
   }
 }
