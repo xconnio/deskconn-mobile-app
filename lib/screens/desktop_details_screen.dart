@@ -5,10 +5,8 @@ import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
 
 import 'package:xconn/xconn.dart';
@@ -43,25 +41,18 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessionProvider = context.read<SessionProvider>();
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.desktop['name'] ?? 'Desktop'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.terminal, size: 28),
-            tooltip: 'Open Shell',
-            onPressed: _openingShell ? null : () => _openShell(context),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.desktop['name'] ?? 'Desktop')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _ActionTile(icon: Icons.brightness_medium, title: "Brightness", onTap: () => _setBrightness(sessionProvider)),
-          _ActionTile(icon: Icons.volume_up, title: "Volume", onTap: () => _setVolume(sessionProvider)),
-          _ActionTile(icon: Icons.lock, title: "Lock Screen", onTap: () => _lock(sessionProvider)),
+          _ActionTile(
+            icon: Icons.terminal,
+            title: "Shell",
+            onTap: () {
+              if (!_openingShell) _openShell(context);
+            },
+          ),
         ],
       ),
     );
@@ -259,18 +250,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     try {
       await session.close();
     } catch (_) {}
-  }
-
-  Future<void> _setBrightness(SessionProvider sessionProvider) async {
-    await sessionProvider.session!.call("io.xconn.desktop.brightness.set", args: [widget.desktop['authid'], 50]);
-  }
-
-  Future<void> _setVolume(SessionProvider sessionProvider) async {
-    await sessionProvider.session!.call("io.xconn.desktop.volume.set", args: [widget.desktop['authid'], 30]);
-  }
-
-  Future<void> _lock(SessionProvider sessionProvider) async {
-    await sessionProvider.session!.call("io.xconn.desktop.lock", args: [widget.desktop['authid']]);
   }
 }
 
