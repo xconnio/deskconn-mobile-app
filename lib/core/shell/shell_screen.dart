@@ -20,6 +20,9 @@ class _ShellScreenState extends State<ShellScreen> {
   void initState() {
     super.initState();
     _controller = ShellController(widget.session);
+    _controller.onExit = () {
+      if (mounted) Navigator.pop(context);
+    };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _controller.start();

@@ -35,8 +35,11 @@ class ShellController {
   final Terminal terminal = Terminal();
   final Session session;
 
+  void Function()? onExit;
+
   bool _running = false;
   Timer? _resizeTimer;
+  String _inputBuffer = "";
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
@@ -74,6 +77,17 @@ class ShellController {
     terminal.onOutput = (String data) {
       if (_running && data.isNotEmpty) {
         _outgoingQueue.put(Progress(args: [data], options: {"progress": true}));
+        for (final rune in data.runes) {
+          final char = String.fromCharCode(rune);
+          if (char == "\r" || char == "\n") {
+            if (_inputBuffer.trim() == "exit") onExit?.call();
+            _inputBuffer = "";
+          } else if (rune >= 32) {
+            _inputBuffer += char;
+          } else {
+            _inputBuffer = "";
+          }
+        }
       }
     };
   }
