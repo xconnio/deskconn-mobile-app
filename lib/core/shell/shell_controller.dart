@@ -38,10 +38,12 @@ class ShellController {
   void Function()? onExit;
 
   bool _running = false;
+  bool _disposed = false;
   Timer? _resizeTimer;
   String _inputBuffer = "";
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
+  final Completer<Progress> _cancelCompleter = Completer();
 
   ShellController(this.session);
 
@@ -59,7 +61,7 @@ class ShellController {
     try {
       await session.callProgressiveProgress("io.xconn.deskconn.deskconnd.shell", _sender, _receiver);
     } catch (e) {
-      terminal.write("\r\nShell error: $e\r\n");
+      if (!_disposed) terminal.write("\r\nShell error: $e\r\n");
     } finally {
       _running = false;
       _cleanup();
@@ -93,7 +95,7 @@ class ShellController {
   }
 
   Future<Progress> _sender() async {
-    return await _outgoingQueue.take();
+    return await Future.any([_outgoingQueue.take(), _cancelCompleter.future]);
   }
 
   void _receiver(Result result) {
@@ -119,8 +121,12 @@ class ShellController {
   }
 
   void dispose() {
+    _disposed = true;
     _running = false;
     _cleanup();
+    if (!_cancelCompleter.isCompleted) {
+      _cancelCompleter.completeError(Exception('shell closed'));
+    }
   }
 
   void sendSpecialKey(String sequence) {
