@@ -77,7 +77,7 @@ class _ToolbarState extends State<Toolbar> {
             children: [
               key("ESC", () => send("\x1b")),
               key("/", () => send("/")),
-              key("-", () => send("-")),
+              key("DEL", () => widget.controller.sendDel()),
               key("HOME", () => widget.controller.sendHome()),
               key("↑", () => widget.controller.sendArrowUp()),
               key("END", () => widget.controller.sendEnd()),

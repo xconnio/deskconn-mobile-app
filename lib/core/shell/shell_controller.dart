@@ -140,4 +140,5 @@ class ShellController {
   void sendArrowLeft() => sendSpecialKey("\x1b[D");
   void sendHome() => sendSpecialKey("\x1b[H");
   void sendEnd() => sendSpecialKey("\x1b[F");
+  void sendDel() => sendSpecialKey("\x1b[3~");
 }
