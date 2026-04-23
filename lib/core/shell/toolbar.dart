@@ -12,36 +12,15 @@ class Toolbar extends StatefulWidget {
 }
 
 class _ToolbarState extends State<Toolbar> {
-  bool ctrl = false;
-  bool alt = false;
-
-  void send(String key) {
-    String output = key;
-
-    if (ctrl) {
-      output = _applyCtrl(key);
-      ctrl = false;
-    }
-
-    if (alt) {
-      output = "\x1b$output";
-      alt = false;
-    }
-
-    widget.controller.sendSpecialKey(output);
-    setState(() {});
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.onModifierChanged = () => setState(() {});
   }
 
-  String _applyCtrl(String key) {
-    if (key.isEmpty) return key;
-
-    final code = key.codeUnitAt(0);
-
-    if (code >= 97 && code <= 122) {
-      return String.fromCharCode(code - 96);
-    }
-
-    return key;
+  void send(String key) {
+    widget.controller.sendSpecialKey(key);
+    setState(() {});
   }
 
   Widget key(String label, VoidCallback onTap, {Color? color, bool active = false}) {
@@ -87,8 +66,16 @@ class _ToolbarState extends State<Toolbar> {
           Row(
             children: [
               key("TAB", () => widget.controller.sendTab()),
-              key("CTRL", () => setState(() => ctrl = !ctrl), active: ctrl),
-              key("ALT", () => setState(() => alt = !alt), active: alt),
+              key(
+                "CTRL",
+                () => setState(() => widget.controller.ctrl = !widget.controller.ctrl),
+                active: widget.controller.ctrl,
+              ),
+              key(
+                "ALT",
+                () => setState(() => widget.controller.alt = !widget.controller.alt),
+                active: widget.controller.alt,
+              ),
               key("←", () => widget.controller.sendArrowLeft()),
               key("↓", () => widget.controller.sendArrowDown()),
               key("→", () => widget.controller.sendArrowRight()),

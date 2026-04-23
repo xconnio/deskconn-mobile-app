@@ -36,7 +36,10 @@ class ShellController {
   final Session session;
 
   void Function()? onExit;
+  void Function()? onModifierChanged;
 
+  bool ctrl = false;
+  bool alt = false;
   bool _running = false;
   Timer? _resizeTimer;
   String _inputBuffer = "";
@@ -63,6 +66,7 @@ class ShellController {
     } finally {
       _running = false;
       _cleanup();
+      onExit?.call();
     }
   }
 
@@ -73,20 +77,46 @@ class ShellController {
     }
   }
 
+  String _applyCtrl(String data) {
+    return data.runes.map((code) {
+      if (code >= 97 && code <= 122) return String.fromCharCode(code - 96);
+      return String.fromCharCode(code);
+    }).join();
+  }
+
   void attachInput() {
     terminal.onOutput = (String data) {
-      if (_running && data.isNotEmpty) {
-        _outgoingQueue.put(Progress(args: [data], options: {"progress": true}));
-        for (final rune in data.runes) {
-          final char = String.fromCharCode(rune);
-          if (char == "\r" || char == "\n") {
-            if (_inputBuffer.trim() == "exit") onExit?.call();
-            _inputBuffer = "";
-          } else if (rune >= 32) {
-            _inputBuffer += char;
-          } else {
-            _inputBuffer = "";
-          }
+      if (!_running || data.isEmpty) return;
+
+      String output = data;
+
+      if (ctrl) {
+        output = _applyCtrl(output);
+        ctrl = false;
+        onModifierChanged?.call();
+      }
+
+      if (alt) {
+        output = "\x1b$output";
+        alt = false;
+        onModifierChanged?.call();
+      }
+
+      _outgoingQueue.put(Progress(args: [output], options: {"progress": true}));
+
+      for (final rune in output.runes) {
+        final char = String.fromCharCode(rune);
+        if (char == "\r" || char == "\n") {
+          final cmd = _inputBuffer.trim();
+          if (cmd == "exit" || cmd == "logout") onExit?.call();
+          _inputBuffer = "";
+        } else if (rune == 4) {
+          // Ctrl+D on empty line — EOF, shell will exit naturally via finally
+          _inputBuffer = "";
+        } else if (rune >= 32) {
+          _inputBuffer += char;
+        } else {
+          _inputBuffer = "";
         }
       }
     };
