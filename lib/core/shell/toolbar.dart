@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'shell_controller.dart';
 
 class Toolbar extends StatefulWidget {
@@ -46,7 +47,10 @@ class _ToolbarState extends State<Toolbar> {
   Widget key(String label, VoidCallback onTap, {Color? color, bool active = false}) {
     return Expanded(
       child: GestureDetector(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         child: Container(
           margin: const EdgeInsets.all(2),
           padding: const EdgeInsets.symmetric(vertical: 10),
