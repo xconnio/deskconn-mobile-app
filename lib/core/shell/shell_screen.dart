@@ -15,6 +15,11 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   late final ShellController _controller;
+  double _fontSize = 14;
+  double _fontSizeOnScaleStart = 14;
+
+  static const double _minFontSize = 8;
+  static const double _maxFontSize = 32;
 
   @override
   void initState() {
@@ -44,7 +49,21 @@ class _ShellScreenState extends State<ShellScreen> {
         child: Column(
           children: [
             Expanded(
-              child: TerminalView(_controller.terminal, autofocus: true, textStyle: const TerminalStyle(fontSize: 14)),
+              child: GestureDetector(
+                onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
+                onScaleUpdate: (details) {
+                  if (details.pointerCount < 2) return;
+                  final newSize = (_fontSizeOnScaleStart * details.scale).clamp(_minFontSize, _maxFontSize);
+                  if ((newSize - _fontSize).abs() >= 0.5) {
+                    setState(() => _fontSize = newSize);
+                  }
+                },
+                child: TerminalView(
+                  _controller.terminal,
+                  autofocus: true,
+                  textStyle: TerminalStyle(fontSize: _fontSize),
+                ),
+              ),
             ),
             Toolbar(controller: _controller),
           ],
