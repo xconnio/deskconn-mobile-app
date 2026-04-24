@@ -111,7 +111,7 @@ class ShellController {
           if (cmd == "exit" || cmd == "logout") onExit?.call();
           _inputBuffer = "";
         } else if (rune == 4) {
-          // Ctrl+D on empty line — EOF, shell will exit naturally via finally
+          if (_inputBuffer.isEmpty) onExit?.call();
           _inputBuffer = "";
         } else if (rune >= 32) {
           _inputBuffer += char;
