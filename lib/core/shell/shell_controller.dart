@@ -1,11 +1,14 @@
 import "dart:async";
 import "dart:collection";
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:xterm/core.dart";
 import "package:xconn/xconn.dart";
 // ignore: implementation_imports
 import "package:xconn/src/types.dart";
+
+import "shell_encryption.dart";
 
 class BlockingQueue<T> {
   final Queue<T> _queue = Queue<T>();
@@ -41,14 +44,18 @@ class ShellController {
   bool ctrl = false;
   bool alt = false;
   bool _running = false;
+  bool _keyReceived = false;
+  bool _clientKeySent = false;
   Timer? _resizeTimer;
   String _inputBuffer = "";
+  Encryption? _encryption;
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
   ShellController(this.session);
 
   Future<void> start() async {
+    _encryption = await Encryption.create();
     _running = true;
     _sendSize();
 
@@ -72,7 +79,12 @@ class ShellController {
 
   void _sendSize() {
     if (_running) {
-      var progress = Progress(args: ["SIZE:${terminal.viewWidth}:${terminal.viewHeight}"], options: {"progress": true});
+      if (!_keyReceived && _clientKeySent) {
+        return;
+      }
+      final payload = _encodeOutboundText("SIZE:${terminal.viewWidth}:${terminal.viewHeight}", encrypt: _keyReceived);
+      _clientKeySent = true;
+      var progress = Progress(args: [payload], options: {"progress": true});
       _outgoingQueue.put(progress);
     }
   }
@@ -87,6 +99,7 @@ class ShellController {
   void attachInput() {
     terminal.onOutput = (String data) {
       if (!_running || data.isEmpty) return;
+      if (!_keyReceived) return;
 
       String output = data;
 
@@ -102,7 +115,7 @@ class ShellController {
         onModifierChanged?.call();
       }
 
-      _outgoingQueue.put(Progress(args: [output], options: {"progress": true}));
+      _outgoingQueue.put(Progress(args: [_encodeOutboundText(output)], options: {"progress": true}));
 
       for (final rune in output.runes) {
         final char = String.fromCharCode(rune);
@@ -126,18 +139,19 @@ class ShellController {
     return await _outgoingQueue.take();
   }
 
-  void _receiver(Result result) {
+  Future<void> _receiver(Result result) async {
     if (result.args.isEmpty) return;
     final raw = result.args.first;
     String text;
     try {
-      if (raw is List<int>) {
-        text = utf8.decode(raw);
-      } else if (raw is String) {
-        text = utf8.decode(base64.decode(raw));
-      } else {
-        text = raw.toString();
+      final bytes = _coerceBytes(raw);
+      if (!_keyReceived) {
+        await _encryption!.acceptServerKey(bytes);
+        _keyReceived = true;
+        return;
       }
+
+      text = utf8.decode(_encryption!.decrypt(bytes));
     } catch (_) {
       text = raw.toString();
     }
@@ -154,8 +168,8 @@ class ShellController {
   }
 
   void sendSpecialKey(String sequence) {
-    if (_running) {
-      var progress = Progress(args: [sequence], options: {"progress": true});
+    if (_running && _keyReceived) {
+      var progress = Progress(args: [_encodeOutboundText(sequence)], options: {"progress": true});
       _outgoingQueue.put(progress);
     }
   }
@@ -171,4 +185,32 @@ class ShellController {
   void sendHome() => sendSpecialKey("\x1b[H");
   void sendEnd() => sendSpecialKey("\x1b[F");
   void sendDel() => sendSpecialKey("\x1b[3~");
+
+  Uint8List _encodeOutboundText(String text, {bool encrypt = true}) {
+    final bytes = Uint8List.fromList(utf8.encode(text));
+    final encryption = _encryption;
+    if (encryption == null) {
+      throw StateError('Shell encryption is not initialized');
+    }
+    if (!encrypt) {
+      return encryption.buildClientFirstMessage(bytes);
+    }
+    if (!_keyReceived) {
+      throw StateError('Shell encryption handshake is not complete');
+    }
+    return encryption.encrypt(bytes);
+  }
+
+  Uint8List _coerceBytes(dynamic raw) {
+    if (raw is Uint8List) {
+      return raw;
+    }
+    if (raw is List<int>) {
+      return Uint8List.fromList(raw);
+    }
+    if (raw is String) {
+      return Uint8List.fromList(base64.decode(raw));
+    }
+    throw FormatException('Unsupported shell payload type: ${raw.runtimeType}');
+  }
 }

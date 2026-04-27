@@ -35,6 +35,25 @@ class WampClient {
     return _session!;
   }
 
+  Future<Session> connectCryptoSignWithSerializer({
+    required String authId,
+    required String privateKey,
+    required String realm,
+    required Serializer serializer,
+  }) async {
+    _client = Client(
+      config: ClientConfig(serializer: serializer, authenticator: CryptoSignAuthenticator(authId, privateKey)),
+    );
+
+    _session = await _client!.connect(DeskconnConfig.wampUrl, realm);
+
+    if (_session == null) {
+      throw Exception('Failed to connect to WAMP server with cryptosign');
+    }
+
+    return _session!;
+  }
+
   Future<void> disconnect() async {
     await _session?.close();
     _session = null;
