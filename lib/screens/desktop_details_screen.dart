@@ -99,7 +99,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
 
     _appendShellLog("Connecting to remote realm");
-    final session = await _shellClient.connectCryptoSign(authId: authId, privateKey: privateKey, realm: realm);
+    final session = await _shellClient.connectCryptoSignWithSerializer(
+      authId: authId,
+      privateKey: privateKey,
+      realm: realm,
+      serializer: CBORSerializer(),
+    );
     _appendShellLog("Connected to remote realm");
 
     final prefs = await SharedPreferences.getInstance();
