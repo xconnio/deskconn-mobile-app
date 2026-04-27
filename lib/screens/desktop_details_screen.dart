@@ -1,18 +1,12 @@
-import 'dart:async';
 import 'dart:convert';
 
-import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
-
-import 'package:xconn/xconn.dart';
-import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
-
-import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
 const String _prefKeyTurnExpiresAt = 'turn_expires_at';
 const String _prefKeyTurnUsername = 'turn_username';
@@ -30,14 +24,6 @@ class DesktopDetailsScreen extends StatefulWidget {
 
 class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   bool _openingShell = false;
-
-  final WampClient _shellClient = WampClient();
-
-  @override
-  void dispose() {
-    _shellClient.disconnect();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,22 +49,38 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
     setState(() => _openingShell = true);
     _appendShellLog("Starting shell connection");
-    _showShellLoadingDialog(context);
 
     try {
-      final shellSession = await _createShellSession();
+      final String? authId = await DeviceIdentity.lastEmail();
+      final String? privateKey = await DeviceIdentity.privateKey();
+      final String? realm = widget.desktop['realm']?.toString();
+      final prefs = await SharedPreferences.getInstance();
+      final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+
+      if (authId == null || privateKey == null || realm == null) {
+        throw Exception("Missing shell credentials or remote realm.");
+      }
+
       if (!context.mounted) return;
 
-      _closeActiveDialog(context);
       setState(() => _openingShell = false);
-      _appendShellLog("Shell session ready, opening terminal screen");
+      _appendShellLog("Opening foreground shell service");
 
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(session: shellSession)));
+      final config = ShellLaunchConfig(
+        sessionKey: DateTime.now().microsecondsSinceEpoch.toString(),
+        desktopName: widget.desktop['name']?.toString() ?? 'Desktop',
+        realm: realm,
+        authId: authId,
+        privateKey: privateKey,
+        webRtcEnabled: webRtcEnabled,
+        turnCredentials: _cachedTurnCredentials(prefs),
+      );
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(config: config)));
     } catch (e) {
       final message = _friendlyShellError(e);
       _appendShellLog("Shell open failed: $message");
       if (context.mounted) {
-        _closeActiveDialog(context);
         await _showShellErrorDialog(context, message);
       }
     } finally {
@@ -88,137 +90,30 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<Session> _createShellSession() async {
-    final String? authId = await DeviceIdentity.lastEmail();
-    final String? privateKey = await DeviceIdentity.privateKey();
-    final String realm = widget.desktop['realm'];
-    _appendShellLog("Loaded device identity for realm $realm");
-
-    if (authId == null || privateKey == null) {
-      throw Exception("Missing authid or private_key in desktop data");
-    }
-
-    _appendShellLog("Connecting to remote realm");
-    final session = await _shellClient.connectCryptoSignWithSerializer(
-      authId: authId,
-      privateKey: privateKey,
-      realm: realm,
-      serializer: CBORSerializer(),
-    );
-    _appendShellLog("Connected to remote realm");
-
-    final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
-
-    if (!webRtcEnabled) {
-      _appendShellLog("WebRTC disabled, using direct WAMP session");
-      return session;
-    }
-
-    final turnCredentials = await _getTurnCredentials(authId, privateKey);
-    final config = web_rtc.ClientConfig(
-      realm: realm,
-      procedureWebRTCOffer: "io.xconn.webrtc.offer",
-      topicAnswererOnCandidate: "io.xconn.webrtc.answerer.on_candidate",
-      topicOffererOnCandidate: "io.xconn.webrtc.offerer.on_candidate",
-      iceServers: [
-        {"urls": "stun:stun.l.google.com:19302"},
-        {
-          "urls": turnCredentials['urls'],
-          "username": turnCredentials['username'],
-          "credential": turnCredentials['credential'],
-        },
-      ],
-      serializer: CBORSerializer(),
-      session: session,
-      authenticator: CryptoSignAuthenticator(authId, privateKey),
-    );
-
-    try {
-      _appendShellLog("Attempting WebRTC shell session");
-      final webRtcSession = await web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
-      _appendShellLog("WebRTC shell session established");
-      return webRtcSession;
-    } catch (e) {
-      final errorText = e.toString();
-      _appendShellLog("WebRTC shell session failed: ${errorText.split('\n').first}");
-
-      if (_isMissingProcedureError(errorText)) {
-        await _safeCloseSession(session);
-        throw Exception(
-          "Remote device offline or check internet connection. Shell service is unavailable on the remote device.",
-        );
-      }
-
-      await _safeCloseSession(session);
-      throw Exception(errorText);
-    }
-  }
-
-  Future<Map<String, dynamic>> _getTurnCredentials(String authID, String privateKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    final expiresAt = prefs.getInt(_prefKeyTurnExpiresAt) ?? 0;
-    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    if (expiresAt > nowSeconds + 60) {
-      final username = prefs.getString(_prefKeyTurnUsername)!;
-      final credential = prefs.getString(_prefKeyTurnCredential)!;
-      final urls = jsonDecode(prefs.getString(_prefKeyTurnUrls)!) as List<dynamic>;
-      _appendShellLog("Using cached TURN credentials (expires in ${expiresAt - nowSeconds}s)");
-      return {'username': username, 'credential': credential, 'urls': urls};
-    }
-
-    _appendShellLog("Fetching fresh TURN credentials from server");
-    var session = await _shellClient.connectCryptoSign(
-      authId: authID,
-      privateKey: privateKey,
-      realm: DeskconnConfig.realm,
-    );
-    final result = await session.call("io.xconn.deskconn.coturn.credentials.create");
-    final turnCredential = result.args[0];
-
-    final username = turnCredential['username'] as String;
-    final credential = turnCredential['credential'] as String;
-    final newExpiresAt = turnCredential['expires_at'] as int;
-    final urls = turnCredential['urls'] as List<dynamic>;
-
-    await prefs.setInt(_prefKeyTurnExpiresAt, newExpiresAt);
-    await prefs.setString(_prefKeyTurnUsername, username);
-    await prefs.setString(_prefKeyTurnCredential, credential);
-    await prefs.setString(_prefKeyTurnUrls, jsonEncode(urls));
-
-    _appendShellLog("TURN credentials fetched and cached");
-    return {'username': username, 'credential': credential, 'urls': urls};
-  }
-
   void _appendShellLog(String message) {
     final line = "[${DateTime.now().toIso8601String()}] $message";
     debugPrint("DesktopDetailsScreen: $line");
   }
 
-  void _showShellLoadingDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return const AlertDialog(
-          content: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
-              SizedBox(width: 16),
-              Flexible(child: Text("Connecting to shell...")),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Map<String, dynamic>? _cachedTurnCredentials(SharedPreferences prefs) {
+    final expiresAt = prefs.getInt(_prefKeyTurnExpiresAt);
+    final username = prefs.getString(_prefKeyTurnUsername);
+    final credential = prefs.getString(_prefKeyTurnCredential);
+    final urlsJson = prefs.getString(_prefKeyTurnUrls);
 
-  void _closeActiveDialog(BuildContext context) {
-    final navigator = Navigator.of(context, rootNavigator: true);
-    if (navigator.canPop()) {
-      navigator.pop();
+    if (expiresAt == null || username == null || credential == null || urlsJson == null) {
+      return null;
+    }
+
+    try {
+      return {
+        'expiresAt': expiresAt,
+        'username': username,
+        'credential': credential,
+        'urls': jsonDecode(urlsJson) as List<dynamic>,
+      };
+    } catch (_) {
+      return null;
     }
   }
 
@@ -249,12 +144,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       return "Shell connection timed out. Try again.";
     }
     return "Remote device offline or Check internet and try again.";
-  }
-
-  Future<void> _safeCloseSession(dynamic session) async {
-    try {
-      await session.close();
-    } catch (_) {}
   }
 }
 

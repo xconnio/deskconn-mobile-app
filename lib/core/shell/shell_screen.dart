@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:xconn/xconn.dart';
 import 'package:xterm/ui.dart';
-import 'shell_controller.dart';
+import 'shell_background_service.dart';
 import 'toolbar.dart';
 
 class ShellScreen extends StatefulWidget {
-  final Session session;
+  final ShellLaunchConfig config;
 
-  const ShellScreen({super.key, required this.session});
+  const ShellScreen({super.key, required this.config});
 
   @override
   State<ShellScreen> createState() => _ShellScreenState();
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  late final ShellController _controller;
+  late final ShellBackgroundController _controller;
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
+  bool _connecting = true;
 
   static const double _minFontSize = 8;
   static const double _maxFontSize = 32;
@@ -24,7 +24,10 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = ShellController(widget.session);
+    _controller = ShellBackgroundController(widget.config);
+    _controller.onStarted = () {
+      if (mounted) setState(() => _connecting = false);
+    };
     _controller.onExit = () {
       if (mounted) Navigator.pop(context);
     };
@@ -36,8 +39,8 @@ class _ShellScreenState extends State<ShellScreen> {
 
   @override
   void dispose() {
+    stopShellBackgroundService(widget.config.sessionKey);
     _controller.dispose();
-    widget.session.close().catchError((_) {});
     super.dispose();
   }
 
@@ -49,23 +52,42 @@ class _ShellScreenState extends State<ShellScreen> {
         child: Column(
           children: [
             Expanded(
-              child: GestureDetector(
-                onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
-                onScaleUpdate: (details) {
-                  if (details.pointerCount < 2) return;
-                  final newSize = (_fontSizeOnScaleStart * details.scale).clamp(_minFontSize, _maxFontSize);
-                  if ((newSize - _fontSize).abs() >= 0.5) {
-                    setState(() => _fontSize = newSize);
-                  }
-                },
-                child: TerminalView(
-                  _controller.terminal,
-                  autofocus: true,
-                  textStyle: TerminalStyle(fontSize: _fontSize),
-                ),
+              child: Stack(
+                children: [
+                  GestureDetector(
+                    onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
+                    onScaleUpdate: (details) {
+                      if (details.pointerCount < 2) return;
+                      final newSize = (_fontSizeOnScaleStart * details.scale).clamp(_minFontSize, _maxFontSize);
+                      if ((newSize - _fontSize).abs() >= 0.5) {
+                        setState(() => _fontSize = newSize);
+                      }
+                    },
+                    child: TerminalView(
+                      _controller.terminal,
+                      autofocus: true,
+                      textStyle: TerminalStyle(fontSize: _fontSize),
+                    ),
+                  ),
+                  if (_connecting)
+                    const Positioned.fill(
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                ],
               ),
             ),
-            Toolbar(controller: _controller),
+            if (!_connecting)
+              Toolbar(controller: _controller)
+            else
+              const SizedBox(
+                height: 48,
+                child: Center(
+                  child: Text('Connecting shell...', style: TextStyle(color: Colors.white70)),
+                ),
+              ),
           ],
         ),
       ),
