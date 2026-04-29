@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'shell_controller.dart';
 
 class Toolbar extends StatefulWidget {
-  final ShellController controller;
+  final dynamic controller;
 
   const Toolbar({super.key, required this.controller});
 

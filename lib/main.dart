@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -6,9 +8,12 @@ import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+import 'core/shell/shell_background_service.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const DeskconnApp());
+  unawaited(initializeShellBackgroundService());
 }
 
 class DeskconnApp extends StatelessWidget {
@@ -24,10 +29,6 @@ class DeskconnApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, theme, _) {
-          if (!theme.initialized) {
-            return const SizedBox.shrink();
-          }
-
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: DeskconnTheme.light(),
