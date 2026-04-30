@@ -171,9 +171,14 @@ void shellBackgroundServiceEntryPoint(ServiceInstance service) {
 class ShellBackgroundController {
   ShellBackgroundController(this.config);
 
+  static const int _outputChunkSize = 4096;
+  static const int _maxOutputChunksPerFlush = 3;
+
   final ShellLaunchConfig config;
   final Terminal terminal = Terminal();
   final FlutterBackgroundService _service = FlutterBackgroundService();
+  final Queue<String> _pendingOutput = Queue<String>();
+  final Queue<String> _pendingInput = Queue<String>();
 
   void Function()? onStarted;
   void Function()? onExit;
@@ -183,6 +188,7 @@ class ShellBackgroundController {
   StreamSubscription<Map<String, dynamic>?>? _outputSub;
   StreamSubscription<Map<String, dynamic>?>? _stoppedSub;
   StreamSubscription<Map<String, dynamic>?>? _errorSub;
+  Timer? _outputFlushTimer;
   Timer? _resizeTimer;
   Timer? _serviceWatchTimer;
   Timer? _exitStopTimer;
@@ -190,6 +196,7 @@ class ShellBackgroundController {
   bool ctrl = false;
   bool alt = false;
   bool _running = false;
+  bool _started = false;
   String _inputBuffer = '';
   bool _disposed = false;
   bool _exitNotified = false;
@@ -210,6 +217,10 @@ class ShellBackgroundController {
   void _listenForServiceEvents() {
     _startedSub ??= _service.on(shellStartedEvent).listen((event) {
       if (!_isCurrentSession(event)) return;
+      _started = true;
+      while (_pendingInput.isNotEmpty) {
+        _sendInput(_pendingInput.removeFirst());
+      }
       _showNotificationCloseAction();
       _sendSize();
       _startServiceWatch();
@@ -219,7 +230,7 @@ class ShellBackgroundController {
       if (!_isCurrentSession(event)) return;
       final data = event?['data']?.toString();
       if (data != null && data.isNotEmpty) {
-        terminal.write(data);
+        _enqueueOutput(data);
       }
     });
     _stoppedSub ??= _service.on(shellStoppedEvent).listen((event) {
@@ -236,6 +247,39 @@ class ShellBackgroundController {
       }
       _notifyExit();
     });
+  }
+
+  void _enqueueOutput(String data) {
+    for (var start = 0; start < data.length; start += _outputChunkSize) {
+      final end = (start + _outputChunkSize).clamp(0, data.length);
+      _pendingOutput.add(data.substring(start, end));
+    }
+    _scheduleOutputFlush();
+  }
+
+  void _scheduleOutputFlush() {
+    if (_disposed || _outputFlushTimer != null || _pendingOutput.isEmpty) {
+      return;
+    }
+    _outputFlushTimer = Timer(Duration.zero, _flushOutput);
+  }
+
+  void _flushOutput() {
+    _outputFlushTimer = null;
+    if (_disposed) {
+      _pendingOutput.clear();
+      return;
+    }
+
+    var chunksWritten = 0;
+    while (_pendingOutput.isNotEmpty && chunksWritten < _maxOutputChunksPerFlush) {
+      terminal.write(_pendingOutput.removeFirst());
+      chunksWritten++;
+    }
+
+    if (_pendingOutput.isNotEmpty) {
+      _outputFlushTimer = Timer(const Duration(milliseconds: 1), _flushOutput);
+    }
   }
 
   void _attachInput() {
@@ -259,13 +303,21 @@ class ShellBackgroundController {
         onModifierChanged?.call();
       }
 
-      _service.invoke(shellInputEvent, {'sessionKey': config.sessionKey, 'data': output});
+      if (_started) {
+        _sendInput(output);
+      } else {
+        _pendingInput.add(output);
+      }
       _trackExitCommands(output);
     };
   }
 
+  void _sendInput(String output) {
+    _service.invoke(shellInputEvent, {'sessionKey': config.sessionKey, 'data': output});
+  }
+
   void _sendSize() {
-    if (!_running) return;
+    if (!_running || !_started) return;
     _service.invoke(shellResizeEvent, {
       'sessionKey': config.sessionKey,
       'width': terminal.viewWidth,
@@ -357,13 +409,24 @@ class ShellBackgroundController {
 
   void sendSpecialKey(String sequence) {
     if (!_running) return;
-    _service.invoke(shellInputEvent, {'sessionKey': config.sessionKey, 'data': sequence});
+    if (_started) {
+      _sendInput(sequence);
+    } else {
+      _pendingInput.add(sequence);
+    }
     _trackExitCommands(sequence);
+  }
+
+  void sendInterrupt() {
+    _pendingOutput.clear();
+    _outputFlushTimer?.cancel();
+    _outputFlushTimer = null;
+    sendSpecialKey('\x03');
   }
 
   void sendTab() => sendSpecialKey('\t');
   void sendEsc() => sendSpecialKey('\x1b');
-  void sendCtrlC() => sendSpecialKey('\x03');
+  void sendCtrlC() => sendInterrupt();
   void sendCtrlD() => sendSpecialKey('\x04');
   void sendArrowUp() => sendSpecialKey('\x1b[A');
   void sendArrowDown() => sendSpecialKey('\x1b[B');
@@ -376,6 +439,10 @@ class ShellBackgroundController {
   void dispose() {
     _disposed = true;
     _running = false;
+    _started = false;
+    _pendingOutput.clear();
+    _pendingInput.clear();
+    _outputFlushTimer?.cancel();
     _resizeTimer?.cancel();
     _serviceWatchTimer?.cancel();
     _exitStopTimer?.cancel();
@@ -406,16 +473,39 @@ class BlockingQueue<T> {
     _waiters.add(completer);
     return completer.future;
   }
+
+  void clear() {
+    _queue.clear();
+  }
+
+  void cancelPending(Object error) {
+    clear();
+    final waiters = List<Completer<T>>.from(_waiters);
+    _waiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) {
+        waiter.completeError(error);
+      }
+    }
+  }
 }
 
 class _ShellBackgroundRuntime {
   _ShellBackgroundRuntime(this.service);
 
+  static const int _outputChunkSize = 4096;
+  static const int _maxOutputChunksPerFlush = 2;
+  static const int _maxOutputHistoryLength = 12000;
+
   final ServiceInstance service;
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue<Progress>();
+  final Queue<String> _pendingOutput = Queue<String>();
+  final Queue<String> _pendingInput = Queue<String>();
 
   Session? _session;
   Encryption? _encryption;
+  Timer? _outputFlushTimer;
+  String _outputHistory = '';
   bool _starting = false;
   bool _running = false;
   bool _keyReceived = false;
@@ -437,8 +527,15 @@ class _ShellBackgroundRuntime {
       return;
     }
 
-    if ((_running || _starting) && _sessionKey == sessionKey) {
+    if (_starting && _sessionKey == sessionKey) {
+      return;
+    }
+
+    if (_running && _sessionKey == sessionKey) {
       service.invoke(shellStartedEvent, {'sessionKey': _sessionKey});
+      if (_outputHistory.isNotEmpty) {
+        service.invoke(shellOutputEvent, {'sessionKey': _sessionKey, 'data': _outputHistory});
+      }
       return;
     }
 
@@ -454,6 +551,8 @@ class _ShellBackgroundRuntime {
       _encryption = await Encryption.create();
       _keyReceived = false;
       _clientKeySent = false;
+      _outputHistory = '';
+      _pendingInput.clear();
       _session = await _createShellSession(
         realm: realm,
         authId: authId,
@@ -476,12 +575,21 @@ class _ShellBackgroundRuntime {
   }
 
   void sendInput(dynamic event) {
-    if (!_running || !_keyReceived) return;
+    if (!_running) return;
     final data = _asMap(event);
     if (data['sessionKey']?.toString() != _sessionKey) return;
     final input = data['data']?.toString();
     if (input == null || input.isEmpty) return;
-    _outgoingQueue.put(Progress(args: [_encodeOutboundText(input)], options: {'progress': true}));
+    if (input == '\x03') {
+      _pendingOutput.clear();
+      _outputFlushTimer?.cancel();
+      _outputFlushTimer = null;
+    }
+    if (!_keyReceived) {
+      _pendingInput.add(input);
+      return;
+    }
+    _sendInput(input);
   }
 
   void resize(dynamic event) {
@@ -509,6 +617,9 @@ class _ShellBackgroundRuntime {
   }
 
   Future<Progress> _sender() async {
+    if (!_running && !_starting) {
+      throw StateError('Shell stopped');
+    }
     return _outgoingQueue.take();
   }
 
@@ -522,6 +633,7 @@ class _ShellBackgroundRuntime {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
+        _flushPendingInput();
         return;
       }
       output = utf8.decode(_encryption!.decrypt(bytes));
@@ -530,13 +642,18 @@ class _ShellBackgroundRuntime {
     }
 
     if (output.isEmpty) return;
-    service.invoke(shellOutputEvent, {'sessionKey': _sessionKey, 'data': output});
+    _enqueueOutput(output);
   }
 
   Future<void> _stopCurrentShell(String reason) async {
     final sessionKey = _sessionKey;
     _starting = false;
     _running = false;
+    _pendingOutput.clear();
+    _pendingInput.clear();
+    _outputFlushTimer?.cancel();
+    _outputFlushTimer = null;
+    _outgoingQueue.cancelPending(StateError(reason));
 
     try {
       await _session?.close();
@@ -549,6 +666,60 @@ class _ShellBackgroundRuntime {
 
     if (sessionKey != null) {
       service.invoke(shellStoppedEvent, {'sessionKey': sessionKey, 'reason': reason});
+    }
+  }
+
+  void _enqueueOutput(String data) {
+    _outputHistory += data;
+    if (_outputHistory.length > _maxOutputHistoryLength) {
+      _outputHistory = _outputHistory.substring(_outputHistory.length - _maxOutputHistoryLength);
+    }
+
+    for (var start = 0; start < data.length; start += _outputChunkSize) {
+      final end = (start + _outputChunkSize).clamp(0, data.length);
+      _pendingOutput.add(data.substring(start, end));
+    }
+    _scheduleOutputFlush();
+  }
+
+  void _flushPendingInput() {
+    while (_pendingInput.isNotEmpty) {
+      _sendInput(_pendingInput.removeFirst());
+    }
+  }
+
+  void _sendInput(String input) {
+    _outgoingQueue.put(Progress(args: [_encodeOutboundText(input)], options: {'progress': true}));
+  }
+
+  void _scheduleOutputFlush() {
+    if (!_running || _outputFlushTimer != null || _pendingOutput.isEmpty) {
+      return;
+    }
+    _outputFlushTimer = Timer(Duration.zero, _flushOutput);
+  }
+
+  void _flushOutput() {
+    _outputFlushTimer = null;
+    if (!_running || _sessionKey == null) {
+      _pendingOutput.clear();
+      return;
+    }
+
+    var chunksWritten = 0;
+    final buffer = StringBuffer();
+    while (_pendingOutput.isNotEmpty && chunksWritten < _maxOutputChunksPerFlush) {
+      buffer.write(_pendingOutput.removeFirst());
+      chunksWritten++;
+    }
+
+    final data = buffer.toString();
+    if (data.isNotEmpty) {
+      service.invoke(shellOutputEvent, {'sessionKey': _sessionKey, 'data': data});
+    }
+
+    if (_pendingOutput.isNotEmpty) {
+      _outputFlushTimer = Timer(const Duration(milliseconds: 4), _flushOutput);
     }
   }
 

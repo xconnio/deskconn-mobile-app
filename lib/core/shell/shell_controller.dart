@@ -12,7 +12,7 @@ import "shell_encryption.dart";
 
 class BlockingQueue<T> {
   final Queue<T> _queue = Queue<T>();
-  final List<Completer<T?>> _waiters = [];
+  final List<Completer<T>> _waiters = [];
 
   void put(T item) {
     if (_waiters.isNotEmpty) {
@@ -32,12 +32,28 @@ class BlockingQueue<T> {
     _waiters.add(completer);
     return completer.future;
   }
+
+  void clear() {
+    _queue.clear();
+  }
+
+  void cancelPending(Object error) {
+    clear();
+    final waiters = List<Completer<T>>.from(_waiters);
+    _waiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) {
+        waiter.completeError(error);
+      }
+    }
+  }
 }
 
 class ShellController {
   final Terminal terminal = Terminal();
   final Session session;
 
+  void Function()? onStarted;
   void Function()? onExit;
   void Function()? onModifierChanged;
 
@@ -46,6 +62,7 @@ class ShellController {
   bool _running = false;
   bool _keyReceived = false;
   bool _clientKeySent = false;
+  bool _disposed = false;
   Timer? _resizeTimer;
   String _inputBuffer = "";
   Encryption? _encryption;
@@ -69,11 +86,15 @@ class ShellController {
     try {
       await session.callProgressiveProgress("io.xconn.deskconn.deskconnd.shell", _sender, _receiver);
     } catch (e) {
-      terminal.write("\r\nShell error: $e\r\n");
+      if (!_disposed) {
+        terminal.write("\r\nShell error: $e\r\n");
+      }
     } finally {
       _running = false;
       _cleanup();
-      onExit?.call();
+      if (!_disposed) {
+        onExit?.call();
+      }
     }
   }
 
@@ -136,6 +157,9 @@ class ShellController {
   }
 
   Future<Progress> _sender() async {
+    if (!_running || _disposed) {
+      throw StateError('Shell closed');
+    }
     return await _outgoingQueue.take();
   }
 
@@ -148,6 +172,7 @@ class ShellController {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
+        onStarted?.call();
         return;
       }
 
@@ -163,8 +188,10 @@ class ShellController {
   }
 
   void dispose() {
+    _disposed = true;
     _running = false;
     _cleanup();
+    _outgoingQueue.cancelPending(StateError('Shell closed'));
   }
 
   void sendSpecialKey(String sequence) {
