@@ -16,7 +16,6 @@ class _ShellScreenState extends State<ShellScreen> {
   late final ShellBackgroundController _controller;
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
-  bool _connecting = true;
 
   static const double _minFontSize = 8;
   static const double _maxFontSize = 32;
@@ -25,9 +24,6 @@ class _ShellScreenState extends State<ShellScreen> {
   void initState() {
     super.initState();
     _controller = ShellBackgroundController(widget.config);
-    _controller.onStarted = () {
-      if (mounted) setState(() => _connecting = false);
-    };
     _controller.onExit = () {
       if (mounted) Navigator.pop(context);
     };
@@ -39,7 +35,6 @@ class _ShellScreenState extends State<ShellScreen> {
 
   @override
   void dispose() {
-    stopShellBackgroundService(widget.config.sessionKey);
     _controller.dispose();
     super.dispose();
   }
@@ -69,25 +64,10 @@ class _ShellScreenState extends State<ShellScreen> {
                       textStyle: TerminalStyle(fontSize: _fontSize),
                     ),
                   ),
-                  if (_connecting)
-                    const Positioned.fill(
-                      child: ColoredBox(
-                        color: Colors.black,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    ),
                 ],
               ),
             ),
-            if (!_connecting)
-              Toolbar(controller: _controller)
-            else
-              const SizedBox(
-                height: 48,
-                child: Center(
-                  child: Text('Connecting shell...', style: TextStyle(color: Colors.white70)),
-                ),
-              ),
+            Toolbar(controller: _controller),
           ],
         ),
       ),
