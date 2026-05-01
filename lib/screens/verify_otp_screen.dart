@@ -76,7 +76,15 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             if (!ctx.mounted) return;
 
                             if (ok) {
-                              await ctx.read<SessionProvider>().login(auth.pendingEmail!, auth.pendingPassword!);
+                              final email = auth.pendingEmail;
+                              final password = auth.pendingPassword;
+
+                              if (email == null || password == null) {
+                                setState(() => _loading = false);
+                                return;
+                              }
+
+                              await ctx.read<SessionProvider>().login(email, password);
 
                               if (!ctx.mounted) return;
 

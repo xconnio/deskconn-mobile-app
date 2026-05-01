@@ -17,6 +17,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   bool savingProfile = false;
   bool savingPassword = false;
+  String? error;
 
   @override
   void didChangeDependencies() {
@@ -61,7 +62,9 @@ class _AccountScreenState extends State<AccountScreen> {
       if (res.args.isNotEmpty) {
         session.updateAccount(Map<String, dynamic>.from(res.args[0]));
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
 
     if (mounted) {
       setState(() {
@@ -83,7 +86,9 @@ class _AccountScreenState extends State<AccountScreen> {
       final session = context.read<SessionProvider>();
       await session.session!.call('io.xconn.deskconn.account.update', kwargs: {'password': passCtrl.text});
       passCtrl.clear();
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
 
     if (mounted) {
       setState(() {
@@ -142,6 +147,11 @@ class _AccountScreenState extends State<AccountScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(error!, style: const TextStyle(color: Colors.red)),
+            ),
           const Text('Email'),
           const SizedBox(height: 4),
           Text(account['email'] ?? ''),

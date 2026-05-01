@@ -107,7 +107,8 @@ class SessionProvider extends ChangeNotifier {
           loggedIn = false;
         }
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Session restore failed: $e');
       session = null;
       account = null;
       desktops.clear();
@@ -201,7 +202,7 @@ class SessionProvider extends ChangeNotifier {
         deviceModel: deviceModel,
       );
     } catch (e) {
-      error = 'Device registration failed:';
+      error = 'Device registration failed: $e';
     }
   }
 

@@ -13,8 +13,10 @@ class DevicesScreen extends StatefulWidget {
 
 class _DevicesScreenState extends State<DevicesScreen> {
   bool loading = true;
+  bool revoking = false;
   List<Map<String, dynamic>> devices = [];
   String? currentDeviceId;
+  String? error;
 
   @override
   void initState() {
@@ -27,18 +29,35 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (!mounted) return;
     final session = context.read<SessionProvider>();
 
-    final res = await session.session!.call('io.xconn.deskconn.device.key.list');
-
-    setState(() {
-      devices = List<Map<String, dynamic>>.from(res.args);
-      loading = false;
-    });
+    try {
+      final res = await session.session!.call('io.xconn.deskconn.device.key.list');
+      setState(() {
+        devices = List<Map<String, dynamic>>.from(res.args);
+        loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        error = e.toString();
+        loading = false;
+      });
+    }
   }
 
   Future<void> _revoke(String deviceId) async {
+    if (revoking) return;
+    setState(() => revoking = true);
+
     final session = context.read<SessionProvider>();
 
-    await session.session!.call('io.xconn.deskconn.device.delete', args: [deviceId]);
+    try {
+      await session.session!.call('io.xconn.deskconn.device.delete', args: [deviceId]);
+    } catch (e) {
+      if (mounted) {
+        setState(() => revoking = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+      return;
+    }
 
     if (deviceId == currentDeviceId) {
       await session.logout();
@@ -46,6 +65,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     }
 
     await _load();
+    if (mounted) setState(() => revoking = false);
   }
 
   @override
@@ -54,6 +74,15 @@ class _DevicesScreenState extends State<DevicesScreen> {
       return AppShell(
         title: 'Devices',
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (error != null) {
+      return AppShell(
+        title: 'Devices',
+        body: Center(
+          child: Text(error!, style: const TextStyle(color: Colors.red)),
+        ),
       );
     }
 
@@ -80,7 +109,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   leading: const Icon(Icons.smartphone),
                   title: Text(d['name'] ?? d['device_id']),
                   subtitle: isThis ? const Text('This device') : null,
-                  trailing: TextButton(onPressed: () => _revoke(d['device_id']), child: const Text('Revoke')),
+                  trailing: isThis
+                      ? null
+                      : TextButton(
+                          onPressed: revoking ? null : () => _revoke(d['device_id']),
+                          child: const Text('Revoke'),
+                        ),
                 );
               },
             ),

@@ -17,11 +17,16 @@ class _InvitationsScreenState extends State<InvitationsScreen> with SingleTicker
   void initState() {
     super.initState();
     tabs = TabController(length: 2, vsync: this);
-
     Future.microtask(() {
       if (!mounted) return;
       context.read<SessionProvider>().loadInvitations();
     });
+  }
+
+  @override
+  void dispose() {
+    tabs.dispose();
+    super.dispose();
   }
 
   @override
