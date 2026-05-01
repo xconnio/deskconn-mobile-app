@@ -14,7 +14,8 @@ class OrganizationDetailsScreen extends StatefulWidget {
 
 class _OrganizationDetailsScreenState extends State<OrganizationDetailsScreen> {
   bool loading = true;
-  List members = [];
+  String? error;
+  List<Map<String, dynamic>> members = [];
 
   @override
   void initState() {
@@ -23,11 +24,19 @@ class _OrganizationDetailsScreenState extends State<OrganizationDetailsScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
     final session = context.read<SessionProvider>();
 
-    final res = await session.session!.call("io.xconn.deskconn.organization.get", args: [widget.id]);
-
-    members = res.args[0]['members'] ?? [];
+    try {
+      final res = await session.session!.call("io.xconn.deskconn.organization.get", args: [widget.id]);
+      if (res.args.isEmpty) throw Exception('Empty response');
+      members = List<Map<String, dynamic>>.from(res.args[0]['members'] ?? []);
+    } catch (e) {
+      error = e.toString();
+    }
 
     setState(() {
       loading = false;
@@ -43,6 +52,10 @@ class _OrganizationDetailsScreenState extends State<OrganizationDetailsScreen> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+          ? Center(
+              child: Text(error!, style: const TextStyle(color: Colors.red)),
+            )
           : ListView.builder(
               itemCount: members.length,
               itemBuilder: (_, i) {

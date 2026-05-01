@@ -13,6 +13,7 @@ class OrganizationsScreen extends StatefulWidget {
 
 class _OrganizationsScreenState extends State<OrganizationsScreen> {
   bool loading = true;
+  String? error;
   List<Map<String, dynamic>> orgs = [];
 
   @override
@@ -24,12 +25,18 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   Future<void> _load() async {
     final session = context.read<SessionProvider>();
 
-    final res = await session.session!.call('io.xconn.deskconn.organization.list');
-
-    setState(() {
-      orgs = List<Map<String, dynamic>>.from(res.args);
-      loading = false;
-    });
+    try {
+      final res = await session.session!.call('io.xconn.deskconn.organization.list');
+      setState(() {
+        orgs = List<Map<String, dynamic>>.from(res.args);
+        loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        error = e.toString();
+        loading = false;
+      });
+    }
   }
 
   @override
@@ -38,6 +45,10 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
       title: 'Organizations',
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+          ? Center(
+              child: Text(error!, style: const TextStyle(color: Colors.red)),
+            )
           : orgs.isEmpty
           ? const Center(child: Text('No organizations'))
           : ListView.builder(
