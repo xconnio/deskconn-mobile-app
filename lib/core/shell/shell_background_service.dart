@@ -602,7 +602,12 @@ class _ShellBackgroundRuntime {
       }
       output = utf8.decode(_encryption!.decrypt(bytes));
     } catch (_) {
-      output = raw.toString();
+      try {
+        final bytes = _coerceBytes(raw);
+        output = utf8.decode(bytes);
+      } catch (_) {
+        output = raw.toString();
+      }
     }
 
     if (output.isEmpty) return;
