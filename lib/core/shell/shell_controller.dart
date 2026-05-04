@@ -139,7 +139,12 @@ class ShellController {
 
       text = utf8.decode(_encryption!.decrypt(bytes));
     } catch (_) {
-      text = raw.toString();
+      try {
+        final bytes = _coerceBytes(raw);
+        text = utf8.decode(bytes);
+      } catch (_) {
+        text = raw.toString();
+      }
     }
     if (text.isNotEmpty) terminal.write(text);
   }
