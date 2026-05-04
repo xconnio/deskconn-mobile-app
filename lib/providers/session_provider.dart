@@ -73,9 +73,9 @@ class SessionProvider extends ChangeNotifier {
 
       notifyListeners();
       rethrow;
+    } finally {
+      _setLoading(false);
     }
-
-    _setLoading(false);
   }
 
   Future<void> initialize() async {
