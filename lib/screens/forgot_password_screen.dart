@@ -52,9 +52,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     TextField(
                       controller: emailCtrl,
                       onChanged: (v) {
-                        setState(() {
-                          emailError = Validators.email(v);
-                        });
+                        if (emailError != null) {
+                          setState(() {
+                            emailError = null;
+                          });
+                        }
                       },
                       decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                     ),

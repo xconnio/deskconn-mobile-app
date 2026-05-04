@@ -73,9 +73,12 @@ class _SignInScreenState extends State<SignInScreen> {
                           TextField(
                             controller: emailCtrl,
                             onChanged: (v) {
-                              setState(() {
-                                emailError = Validators.email(v);
-                              });
+                              if (emailError != null || passwordError != null) {
+                                setState(() {
+                                  emailError = null;
+                                  passwordError = null;
+                                });
+                              }
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
@@ -86,9 +89,12 @@ class _SignInScreenState extends State<SignInScreen> {
                             controller: passCtrl,
                             obscureText: true,
                             onChanged: (v) {
-                              setState(() {
-                                passwordError = Validators.required(v);
-                              });
+                              if (emailError != null || passwordError != null) {
+                                setState(() {
+                                  emailError = null;
+                                  passwordError = null;
+                                });
+                              }
                             },
                             decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
                           ),
@@ -113,14 +119,16 @@ class _SignInScreenState extends State<SignInScreen> {
 
                                 setState(() {
                                   emailError = Validators.email(emailCtrl.text);
-                                  passwordError = Validators.password(passCtrl.text);
+                                  passwordError = Validators.required(passCtrl.text);
                                 });
 
                                 if (emailError != null || passwordError != null) {
                                   return;
                                 }
 
-                                await session.login(emailCtrl.text.trim(), passCtrl.text);
+                                try {
+                                  await session.login(emailCtrl.text.trim(), passCtrl.text);
+                                } catch (_) {}
 
                                 if (!context.mounted) return;
 

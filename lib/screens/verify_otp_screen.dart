@@ -48,9 +48,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     maxLength: 6,
                     enabled: !_loading,
                     onChanged: (v) {
-                      setState(() {
-                        requiredError = Validators.required(v);
-                      });
+                      if (requiredError != null) {
+                        setState(() {
+                          requiredError = null;
+                        });
+                      }
                     },
                     decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
                   ),
@@ -69,31 +71,33 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             FocusScope.of(context).unfocus();
                             setState(() => _loading = true);
 
-                            final ctx = context;
+                            try {
+                              final ok = await auth.verifyOtp(otpCtrl.text.trim());
 
-                            final ok = await auth.verifyOtp(otpCtrl.text.trim());
+                              if (!context.mounted) return;
 
-                            if (!ctx.mounted) return;
+                              if (ok) {
+                                final email = auth.pendingEmail;
+                                final password = auth.pendingPassword;
 
-                            if (ok) {
-                              final email = auth.pendingEmail;
-                              final password = auth.pendingPassword;
+                                if (email == null || password == null) {
+                                  setState(() => _loading = false);
+                                  return;
+                                }
 
-                              if (email == null || password == null) {
+                                await context.read<SessionProvider>().login(email, password);
+
+                                if (!context.mounted) return;
+
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                                  (_) => false,
+                                );
+                              } else {
                                 setState(() => _loading = false);
-                                return;
                               }
-
-                              await ctx.read<SessionProvider>().login(email, password);
-
-                              if (!ctx.mounted) return;
-
-                              Navigator.pushAndRemoveUntil(
-                                ctx,
-                                MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                                (_) => false,
-                              );
-                            } else {
+                            } catch (_) {
                               setState(() => _loading = false);
                             }
                           },

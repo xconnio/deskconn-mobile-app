@@ -56,9 +56,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           TextField(
                             controller: emailCtrl,
                             onChanged: (v) {
-                              setState(() {
-                                emailError = Validators.email(v);
-                              });
+                              if (emailError != null || nameError != null || passwordError != null) {
+                                setState(() {
+                                  emailError = null;
+                                  nameError = null;
+                                  passwordError = null;
+                                });
+                              }
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
@@ -68,9 +72,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           TextField(
                             controller: nameCtrl,
                             onChanged: (v) {
-                              setState(() {
-                                nameError = Validators.name(v);
-                              });
+                              if (emailError != null || nameError != null || passwordError != null) {
+                                setState(() {
+                                  emailError = null;
+                                  nameError = null;
+                                  passwordError = null;
+                                });
+                              }
                             },
                             decoration: InputDecoration(labelText: 'Username', errorText: nameError),
                           ),
@@ -81,9 +89,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             controller: passCtrl,
                             obscureText: true,
                             onChanged: (v) {
-                              setState(() {
-                                passwordError = Validators.password(v);
-                              });
+                              if (emailError != null || nameError != null || passwordError != null) {
+                                setState(() {
+                                  emailError = null;
+                                  nameError = null;
+                                  passwordError = null;
+                                });
+                              }
                             },
                             decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
                           ),
