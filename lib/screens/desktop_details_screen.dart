@@ -50,8 +50,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         (_connectionStatus == _DesktopConnectionStatus.routed || _connectionStatus == _DesktopConnectionStatus.p2p) &&
         !_openingShell;
 
+    final name = widget.desktop['name'] as String?;
+    final authId = widget.desktop['authid']?.toString() ?? '';
+    final shortId = authId.length > 4 ? authId.substring(authId.length - 4) : authId;
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.desktop['name'] ?? 'Desktop')),
+      appBar: AppBar(title: Text(name ?? 'Desktop #$shortId')),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
