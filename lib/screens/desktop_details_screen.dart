@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
@@ -69,6 +70,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                   title: "Shell",
                   enabled: shellEnabled,
                   onTap: () => _openShell(context),
+                ),
+                _ActionTile(
+                  icon: Icons.folder_open,
+                  title: "File Explorer",
+                  enabled: shellEnabled,
+                  onTap: () => _openFileExplorer(context),
                 ),
               ],
             ),
@@ -140,6 +147,39 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       }
     } finally {
       await probeClient.disconnect();
+    }
+  }
+
+  Future<void> _openFileExplorer(BuildContext context) async {
+    final realm = _realm;
+    if (realm == null ||
+        (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
+      return;
+    }
+
+    try {
+      final authId = await DeviceIdentity.lastEmail();
+      final privateKey = await DeviceIdentity.privateKey();
+      final prefs = await SharedPreferences.getInstance();
+      if (authId == null || privateKey == null) {
+        throw Exception("Missing credentials.");
+      }
+
+      if (!context.mounted) return;
+
+      final config = _shellConfig(
+        realm: realm,
+        authId: authId,
+        privateKey: privateKey,
+        status: _connectionStatus,
+        prefs: prefs,
+      );
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => FileExplorerScreen(config: config)));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open File Explorer: $e")));
+      }
     }
   }
 
