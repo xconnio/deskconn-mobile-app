@@ -12,5 +12,6 @@ class ShellNotificationActionReceiver : BroadcastReceiver() {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(1107)
+        notificationManager.cancel(1108)
     }
 }

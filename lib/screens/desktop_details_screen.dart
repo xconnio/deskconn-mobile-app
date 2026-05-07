@@ -1,23 +1,17 @@
 import 'dart:async';
-import 'dart:convert';
 
+import 'package:deskconn_mobile_app/core/shell/shell_controller.dart';
+import 'package:deskconn_mobile_app/core/shell/shell_registry.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
-import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
-import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
-import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:xconn/xconn.dart';
-import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
 
-const String _prefKeyTurnExpiresAt = 'turn_expires_at';
-const String _prefKeyTurnUsername = 'turn_username';
-const String _prefKeyTurnCredential = 'turn_credential';
-const String _prefKeyTurnUrls = 'turn_urls';
+import '../core/shell/shell_background_service.dart';
 
 enum _DesktopConnectionStatus { checking, routed, p2p, offline }
 
@@ -31,9 +25,6 @@ class DesktopDetailsScreen extends StatefulWidget {
 }
 
 class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
-  static final Map<String, _DesktopConnectionStatus> _statuses = {};
-  static final Set<String> _warmingShells = {};
-
   bool _openingShell = false;
   _DesktopConnectionStatus _connectionStatus = _DesktopConnectionStatus.checking;
 
@@ -43,6 +34,15 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   void initState() {
     super.initState();
     unawaited(_probeDesktopConnection());
+  }
+
+  @override
+  void dispose() {
+    final realm = _realm;
+    if (realm != null) {
+      unawaited(DesktopConnectionManager().release(realm));
+    }
+    super.dispose();
   }
 
   @override
@@ -87,15 +87,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   Future<void> _probeDesktopConnection() async {
     final realm = _realm;
-    final existing = realm == null ? null : _statuses[realm];
-    if (existing != null) {
-      if (mounted) {
-        setState(() => _connectionStatus = existing);
-      }
-      unawaited(_warmShellService(existing));
-      return;
-    }
-
     if (mounted) {
       setState(() => _connectionStatus = _DesktopConnectionStatus.checking);
     }
@@ -112,41 +103,24 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       return;
     }
 
-    final probeClient = WampClient();
     try {
-      final session = await probeClient
-          .connectCryptoSignWithSerializer(
-            authId: authId,
-            privateKey: privateKey,
-            realm: realm,
-            serializer: CBORSerializer(),
-          )
-          .timeout(const Duration(seconds: 10));
-      await session.call("io.xconn.deskconn.deskconnd.exec", args: ["echo"]).timeout(const Duration(seconds: 5));
-      var status = _DesktopConnectionStatus.routed;
-      if (webRtcEnabled) {
-        Session? p2pSession;
-        try {
-          p2pSession = await _connectP2pSession(session: session, realm: realm, authId: authId, privateKey: privateKey);
-          status = _DesktopConnectionStatus.p2p;
-        } catch (e) {
-          _appendShellLog("P2P session failed, using routed session: ${e.toString().split('\n').first}");
-        } finally {
-          await _safeCloseSession(p2pSession);
-        }
-      }
-      _statuses[realm] = status;
+      final connection = await DesktopConnectionManager().connect(
+        realm: realm,
+        authId: authId,
+        privateKey: privateKey,
+        webRtcEnabled: webRtcEnabled,
+      );
+
       if (mounted) {
-        setState(() => _connectionStatus = status);
+        setState(
+          () => _connectionStatus = connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed,
+        );
       }
-      unawaited(_warmShellService(status));
     } catch (e) {
-      _appendShellLog("Desktop connection probe failed: ${e.toString().split('\n').first}");
+      _appendShellLog("Desktop connection failed: ${e.toString().split('\n').first}");
       if (mounted) {
         setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
       }
-    } finally {
-      await probeClient.disconnect();
     }
   }
 
@@ -160,20 +134,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     try {
       final authId = await DeviceIdentity.lastEmail();
       final privateKey = await DeviceIdentity.privateKey();
-      final prefs = await SharedPreferences.getInstance();
       if (authId == null || privateKey == null) {
         throw Exception("Missing credentials.");
       }
 
       if (!context.mounted) return;
 
-      final config = _shellConfig(
-        realm: realm,
-        authId: authId,
-        privateKey: privateKey,
-        status: _connectionStatus,
-        prefs: prefs,
-      );
+      final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
       await Navigator.push(context, MaterialPageRoute(builder: (_) => FileExplorerScreen(config: config)));
     } catch (e) {
@@ -195,27 +162,40 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     _appendShellLog("Starting shell connection");
 
     try {
-      final authId = await DeviceIdentity.lastEmail();
-      final privateKey = await DeviceIdentity.privateKey();
-      final prefs = await SharedPreferences.getInstance();
-      if (authId == null || privateKey == null) {
-        throw Exception("Missing shell credentials.");
+      var controller = ShellRegistry().getActive(realm);
+
+      if (controller == null) {
+        final authId = await DeviceIdentity.lastEmail();
+        final privateKey = await DeviceIdentity.privateKey();
+        if (authId == null || privateKey == null) {
+          throw Exception("Missing shell credentials.");
+        }
+
+        final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+
+        final connection = await DesktopConnectionManager().connect(
+          realm: realm,
+          authId: authId,
+          privateKey: privateKey,
+          webRtcEnabled: config.webRtcEnabled,
+        );
+        controller = ShellController(connection.session, config: config);
+
+        controller.onClosed = () => ShellRegistry().closeShell(realm);
+
+        ShellRegistry().register(realm, controller);
+        unawaited(controller.start());
+        _appendShellLog("Shell controller created isP2P=${connection.isP2P}");
+      } else {
+        _appendShellLog("Reusing persistent shell controller");
       }
 
       if (!context.mounted) return;
 
       setState(() => _openingShell = false);
-      _appendShellLog("Opening shell in background service");
+      _appendShellLog("Navigating to shell screen");
 
-      final config = _shellConfig(
-        realm: realm,
-        authId: authId,
-        privateKey: privateKey,
-        status: _connectionStatus,
-        prefs: prefs,
-      );
-
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(config: config)));
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(controller: controller!)));
     } catch (e) {
       final message = _friendlyShellError(e);
       _appendShellLog("Shell open failed: $message");
@@ -229,36 +209,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<void> _warmShellService(_DesktopConnectionStatus status) async {
-    final realm = _realm;
-    if (realm == null ||
-        (status != _DesktopConnectionStatus.routed && status != _DesktopConnectionStatus.p2p) ||
-        _warmingShells.contains(realm)) {
-      return;
-    }
-
-    _warmingShells.add(realm);
-    try {
-      final authId = await DeviceIdentity.lastEmail();
-      final privateKey = await DeviceIdentity.privateKey();
-      final prefs = await SharedPreferences.getInstance();
-      if (authId == null || privateKey == null) return;
-
-      final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: status, prefs: prefs);
-      await startShellBackgroundService(config);
-    } catch (e) {
-      _appendShellLog("Shell service warmup failed: ${e.toString().split('\n').first}");
-    } finally {
-      _warmingShells.remove(realm);
-    }
-  }
-
   ShellLaunchConfig _shellConfig({
     required String realm,
     required String authId,
     required String privateKey,
     required _DesktopConnectionStatus status,
-    required SharedPreferences prefs,
   }) {
     return ShellLaunchConfig(
       sessionKey: 'shell:$realm',
@@ -267,99 +222,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       authId: authId,
       privateKey: privateKey,
       webRtcEnabled: status == _DesktopConnectionStatus.p2p,
-      turnCredentials: _cachedTurnCredentials(prefs),
     );
-  }
-
-  Future<void> _safeCloseSession(dynamic session) async {
-    try {
-      await session?.close();
-    } catch (_) {}
-  }
-
-  Future<Session> _connectP2pSession({
-    required Session session,
-    required String realm,
-    required String authId,
-    required String privateKey,
-  }) async {
-    final turnCredentials = await _getTurnCredentials(authId, privateKey);
-    final config = web_rtc.ClientConfig(
-      realm: realm,
-      procedureWebRTCOffer: "io.xconn.webrtc.offer",
-      topicAnswererOnCandidate: "io.xconn.webrtc.answerer.on_candidate",
-      topicOffererOnCandidate: "io.xconn.webrtc.offerer.on_candidate",
-      iceServers: [
-        {"urls": "stun:stun.l.google.com:19302"},
-        {
-          "urls": turnCredentials['urls'],
-          "username": turnCredentials['username'],
-          "credential": turnCredentials['credential'],
-        },
-      ],
-      serializer: CBORSerializer(),
-      session: session,
-      authenticator: CryptoSignAuthenticator(authId, privateKey),
-    );
-
-    return web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
-  }
-
-  Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    final cachedCredentials = _cachedTurnCredentials(prefs);
-    if (cachedCredentials != null) {
-      return cachedCredentials;
-    }
-
-    final turnClient = WampClient();
-    try {
-      final session = await turnClient.connectCryptoSign(
-        authId: authId,
-        privateKey: privateKey,
-        realm: DeskconnConfig.realm,
-      );
-      final result = await session.call("io.xconn.deskconn.coturn.credentials.create");
-      final turnCredential = result.args[0];
-
-      final username = turnCredential['username'] as String;
-      final credential = turnCredential['credential'] as String;
-      final expiresAt = turnCredential['expires_at'] as int;
-      final urls = turnCredential['urls'] as List<dynamic>;
-
-      await prefs.setInt(_prefKeyTurnExpiresAt, expiresAt);
-      await prefs.setString(_prefKeyTurnUsername, username);
-      await prefs.setString(_prefKeyTurnCredential, credential);
-      await prefs.setString(_prefKeyTurnUrls, jsonEncode(urls));
-
-      return {'username': username, 'credential': credential, 'urls': urls};
-    } finally {
-      await turnClient.disconnect();
-    }
   }
 
   void _appendShellLog(String message) {
     final line = "[${DateTime.now().toIso8601String()}] $message";
     debugPrint("DesktopDetailsScreen: $line");
-  }
-
-  Map<String, dynamic>? _cachedTurnCredentials(SharedPreferences prefs) {
-    final expiresAt = prefs.getInt(_prefKeyTurnExpiresAt);
-    final username = prefs.getString(_prefKeyTurnUsername);
-    final credential = prefs.getString(_prefKeyTurnCredential);
-    final urlsJson = prefs.getString(_prefKeyTurnUrls);
-
-    if (expiresAt == null || username == null || credential == null || urlsJson == null) {
-      return null;
-    }
-
-    try {
-      final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      if (expiresAt <= nowSeconds + 60) return null;
-      return {'username': username, 'credential': credential, 'urls': jsonDecode(urlsJson) as List<dynamic>};
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<void> _showShellErrorDialog(BuildContext context, String message) async {

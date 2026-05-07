@@ -1,12 +1,9 @@
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:xconn/xconn.dart';
 import '../core/file_explorer/file_explorer_controller.dart';
 import '../core/file_explorer/models.dart';
 import '../core/shell/shell_background_service.dart';
-import '../core/wamp/wamp_client.dart';
-import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
-import '../core/constants.dart';
 
 class FileExplorerScreen extends StatefulWidget {
   final ShellLaunchConfig config;
@@ -37,8 +34,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     });
 
     try {
-      final session = await _createSession();
-      _controller = FileExplorerController(session);
+      final connection = await DesktopConnectionManager().connect(
+        realm: widget.config.realm,
+        authId: widget.config.authId,
+        privateKey: widget.config.privateKey,
+        webRtcEnabled: widget.config.webRtcEnabled,
+        turnCredentials: widget.config.turnCredentials,
+      );
+      _controller = FileExplorerController(connection.session);
       await _loadPath('');
     } catch (e) {
       if (mounted) {
@@ -47,66 +50,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<Session> _createSession() async {
-    final client = WampClient();
-    final session = await client.connectCryptoSignWithSerializer(
-      authId: widget.config.authId,
-      privateKey: widget.config.privateKey,
-      realm: widget.config.realm,
-      serializer: CBORSerializer(),
-    );
-
-    if (!widget.config.webRtcEnabled) {
-      return session;
-    }
-
-    try {
-      final turnCredentials = widget.config.turnCredentials ?? await _fetchTurnCredentials();
-      final config = web_rtc.ClientConfig(
-        realm: widget.config.realm,
-        procedureWebRTCOffer: 'io.xconn.webrtc.offer',
-        topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
-        topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
-        iceServers: [
-          {'urls': 'stun:stun.l.google.com:19302'},
-          {
-            'urls': turnCredentials['urls'],
-            'username': turnCredentials['username'],
-            'credential': turnCredentials['credential'],
-          },
-        ],
-        serializer: CBORSerializer(),
-        session: session,
-        authenticator: CryptoSignAuthenticator(widget.config.authId, widget.config.privateKey),
-      );
-
-      return web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
-    } catch (_) {
-      // Fallback to routed session if P2P fails
-      return session;
-    }
-  }
-
-  Future<Map<String, dynamic>> _fetchTurnCredentials() async {
-    final turnClient = WampClient();
-    try {
-      final session = await turnClient.connectCryptoSign(
-        authId: widget.config.authId,
-        privateKey: widget.config.privateKey,
-        realm: DeskconnConfig.realm,
-      );
-      final result = await session.call('io.xconn.deskconn.coturn.credentials.create');
-      final turnCredential = result.args[0];
-      return {
-        'username': turnCredential['username'],
-        'credential': turnCredential['credential'],
-        'urls': turnCredential['urls'],
-      };
-    } finally {
-      await turnClient.disconnect();
     }
   }
 
