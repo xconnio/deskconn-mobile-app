@@ -17,11 +17,10 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val shellNotificationChannel = "deskconn/shell_notification"
     private val foregroundChannelId = "FOREGROUND_DEFAULT"
-    private val foregroundNotificationId = 1107
+    private val shellActiveNotificationId = 1108
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -32,6 +31,13 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == "deskconn.CLOSE_SHELL") {
+            val realm = intent.getStringExtra("realm") ?: return
+            flutterEngine?.let { engine ->
+                MethodChannel(engine.dartExecutor.binaryMessenger, shellNotificationChannel)
+                    .invokeMethod("closeShell", mapOf("realm" to realm))
+            }
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -43,7 +49,13 @@ class MainActivity : FlutterActivity() {
                     "showShellNotification" -> {
                         val title = call.argument<String>("title") ?: "Deskconn Shell"
                         val content = call.argument<String>("content") ?: "Terminal is running"
-                        showShellNotification(title, content)
+                        val realm = call.argument<String>("realm")
+                        showShellNotification(title, content, realm)
+                        result.success(null)
+                    }
+                    "dismissShellNotification" -> {
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(shellActiveNotificationId)
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -51,39 +63,31 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun showShellNotification(title: String, content: String) {
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private fun showShellNotification(title: String, content: String, realm: String?) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                foregroundChannelId,
-                "Foreground Service",
-                NotificationManager.IMPORTANCE_LOW
+            notificationManager.createNotificationChannel(
+                NotificationChannel(foregroundChannelId, "Shell", NotificationManager.IMPORTANCE_LOW)
             )
-            notificationManager.createNotificationChannel(channel)
         }
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
-            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val openPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            this, 0, openIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val closeIntent = Intent(this, ShellNotificationActionReceiver::class.java)
-        val closePendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            closeIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val closeIntent = Intent(this, MainActivity::class.java).apply {
+            action = "deskconn.CLOSE_SHELL"
+            putExtra("realm", realm)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val closePendingIntent = PendingIntent.getActivity(
+            this, 1, closeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val notification = NotificationCompat.Builder(this, foregroundChannelId)
@@ -96,6 +100,6 @@ class MainActivity : FlutterActivity() {
             .addAction(R.drawable.ic_bg_service_small, "Close", closePendingIntent)
             .build()
 
-        notificationManager.notify(foregroundNotificationId, notification)
+        notificationManager.notify(shellActiveNotificationId, notification)
     }
 }

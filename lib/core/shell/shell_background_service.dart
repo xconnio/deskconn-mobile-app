@@ -12,6 +12,7 @@ import 'package:xconn/src/types.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:xterm/core.dart';
 
+import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'blocking_queue.dart';
 import 'shell_encryption.dart';
 
@@ -25,10 +26,28 @@ const String shellStoppedEvent = 'shell.stopped';
 const String shellErrorEvent = 'shell.error';
 const String shellPingEvent = 'shell.ping';
 const String shellPongEvent = 'shell.pong';
+const String shellNotifyEvent = 'shell.notify';
+const String shellSetAppStatus = 'shell.set_app_status';
 
 bool _serviceConfigured = false;
 Future<void>? _serviceConfigureFuture;
 const MethodChannel _shellNotificationChannel = MethodChannel('deskconn/shell_notification');
+
+Future<void> showShellNotification(String desktopName, String realm) async {
+  try {
+    await _shellNotificationChannel.invokeMethod('showShellNotification', {
+      'title': 'Deskconn Shell',
+      'content': 'Terminal is running on $desktopName',
+      'realm': realm,
+    });
+  } catch (_) {}
+}
+
+Future<void> dismissShellNotification() async {
+  try {
+    await _shellNotificationChannel.invokeMethod('dismissShellNotification');
+  } catch (_) {}
+}
 
 class ShellLaunchConfig {
   const ShellLaunchConfig({
@@ -104,7 +123,7 @@ Future<void> _configureShellBackgroundService() {
   );
 }
 
-Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
+Future<void> startShellBackgroundService(ShellLaunchConfig config, {bool wait = false}) async {
   await initializeShellBackgroundService();
 
   final service = FlutterBackgroundService();
@@ -122,21 +141,35 @@ Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
     await service.startService();
   }
 
-  try {
-    for (var i = 0; i < 40 && !ready.isCompleted; i++) {
-      service.invoke(shellPingEvent, {'token': pingToken});
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
+  final future = () async {
+    try {
+      for (var i = 0; i < 40 && !ready.isCompleted; i++) {
+        service.invoke(shellPingEvent, {'token': pingToken});
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
 
-    if (!ready.isCompleted) {
-      throw TimeoutException('Shell background service did not become ready.');
-    }
+      if (!ready.isCompleted) {
+        if (wait) {
+          throw TimeoutException('Shell background service did not become ready.');
+        } else {
+          return;
+        }
+      }
 
-    await ready.future;
-    service.invoke(shellStartEvent, config.toEvent());
-  } finally {
-    await pongSub.cancel();
+      await ready.future;
+      service.invoke(shellStartEvent, config.toEvent());
+    } finally {
+      await pongSub.cancel();
+    }
+  }();
+
+  if (wait) {
+    await future;
   }
+}
+
+void setShellAppStatus(bool isBackground) {
+  FlutterBackgroundService().invoke(shellSetAppStatus, {'isBackground': isBackground});
 }
 
 void stopShellBackgroundService(String sessionKey) {
@@ -155,17 +188,17 @@ void shellBackgroundServiceEntryPoint(ServiceInstance service) {
 
   final runtime = _ShellBackgroundRuntime(service);
 
-  if (service is AndroidServiceInstance) {
-    service.setAsForegroundService();
-    service.setForegroundNotificationInfo(title: 'Deskconn Shell', content: 'Shell service is idle');
-  }
-
   service.on(shellStartEvent).listen(runtime.start);
   service.on(shellInputEvent).listen(runtime.sendInput);
   service.on(shellResizeEvent).listen(runtime.resize);
   service.on(shellStopEvent).listen(runtime.stop);
+  service.on(shellSetAppStatus).listen(runtime.setAppStatus);
   service.on(shellPingEvent).listen((event) {
     service.invoke(shellPongEvent, event);
+  });
+  service.on(shellNotifyEvent).listen((event) {
+    final desktopName = event?['desktopName']?.toString() ?? 'Shell';
+    runtime.showNotification('Deskconn Shell', 'Terminal is running on $desktopName');
   });
 }
 
@@ -183,7 +216,11 @@ class ShellBackgroundController {
 
   void Function()? onStarted;
   void Function()? onExit;
+  void Function()? onClosed;
   void Function()? onModifierChanged;
+
+  bool get isActive => _running;
+  bool get isReady => _started;
 
   StreamSubscription<Map<String, dynamic>?>? _startedSub;
   StreamSubscription<Map<String, dynamic>?>? _outputSub;
@@ -192,13 +229,11 @@ class ShellBackgroundController {
   Timer? _outputFlushTimer;
   Timer? _resizeTimer;
   Timer? _serviceWatchTimer;
-  Timer? _exitStopTimer;
 
   bool ctrl = false;
   bool alt = false;
   bool _running = false;
   bool _started = false;
-  String _inputBuffer = '';
   bool _disposed = false;
   bool _exitNotified = false;
 
@@ -207,7 +242,7 @@ class ShellBackgroundController {
     _listenForServiceEvents();
     _attachInput();
     try {
-      await startShellBackgroundService(config);
+      await startShellBackgroundService(config, wait: false);
     } catch (error) {
       _running = false;
       terminal.write('\r\n${_friendlyStartError(error)}\r\n');
@@ -222,7 +257,6 @@ class ShellBackgroundController {
       while (_pendingInput.isNotEmpty) {
         _sendInput(_pendingInput.removeFirst());
       }
-      _showNotificationCloseAction();
       _sendSize();
       _startServiceWatch();
       onStarted?.call();
@@ -309,7 +343,6 @@ class ShellBackgroundController {
       } else {
         _pendingInput.add(output);
       }
-      _trackExitCommands(output);
     };
   }
 
@@ -333,44 +366,6 @@ class ShellBackgroundController {
     }).join();
   }
 
-  void _trackExitCommands(String output) {
-    for (final rune in output.runes) {
-      if (rune == 4) {
-        if (_inputBuffer.trim().isEmpty) _scheduleExitStop();
-        _inputBuffer = '';
-        continue;
-      }
-
-      if (rune == 8 || rune == 127) {
-        if (_inputBuffer.isNotEmpty) {
-          _inputBuffer = _inputBuffer.substring(0, _inputBuffer.length - 1);
-        }
-        continue;
-      }
-
-      if (rune == 13 || rune == 10) {
-        final command = _inputBuffer.trim();
-        if (command == 'exit' || command == 'logout') _scheduleExitStop();
-        _inputBuffer = '';
-        continue;
-      }
-
-      if (rune >= 32) {
-        _inputBuffer += String.fromCharCode(rune);
-      } else {
-        _inputBuffer = '';
-      }
-    }
-  }
-
-  void _scheduleExitStop() {
-    _exitStopTimer?.cancel();
-    _exitStopTimer = Timer(const Duration(milliseconds: 700), () {
-      if (!_running || _disposed) return;
-      stopShellBackgroundService(config.sessionKey);
-    });
-  }
-
   void _startServiceWatch() {
     _serviceWatchTimer ??= Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!_running || _disposed) return;
@@ -384,6 +379,7 @@ class ShellBackgroundController {
   void _notifyExit() {
     if (_disposed || _exitNotified) return;
     _exitNotified = true;
+    onClosed?.call();
     onExit?.call();
   }
 
@@ -399,15 +395,6 @@ class ShellBackgroundController {
     return event?['sessionKey']?.toString() == config.sessionKey;
   }
 
-  Future<void> _showNotificationCloseAction() async {
-    try {
-      await _shellNotificationChannel.invokeMethod('showShellNotification', {
-        'title': 'Deskconn Shell',
-        'content': 'Terminal is running on ${config.desktopName}',
-      });
-    } catch (_) {}
-  }
-
   void sendSpecialKey(String sequence) {
     if (!_running) return;
     if (_started) {
@@ -415,19 +402,11 @@ class ShellBackgroundController {
     } else {
       _pendingInput.add(sequence);
     }
-    _trackExitCommands(sequence);
-  }
-
-  void sendInterrupt() {
-    _pendingOutput.clear();
-    _outputFlushTimer?.cancel();
-    _outputFlushTimer = null;
-    sendSpecialKey('\x03');
   }
 
   void sendTab() => sendSpecialKey('\t');
-  void sendEsc() => sendSpecialKey('\x1b');
-  void sendCtrlC() => sendInterrupt();
+  void sendEsc() => sendSpecialKey("\x1b");
+  void sendCtrlC() => sendSpecialKey('\x03');
   void sendCtrlD() => sendSpecialKey('\x04');
   void sendArrowUp() => sendSpecialKey('\x1b[A');
   void sendArrowDown() => sendSpecialKey('\x1b[B');
@@ -446,7 +425,6 @@ class ShellBackgroundController {
     _outputFlushTimer?.cancel();
     _resizeTimer?.cancel();
     _serviceWatchTimer?.cancel();
-    _exitStopTimer?.cancel();
     _startedSub?.cancel();
     _outputSub?.cancel();
     _stoppedSub?.cancel();
@@ -475,6 +453,27 @@ class _ShellBackgroundRuntime {
   bool _keyReceived = false;
   bool _clientKeySent = false;
   String? _sessionKey;
+  String? _desktopName;
+  bool _isAppBackground = false;
+
+  void setAppStatus(dynamic event) {
+    final data = _asMap(event);
+    _isAppBackground = data['isBackground'] == true;
+    _updateNotification();
+  }
+
+  void _updateNotification() {
+    if (_isAppBackground && (_running || _starting)) {
+      showNotification(
+        'Deskconn Shell',
+        _running ? 'Terminal is running on ${_desktopName ?? 'Desktop'}' : 'Connecting...',
+      );
+    } else {
+      if (service is AndroidServiceInstance) {
+        (service as AndroidServiceInstance).setAsBackgroundService();
+      }
+    }
+  }
 
   Future<void> start(dynamic event) async {
     final data = _asMap(event);
@@ -508,8 +507,9 @@ class _ShellBackgroundRuntime {
     }
 
     _sessionKey = sessionKey;
+    _desktopName = desktopName;
     _starting = true;
-    _setNotification('Deskconn Shell', 'Connecting to $desktopName');
+    _updateNotification();
 
     try {
       _encryption = await Encryption.create();
@@ -525,7 +525,7 @@ class _ShellBackgroundRuntime {
         turnCredentials: turnCredentials,
       );
       _running = true;
-      _setNotification('Deskconn Shell', 'Terminal is running on $desktopName');
+      _updateNotification();
       service.invoke(shellStartedEvent, {'sessionKey': _sessionKey});
 
       await _session!.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
@@ -535,6 +535,67 @@ class _ShellBackgroundRuntime {
     } finally {
       _starting = false;
       await _stopCurrentShell('Shell ended');
+    }
+  }
+
+  Future<Session> _createShellSession({
+    required String realm,
+    required String authId,
+    required String privateKey,
+    required bool webRtcEnabled,
+    required Map<String, dynamic>? turnCredentials,
+  }) async {
+    final client = WampClient();
+    final signalingSession = await client.connectCryptoSignWithSerializer(
+      authId: authId,
+      privateKey: privateKey,
+      realm: realm,
+      serializer: CBORSerializer(),
+    );
+
+    if (!webRtcEnabled) {
+      return signalingSession;
+    }
+
+    try {
+      final credentials = turnCredentials ?? await _fetchTurnCredentials(authId, privateKey);
+      final config = web_rtc.ClientConfig(
+        realm: realm,
+        procedureWebRTCOffer: 'io.xconn.webrtc.offer',
+        topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
+        topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
+        iceServers: [
+          {'urls': 'stun:stun.l.google.com:19302'},
+          {'urls': credentials['urls'], 'username': credentials['username'], 'credential': credentials['credential']},
+        ],
+        serializer: CBORSerializer(),
+        session: signalingSession,
+        authenticator: CryptoSignAuthenticator(authId, privateKey),
+      );
+
+      return await web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
+    } catch (_) {
+      return signalingSession;
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchTurnCredentials(String authId, String privateKey) async {
+    final turnClient = WampClient();
+    try {
+      final session = await turnClient.connectCryptoSign(
+        authId: authId,
+        privateKey: privateKey,
+        realm: DeskconnConfig.realm,
+      );
+      final result = await session.call('io.xconn.deskconn.coturn.credentials.create');
+      final turnCredential = result.args[0];
+      return {
+        'username': turnCredential['username'],
+        'credential': turnCredential['credential'],
+        'urls': turnCredential['urls'],
+      };
+    } finally {
+      await turnClient.disconnect();
     }
   }
 
@@ -573,7 +634,8 @@ class _ShellBackgroundRuntime {
   Future<void> stop(dynamic event) async {
     final data = _asMap(event);
     final sessionKey = data['sessionKey']?.toString();
-    if (sessionKey != null && sessionKey != _sessionKey) return;
+    if (sessionKey != null && _sessionKey != null && sessionKey != _sessionKey) return;
+
     await _stopCurrentShell('Shell terminated');
     if (service is AndroidServiceInstance) {
       await (service as AndroidServiceInstance).stopSelf();
@@ -631,7 +693,10 @@ class _ShellBackgroundRuntime {
     _session = null;
     _encryption = null;
     _sessionKey = null;
-    _setNotification('Deskconn Shell', 'Shell service is idle');
+
+    if (service is AndroidServiceInstance) {
+      (service as AndroidServiceInstance).setAsBackgroundService();
+    }
 
     if (sessionKey != null) {
       service.invoke(shellStoppedEvent, {'sessionKey': sessionKey, 'reason': reason});
@@ -692,81 +757,6 @@ class _ShellBackgroundRuntime {
     }
   }
 
-  Future<Session> _createShellSession({
-    required String realm,
-    required String authId,
-    required String privateKey,
-    required bool webRtcEnabled,
-    required Map<String, dynamic>? turnCredentials,
-  }) async {
-    final client = Client(
-      config: ClientConfig(serializer: CBORSerializer(), authenticator: CryptoSignAuthenticator(authId, privateKey)),
-    );
-    final session = await client.connect(DeskconnConfig.wampUrl, realm);
-
-    if (!webRtcEnabled) {
-      return session;
-    }
-
-    try {
-      final credentials = _usableTurnCredentials(turnCredentials) ?? await _fetchTurnCredentials(authId, privateKey);
-      final config = web_rtc.ClientConfig(
-        realm: realm,
-        procedureWebRTCOffer: 'io.xconn.webrtc.offer',
-        topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
-        topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
-        iceServers: [
-          {'urls': 'stun:stun.l.google.com:19302'},
-          {'urls': credentials['urls'], 'username': credentials['username'], 'credential': credentials['credential']},
-        ],
-        serializer: CBORSerializer(),
-        session: session,
-        authenticator: CryptoSignAuthenticator(authId, privateKey),
-      );
-
-      return web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
-    } catch (_) {
-      await session.close();
-      rethrow;
-    }
-  }
-
-  Map<String, dynamic>? _usableTurnCredentials(Map<String, dynamic>? credentials) {
-    if (credentials == null) return null;
-
-    final expiresAt = credentials['expiresAt'];
-    final username = credentials['username'];
-    final credential = credentials['credential'];
-    final urls = credentials['urls'];
-    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    if (expiresAt is int && expiresAt > nowSeconds + 60 && username is String && credential is String && urls is List) {
-      return {'username': username, 'credential': credential, 'urls': urls};
-    }
-
-    return null;
-  }
-
-  Future<Map<String, dynamic>> _fetchTurnCredentials(String authId, String privateKey) async {
-    final client = Client(
-      config: ClientConfig(serializer: JSONSerializer(), authenticator: CryptoSignAuthenticator(authId, privateKey)),
-    );
-    final session = await client.connect(DeskconnConfig.wampUrl, DeskconnConfig.realm);
-
-    try {
-      final result = await session.call('io.xconn.deskconn.coturn.credentials.create');
-      final turnCredential = result.args[0];
-
-      final username = turnCredential['username'] as String;
-      final credential = turnCredential['credential'] as String;
-      final urls = turnCredential['urls'] as List<dynamic>;
-
-      return {'username': username, 'credential': credential, 'urls': urls};
-    } finally {
-      await session.close();
-    }
-  }
-
   Uint8List _encodeOutboundText(String text, {bool encrypt = true}) {
     final encryption = _encryption;
     if (encryption == null) {
@@ -791,13 +781,14 @@ class _ShellBackgroundRuntime {
   }
 
   void _emitError(String message) {
-    _setNotification('Deskconn Shell', message);
+    showNotification('Deskconn Shell', message);
     service.invoke(shellErrorEvent, {'sessionKey': _sessionKey, 'message': message});
   }
 
-  void _setNotification(String title, String content) {
+  void showNotification(String title, String content) {
     if (service is AndroidServiceInstance) {
       final androidService = service as AndroidServiceInstance;
+      androidService.setAsForegroundService();
       androidService.setForegroundNotificationInfo(title: title, content: content);
     }
   }

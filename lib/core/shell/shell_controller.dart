@@ -2,20 +2,24 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart";
 import "package:xterm/core.dart";
 import "package:xconn/xconn.dart";
 // ignore: implementation_imports
 import "package:xconn/src/types.dart";
 
 import "blocking_queue.dart";
+import "shell_background_service.dart";
 import "shell_encryption.dart";
 
 class ShellController {
   final Terminal terminal = Terminal();
   final Session session;
+  final ShellLaunchConfig config;
 
   void Function()? onStarted;
   void Function()? onExit;
+  void Function()? onClosed;
   void Function()? onModifierChanged;
 
   bool ctrl = false;
@@ -30,9 +34,13 @@ class ShellController {
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
-  ShellController(this.session);
+  bool get isActive => _running;
+  bool get isReady => _keyReceived;
+
+  ShellController(this.session, {required this.config});
 
   Future<void> start() async {
+    if (_running) return;
     _encryption = await Encryption.create();
     _running = true;
     _sendSize();
@@ -42,7 +50,7 @@ class ShellController {
       _resizeTimer = Timer(const Duration(milliseconds: 100), _sendSize);
     };
 
-    attachInput();
+    _attachInput();
 
     try {
       await session.callProgressiveProgress("io.xconn.deskconn.deskconnd.shell", _sender, _receiver);
@@ -53,6 +61,8 @@ class ShellController {
     } finally {
       _running = false;
       _cleanup();
+      unawaited(dismissShellNotification());
+      onClosed?.call();
       if (!_disposed) {
         onExit?.call();
       }
@@ -78,10 +88,9 @@ class ShellController {
     }).join();
   }
 
-  void attachInput() {
+  void _attachInput() {
     terminal.onOutput = (String data) {
       if (!_running || data.isEmpty) return;
-      if (!_keyReceived) return;
 
       String output = data;
 
@@ -97,7 +106,9 @@ class ShellController {
         onModifierChanged?.call();
       }
 
-      _outgoingQueue.put(Progress(args: [_encodeOutboundText(output)], options: {"progress": true}));
+      if (_keyReceived) {
+        _outgoingQueue.put(Progress(args: [_encodeOutboundText(output)], options: {"progress": true}));
+      }
 
       for (final rune in output.runes) {
         final char = String.fromCharCode(rune);
@@ -118,10 +129,14 @@ class ShellController {
   }
 
   Future<Progress> _sender() async {
-    if (!_running || _disposed) {
+    if (_disposed) {
       throw StateError('Shell closed');
     }
-    return await _outgoingQueue.take();
+    try {
+      return await _outgoingQueue.take();
+    } catch (e) {
+      throw StateError('Shell closed');
+    }
   }
 
   Future<void> _receiver(Result result) async {
@@ -133,12 +148,13 @@ class ShellController {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
+        unawaited(showShellNotification(config.desktopName, config.realm));
         onStarted?.call();
         return;
       }
 
       text = utf8.decode(_encryption!.decrypt(bytes));
-    } catch (_) {
+    } catch (e) {
       try {
         final bytes = _coerceBytes(raw);
         text = utf8.decode(bytes);
