@@ -56,11 +56,7 @@ class SessionProvider extends ChangeNotifier {
 
       account = Map<String, dynamic>.from(res.args[0]);
 
-      await loadDesktops();
-      await loadOrganizations();
-      await loadInvitations();
-
-      await _registerDevice(email);
+      await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations(), _registerDevice(email)]);
 
       loggedIn = true;
       notifyListeners();
@@ -98,9 +94,7 @@ class SessionProvider extends ChangeNotifier {
 
           account = Map<String, dynamic>.from(res.args[0]);
 
-          await loadDesktops();
-          await loadOrganizations();
-          await loadInvitations();
+          await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations()]);
 
           loggedIn = true;
         } else {
@@ -170,6 +164,14 @@ class SessionProvider extends ChangeNotifier {
     }
 
     try {
+      final hasIdentity = await DeviceIdentity.exists();
+      if (hasIdentity) {
+        final lastEmail = await DeviceIdentity.lastEmail();
+        if (lastEmail == email) {
+          return;
+        }
+      }
+
       final privateKeyHex = await CryptoSignKeys.generatePrivateKey();
       final publicKeyHex = await CryptoSignKeys.derivePublicKey(privateKeyHex);
 
