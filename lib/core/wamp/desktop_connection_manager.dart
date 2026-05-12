@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
-import '../constants.dart';
-import '../wamp/wamp_client.dart';
+import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
 class DesktopConnection {
   final Session session;
@@ -27,6 +27,15 @@ class DesktopConnectionManager {
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
 
+  // Synchronous cache lookup — returns null if not connected (mirrors web app sessionCache)
+  DesktopConnection? get(String realm) {
+    final key = 'session:$realm';
+    final connection = _connections[key];
+    if (connection != null && connection.session.isConnected()) return connection;
+    _connections.remove(key);
+    return null;
+  }
+
   Future<DesktopConnection> connect({
     required String realm,
     required String authId,
@@ -35,7 +44,6 @@ class DesktopConnectionManager {
     Map<String, dynamic>? turnCredentials,
   }) async {
     final key = 'session:$realm';
-
     final existing = _connections[key];
     if (existing != null) {
       bool connected = false;
@@ -49,7 +57,7 @@ class DesktopConnectionManager {
         }
         await release(realm);
       } else {
-        _connections.remove(key);
+        await release(realm);
       }
     }
 
@@ -96,6 +104,14 @@ class DesktopConnectionManager {
 
     final connection = DesktopConnection(session: finalSession, isP2P: isP2P);
     _connections[key] = connection;
+
+    // Auto-remove from cache when the session drops (mirrors web app sessionCache pattern)
+    finalSession.onDisconnect(() {
+      if (_connections[key] == connection) {
+        _connections.remove(key);
+      }
+    });
+
     return connection;
   }
 

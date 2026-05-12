@@ -4,8 +4,10 @@ import 'dart:collection';
 class BlockingQueue<T> {
   final Queue<T> _queue = Queue<T>();
   final List<Completer<T>> _waiters = [];
+  bool _isClosed = false;
 
   void put(T item) {
+    if (_isClosed) return;
     if (_waiters.isNotEmpty) {
       _waiters.removeAt(0).complete(item);
       return;
@@ -14,6 +16,7 @@ class BlockingQueue<T> {
   }
 
   Future<T> take() {
+    if (_isClosed) throw StateError('Queue closed');
     if (_queue.isNotEmpty) {
       return Future.value(_queue.removeFirst());
     }
@@ -27,6 +30,7 @@ class BlockingQueue<T> {
   }
 
   void cancelPending(Object error) {
+    _isClosed = true;
     clear();
     final waiters = List<Completer<T>>.from(_waiters);
     _waiters.clear();

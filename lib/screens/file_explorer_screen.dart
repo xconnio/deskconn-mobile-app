@@ -1,9 +1,11 @@
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../core/file_explorer/file_explorer_controller.dart';
-import '../core/file_explorer/models.dart';
-import '../core/shell/shell_background_service.dart';
+import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
+import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
+import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
 
 class FileExplorerScreen extends StatefulWidget {
   final ShellLaunchConfig config;
@@ -21,6 +23,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String? _error;
   bool _showHidden = false;
 
+  // Cache for directory listings to make back navigation instant
+  static final Map<String, FileBrowseResult> _browseCache = {};
+
   @override
   void initState() {
     super.initState();
@@ -28,20 +33,35 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Future<void> _initialize() async {
+    if (!mounted) return;
+
+    // Fast path: session already established by DesktopDetailsScreen — no async needed
+    final existing = DesktopConnectionManager().get(widget.config.realm);
+    if (existing != null) {
+      _controller = FileExplorerController.getOrCreate(existing.session, widget.config.realm);
+      // If controller is reused (key exchange already done), skip the loading state entirely
+      if (_controller!.isKeyExchanged) {
+        await _loadPath(_currentBrowse?.path ?? '');
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final connection = await DesktopConnectionManager().connect(
-        realm: widget.config.realm,
-        authId: widget.config.authId,
-        privateKey: widget.config.privateKey,
-        webRtcEnabled: widget.config.webRtcEnabled,
-        turnCredentials: widget.config.turnCredentials,
-      );
-      _controller = FileExplorerController(connection.session);
+      final connection =
+          existing ??
+          await DesktopConnectionManager().connect(
+            realm: widget.config.realm,
+            authId: widget.config.authId,
+            privateKey: widget.config.privateKey,
+            webRtcEnabled: widget.config.webRtcEnabled,
+            turnCredentials: widget.config.turnCredentials,
+          );
+      _controller = FileExplorerController.getOrCreate(connection.session, widget.config.realm);
       await _loadPath('');
     } catch (e) {
       if (mounted) {
@@ -53,12 +73,36 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
+  // Force-release and reconnect — used by Reconnect button and auto-reconnect
+  Future<void> _reconnect() async {
+    FileExplorerController.invalidate(widget.config.realm);
+    await DesktopConnectionManager().release(widget.config.realm);
+    _controller = null;
+    await _initialize();
+  }
+
   Future<void> _loadPath(String path) async {
     if (_controller == null) return;
 
+    final cacheKey = '${widget.config.realm}:$path';
+    if (_browseCache.containsKey(cacheKey)) {
+      setState(() {
+        _currentBrowse = _browseCache[cacheKey];
+        _isLoading = false;
+      });
+      _refreshPath(path);
+      return;
+    }
+
     setState(() => _isLoading = true);
+    await _refreshPath(path);
+  }
+
+  Future<void> _refreshPath(String path) async {
     try {
       final result = await _controller!.browse(path);
+      final cacheKey = '${widget.config.realm}:$path';
+      _browseCache[cacheKey] = result;
       if (mounted) {
         setState(() {
           _currentBrowse = result;
@@ -66,12 +110,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
+      if (!mounted) return;
+      final sessionAlive = _controller?.session.isConnected() ?? false;
+      if (!sessionAlive) {
+        await _reconnect();
+        return;
       }
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
@@ -80,7 +128,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       final newPath = _currentBrowse!.path == '/' ? '/${entry.name}' : '${_currentBrowse!.path}/${entry.name}';
       _loadPath(newPath);
     } else {
-      // TODO: Handle file preview/download
+      final path = _currentBrowse!.path == '/' ? '/${entry.name}' : '${_currentBrowse!.path}/${entry.name}';
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              FilePreviewScreen(controller: _controller!, entry: entry, path: path),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
+      );
     }
   }
 
@@ -144,7 +201,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text('Error: $_error'),
-            ElevatedButton(onPressed: _initialize, child: const Text('Retry')),
+            ElevatedButton(onPressed: _reconnect, child: const Text('Reconnect')),
           ],
         ),
       );
@@ -166,6 +223,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         return _FileEntryTile(
+          controller: _controller!,
+          parentPath: _currentBrowse!.path,
           entry: entry,
           onTap: () => _onEntryTap(entry),
           onLongPress: () => _showEntryOptions(entry),
@@ -361,17 +420,172 @@ class _Breadcrumbs extends StatelessWidget {
   }
 }
 
+class FilePreviewScreen extends StatefulWidget {
+  final FileExplorerController controller;
+  final FileEntry entry;
+  final String path;
+
+  const FilePreviewScreen({super.key, required this.controller, required this.entry, required this.path});
+
+  @override
+  State<FilePreviewScreen> createState() => _FilePreviewScreenState();
+}
+
+class _FilePreviewScreenState extends State<FilePreviewScreen> {
+  late Future<Uint8List> _contentFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _contentFuture = widget.controller.read(widget.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF272822), // Sublime-like dark background
+      appBar: AppBar(
+        title: Text(widget.entry.name),
+        backgroundColor: const Color(0xFF1E1E1E),
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: () {
+              // TODO: Implement download
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download not implemented yet')));
+            },
+          ),
+        ],
+      ),
+      body: FutureBuilder<Uint8List>(
+        future: _contentFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Colors.white));
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(
+              child: Text('No data', style: TextStyle(color: Colors.white)),
+            );
+          }
+
+          final data = snapshot.data!;
+          final ext = widget.entry.name.split('.').last.toLowerCase();
+
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+            return Center(child: Image.memory(data));
+          }
+
+          // Added .sh and other common code extensions
+          if ([
+            'txt',
+            'md',
+            'json',
+            'yaml',
+            'xml',
+            'log',
+            'sh',
+            'py',
+            'js',
+            'ts',
+            'c',
+            'cpp',
+            'h',
+            'css',
+            'html',
+          ].contains(ext)) {
+            try {
+              final text = utf8.decode(data);
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  text,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    color: Color(0xFFF8F8F2), // Sublime-like text color
+                    fontSize: 14,
+                  ),
+                ),
+              );
+            } catch (e) {
+              return const Center(
+                child: Text('Cannot display binary file as text', style: TextStyle(color: Colors.white)),
+              );
+            }
+          }
+
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  ext == 'pdf' ? Icons.picture_as_pdf : Icons.insert_drive_file,
+                  size: 64,
+                  color: ext == 'pdf' ? Colors.red : Colors.grey,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  ext == 'pdf' ? 'PDF Preview not supported yet' : 'No preview available for .$ext',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                Text('Size: ${formatSize(widget.entry.size)}', style: const TextStyle(color: Colors.grey)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _FileEntryTile extends StatelessWidget {
+  final FileExplorerController controller;
+  final String parentPath;
   final FileEntry entry;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const _FileEntryTile({required this.entry, required this.onTap, required this.onLongPress});
+  const _FileEntryTile({
+    required this.controller,
+    required this.parentPath,
+    required this.entry,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final ext = entry.name.split('.').last.toLowerCase();
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+
     return ListTile(
-      leading: Icon(entry.isDir ? Icons.folder : _getFileIcon(entry.name), color: entry.isDir ? Colors.amber : null),
+      leading: SizedBox(
+        width: 40,
+        height: 40,
+        child: isImage
+            ? FutureBuilder<Uint8List>(
+                future: controller.thumbnail(parentPath == '/' ? '/${entry.name}' : '$parentPath/${entry.name}'),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                  }
+                  if (snapshot.hasError) {
+                    return Icon(Icons.image_not_supported, color: Colors.grey[400], size: 20);
+                  }
+                  return Icon(Icons.image, color: Colors.grey[400]);
+                },
+              )
+            : Icon(entry.isDir ? Icons.folder : _getFileIcon(entry.name), color: entry.isDir ? Colors.amber : null),
+      ),
       title: Text(entry.name),
       subtitle: entry.isDir ? null : Text(formatSize(entry.size)),
       onTap: onTap,

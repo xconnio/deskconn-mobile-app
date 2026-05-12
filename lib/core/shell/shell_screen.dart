@@ -51,7 +51,6 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      startShellBackgroundService(widget.controller.config, wait: false);
       setShellAppStatus(true);
     } else if (state == AppLifecycleState.resumed) {
       setShellAppStatus(false);

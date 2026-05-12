@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
 
-import '../core/shell/shell_background_service.dart';
+import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
 
 enum _DesktopConnectionStatus { checking, routed, p2p, offline }
 
@@ -173,19 +173,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
         final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
-        final connection = await DesktopConnectionManager().connect(
-          realm: realm,
-          authId: authId,
-          privateKey: privateKey,
-          webRtcEnabled: config.webRtcEnabled,
-        );
-        controller = ShellController(connection.session, config: config);
+        controller = ShellController(config: config);
 
         controller.onClosed = () => ShellRegistry().closeShell(realm);
 
         ShellRegistry().register(realm, controller);
         unawaited(controller.start());
-        _appendShellLog("Shell controller created isP2P=${connection.isP2P}");
+        _appendShellLog("Shell controller created");
       } else {
         _appendShellLog("Reusing persistent shell controller");
       }
