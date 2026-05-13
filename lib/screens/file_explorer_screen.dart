@@ -1,11 +1,69 @@
-import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:pdfx/pdfx.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
+
+const _kImageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico'};
+const _kTextExts = {
+  'txt',
+  'md',
+  'json',
+  'yaml',
+  'yml',
+  'xml',
+  'log',
+  'sh',
+  'bash',
+  'zsh',
+  'fish',
+  'py',
+  'js',
+  'ts',
+  'jsx',
+  'tsx',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cc',
+  'css',
+  'html',
+  'htm',
+  'dart',
+  'go',
+  'rs',
+  'rb',
+  'java',
+  'kt',
+  'swift',
+  'cs',
+  'php',
+  'sql',
+  'r',
+  'toml',
+  'ini',
+  'cfg',
+  'conf',
+  'env',
+  'properties',
+  'gradle',
+  'cmake',
+  'makefile',
+  'dockerfile',
+};
+const _kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3gp'};
+const _kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
 
 class FileExplorerScreen extends StatefulWidget {
   final ShellLaunchConfig config;
@@ -440,108 +498,335 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     _contentFuture = widget.controller.read(widget.path);
   }
 
+  String get _ext => widget.entry.name.contains('.') ? widget.entry.name.split('.').last.toLowerCase() : '';
+
+  Color get _bgColor {
+    if (_ext == 'pdf') return Colors.grey.shade200;
+    if (_kVideoExts.contains(_ext)) return Colors.black;
+    if (_kImageExts.contains(_ext) || _ext == 'svg') return Colors.black;
+    return const Color(0xFF272822);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF272822), // Sublime-like dark background
+      backgroundColor: _bgColor,
       appBar: AppBar(
-        title: Text(widget.entry.name),
+        title: Text(widget.entry.name, style: const TextStyle(fontSize: 14)),
         backgroundColor: const Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: () {
-              // TODO: Implement download
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download not implemented yet')));
-            },
-          ),
-        ],
       ),
       body: FutureBuilder<Uint8List>(
         future: _contentFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.white));
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 16),
+                  Text('Loading ${formatSize(widget.entry.size)}…', style: const TextStyle(color: Colors.white54)),
+                ],
+              ),
+            );
           }
-
           if (snapshot.hasError) {
             return Center(
               child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
             );
           }
-
           if (!snapshot.hasData) {
             return const Center(
               child: Text('No data', style: TextStyle(color: Colors.white)),
             );
           }
+          return _buildContent(snapshot.data!, _ext);
+        },
+      ),
+    );
+  }
 
-          final data = snapshot.data!;
-          final ext = widget.entry.name.split('.').last.toLowerCase();
+  Widget _buildContent(Uint8List data, String ext) {
+    if (_kImageExts.contains(ext)) {
+      return InteractiveViewer(child: Center(child: Image.memory(data)));
+    }
+    if (ext == 'svg') {
+      return InteractiveViewer(child: Center(child: SvgPicture.memory(data)));
+    }
+    if (_kTextExts.contains(ext)) {
+      return _TextPreview(data: data);
+    }
+    if (ext == 'pdf') {
+      return _PdfPreview(data: data);
+    }
+    if (_kVideoExts.contains(ext)) {
+      return _VideoPreview(data: data, name: widget.entry.name);
+    }
+    if (_kAudioExts.contains(ext)) {
+      return _AudioPreview(data: data, name: widget.entry.name);
+    }
+    return _UnknownPreview(entry: widget.entry, ext: ext);
+  }
+}
 
-          if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
-            return Center(child: Image.memory(data));
-          }
+class _TextPreview extends StatelessWidget {
+  final Uint8List data;
+  const _TextPreview({required this.data});
 
-          // Added .sh and other common code extensions
-          if ([
-            'txt',
-            'md',
-            'json',
-            'yaml',
-            'xml',
-            'log',
-            'sh',
-            'py',
-            'js',
-            'ts',
-            'c',
-            'cpp',
-            'h',
-            'css',
-            'html',
-          ].contains(ext)) {
-            try {
-              final text = utf8.decode(data);
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  text,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    color: Color(0xFFF8F8F2), // Sublime-like text color
-                    fontSize: 14,
-                  ),
-                ),
-              );
-            } catch (e) {
-              return const Center(
-                child: Text('Cannot display binary file as text', style: TextStyle(color: Colors.white)),
-              );
-            }
-          }
+  @override
+  Widget build(BuildContext context) {
+    try {
+      final text = utf8.decode(data);
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: SelectableText(
+          text,
+          style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFF8F8F2), fontSize: 14),
+        ),
+      );
+    } catch (_) {
+      return const Center(
+        child: Text('Cannot display binary file as text', style: TextStyle(color: Colors.white)),
+      );
+    }
+  }
+}
 
-          return Center(
-            child: Column(
+class _PdfPreview extends StatefulWidget {
+  final Uint8List data;
+  const _PdfPreview({required this.data});
+
+  @override
+  State<_PdfPreview> createState() => _PdfPreviewState();
+}
+
+class _PdfPreviewState extends State<_PdfPreview> {
+  late PdfController _pdfController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pdfController = PdfController(document: PdfDocument.openData(widget.data));
+  }
+
+  @override
+  void dispose() {
+    _pdfController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PdfView(controller: _pdfController, scrollDirection: Axis.vertical, pageSnapping: false);
+  }
+}
+
+class _VideoPreview extends StatefulWidget {
+  final Uint8List data;
+  final String name;
+  const _VideoPreview({required this.data, required this.name});
+
+  @override
+  State<_VideoPreview> createState() => _VideoPreviewState();
+}
+
+class _VideoPreviewState extends State<_VideoPreview> {
+  VideoPlayerController? _vc;
+  ChewieController? _cc;
+  File? _tempFile;
+  String? _error;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${widget.name}');
+      await file.writeAsBytes(widget.data);
+      _tempFile = file;
+      _vc = VideoPlayerController.file(file);
+      await _vc!.initialize();
+      _cc = ChewieController(
+        videoPlayerController: _vc!,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowMuting: true,
+      );
+      if (mounted) setState(() => _ready = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  void dispose() {
+    _cc?.dispose();
+    _vc?.dispose();
+    _tempFile?.delete().catchError((Object _) => _tempFile!);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Center(
+        child: Text('Error: $_error', style: const TextStyle(color: Colors.red)),
+      );
+    }
+    if (!_ready) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    return Chewie(controller: _cc!);
+  }
+}
+
+class _AudioPreview extends StatefulWidget {
+  final Uint8List data;
+  final String name;
+  const _AudioPreview({required this.data, required this.name});
+
+  @override
+  State<_AudioPreview> createState() => _AudioPreviewState();
+}
+
+class _AudioPreviewState extends State<_AudioPreview> {
+  final _player = AudioPlayer();
+  PlayerState _state = PlayerState.stopped;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _state = s);
+    });
+    _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+    _player.play(BytesSource(widget.data));
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlaying = _state == PlayerState.playing;
+    final progress = _duration.inMilliseconds > 0
+        ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.audiotrack, size: 96, color: Colors.white54),
+            const SizedBox(height: 24),
+            Text(
+              widget.name,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 32),
+            Slider(
+              value: progress,
+              onChanged: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).round())),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_fmt(_position), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(_fmt(_duration), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  ext == 'pdf' ? Icons.picture_as_pdf : Icons.insert_drive_file,
-                  size: 64,
-                  color: ext == 'pdf' ? Colors.red : Colors.grey,
+                IconButton(
+                  icon: const Icon(Icons.replay_10, color: Colors.white70, size: 32),
+                  onPressed: () =>
+                      _player.seek(Duration(seconds: (_position.inSeconds - 10).clamp(0, _duration.inSeconds))),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  ext == 'pdf' ? 'PDF Preview not supported yet' : 'No preview available for .$ext',
-                  style: const TextStyle(color: Colors.white),
+                const SizedBox(width: 16),
+                IconButton(
+                  icon: Icon(
+                    isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                    color: Colors.white,
+                    size: 64,
+                  ),
+                  onPressed: () => isPlaying ? _player.pause() : _player.resume(),
                 ),
-                const SizedBox(height: 16),
-                Text('Size: ${formatSize(widget.entry.size)}', style: const TextStyle(color: Colors.grey)),
+                const SizedBox(width: 16),
+                IconButton(
+                  icon: const Icon(Icons.forward_10, color: Colors.white70, size: 32),
+                  onPressed: () =>
+                      _player.seek(Duration(seconds: (_position.inSeconds + 10).clamp(0, _duration.inSeconds))),
+                ),
               ],
             ),
-          );
-        },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UnknownPreview extends StatelessWidget {
+  final FileEntry entry;
+  final String ext;
+  const _UnknownPreview({required this.entry, required this.ext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.insert_drive_file, size: 80, color: Colors.grey.shade600),
+          const SizedBox(height: 16),
+          Text(
+            entry.name,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text('Size: ${formatSize(entry.size)}', style: const TextStyle(color: Colors.white54)),
+          if (ext.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('.${ext.toUpperCase()} file', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          ],
+          const SizedBox(height: 24),
+          const Text('No preview available for this file type', style: TextStyle(color: Colors.white38)),
+        ],
       ),
     );
   }
@@ -564,8 +849,8 @@ class _FileEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ext = entry.name.split('.').last.toLowerCase();
-    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+    final ext = entry.name.contains('.') ? entry.name.split('.').last.toLowerCase() : '';
+    final isImage = _kImageExts.contains(ext);
 
     return ListTile(
       leading: SizedBox(
@@ -576,7 +861,10 @@ class _FileEntryTile extends StatelessWidget {
                 future: controller.thumbnail(parentPath == '/' ? '/${entry.name}' : '$parentPath/${entry.name}'),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
-                    return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.memory(snapshot.data!, fit: BoxFit.cover),
+                    );
                   }
                   if (snapshot.hasError) {
                     return Icon(Icons.image_not_supported, color: Colors.grey[400], size: 20);
@@ -584,7 +872,10 @@ class _FileEntryTile extends StatelessWidget {
                   return Icon(Icons.image, color: Colors.grey[400]);
                 },
               )
-            : Icon(entry.isDir ? Icons.folder : _getFileIcon(entry.name), color: entry.isDir ? Colors.amber : null),
+            : Icon(
+                entry.isDir ? Icons.folder : _getFileIcon(ext),
+                color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
+              ),
       ),
       title: Text(entry.name),
       subtitle: entry.isDir ? null : Text(formatSize(entry.size)),
@@ -594,24 +885,12 @@ class _FileEntryTile extends StatelessWidget {
     );
   }
 
-  IconData _getFileIcon(String name) {
-    final ext = name.split('.').last.toLowerCase();
+  IconData _getFileIcon(String ext) {
+    if (_kImageExts.contains(ext) || ext == 'svg') return Icons.image;
+    if (_kVideoExts.contains(ext)) return Icons.movie;
+    if (_kAudioExts.contains(ext)) return Icons.audiotrack;
+    if (_kTextExts.contains(ext)) return Icons.description;
     switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'webp':
-        return Icons.image;
-      case 'mp4':
-      case 'mkv':
-      case 'webm':
-        return Icons.movie;
-      case 'mp3':
-      case 'wav':
-      case 'ogg':
-      case 'flac':
-        return Icons.audiotrack;
       case 'pdf':
         return Icons.picture_as_pdf;
       case 'zip':
@@ -619,14 +898,39 @@ class _FileEntryTile extends StatelessWidget {
       case '7z':
       case 'tar':
       case 'gz':
+      case 'xz':
+      case 'bz2':
         return Icons.archive;
-      case 'txt':
-      case 'md':
-      case 'json':
-      case 'yaml':
-        return Icons.description;
+      case 'apk':
+        return Icons.android;
+      case 'exe':
+      case 'msi':
+      case 'dmg':
+        return Icons.computer;
+      case 'db':
+      case 'sqlite':
+      case 'sqlite3':
+        return Icons.storage;
       default:
         return Icons.insert_drive_file;
+    }
+  }
+
+  Color? _getFileIconColor(String ext) {
+    if (_kVideoExts.contains(ext)) return Colors.blue.shade300;
+    if (_kAudioExts.contains(ext)) return Colors.purple.shade300;
+    if (_kTextExts.contains(ext)) return Colors.teal.shade300;
+    switch (ext) {
+      case 'pdf':
+        return Colors.red.shade400;
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+      case 'gz':
+        return Colors.orange.shade400;
+      default:
+        return null;
     }
   }
 }
