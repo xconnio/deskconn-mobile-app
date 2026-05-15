@@ -144,6 +144,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
     return AppShell(
       title: 'Account',
+      currentSection: AppShellSection.account,
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [

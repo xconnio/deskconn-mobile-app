@@ -14,6 +14,7 @@ class DesktopListScreen extends StatelessWidget {
 
     return AppShell(
       title: 'Desktops',
+      currentSection: AppShellSection.desktops,
       body: session.desktopsLoading
           ? const Center(child: CircularProgressIndicator())
           : session.desktops.isEmpty

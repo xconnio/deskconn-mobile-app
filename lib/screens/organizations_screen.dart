@@ -43,6 +43,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       title: 'Organizations',
+      currentSection: AppShellSection.organizations,
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null

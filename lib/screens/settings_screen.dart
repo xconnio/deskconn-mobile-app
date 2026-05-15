@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 
 const String prefKeyWebRtcEnabled = 'webrtc_enabled';
 
@@ -34,8 +35,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+    return AppShell(
+      title: 'Settings',
+      currentSection: AppShellSection.settings,
       body: ListView(
         children: [
           SwitchListTile(
