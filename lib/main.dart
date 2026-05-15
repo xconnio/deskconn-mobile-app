@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:deskconn_mobile_app/core/shell/shell_registry.dart';
+import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -13,6 +14,8 @@ import 'package:provider/provider.dart';
 
 import 'core/shell/shell_background_service.dart';
 
+final navigatorKey = GlobalKey<NavigatorState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -22,14 +25,22 @@ Future<void> main() async {
     return false;
   };
 
-  // Handle close-shell signal from the notification Close button.
   const MethodChannel('deskconn/shell_notification').setMethodCallHandler((call) async {
-    if (call.method == 'closeShell') {
-      final realm = (call.arguments as Map?)?.entries
-          .firstWhere((e) => e.key == 'realm', orElse: () => const MapEntry('realm', null))
-          .value
-          ?.toString();
-      if (realm != null) ShellRegistry().closeShell(realm);
+    final realm = (call.arguments as Map?)?.entries
+        .firstWhere((e) => e.key == 'realm', orElse: () => const MapEntry('realm', null))
+        .value
+        ?.toString();
+
+    switch (call.method) {
+      case 'closeShell':
+        if (realm != null) ShellRegistry().closeShell(realm);
+      case 'openShell':
+        if (realm != null) {
+          final controller = ShellRegistry().getActive(realm);
+          if (controller != null) {
+            navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ShellScreen(controller: controller)));
+          }
+        }
     }
   });
 
@@ -51,6 +62,7 @@ class DeskconnApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, theme, _) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             debugShowCheckedModeBanner: false,
             theme: DeskconnTheme.light(),
             darkTheme: DeskconnTheme.dark(),

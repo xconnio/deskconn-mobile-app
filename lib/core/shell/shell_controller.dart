@@ -60,7 +60,7 @@ class ShellController {
     };
     _attachInput();
 
-    unawaited(startShellBackgroundService(config));
+    await startShellBackgroundService(config);
 
     try {
       await connection.session.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
@@ -71,7 +71,9 @@ class ShellController {
       _cleanup();
       unawaited(dismissShellNotification());
       onClosed?.call();
-      if (!_disposed) onExit?.call();
+      final exit = onExit;
+      onExit = null;
+      exit?.call();
     }
   }
 
@@ -146,7 +148,6 @@ class ShellController {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
-        unawaited(showShellNotification(config.desktopName, config.realm));
         onStarted?.call();
         return;
       }
@@ -197,9 +198,14 @@ class ShellController {
   void sendDel() => sendSpecialKey('\x1b[3~');
 
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _running = false;
     _cleanup();
     _outgoingQueue.cancelPending(StateError('Shell closed'));
+    unawaited(dismissShellNotification());
+    final exit = onExit;
+    onExit = null;
+    exit?.call();
   }
 }

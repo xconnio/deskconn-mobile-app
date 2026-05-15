@@ -21,8 +21,7 @@ class ShellLaunchConfig {
 }
 
 Future<void> initializeShellBackgroundService() async {
-  final service = FlutterBackgroundService();
-  await service.configure(
+  await FlutterBackgroundService().configure(
     androidConfiguration: AndroidConfiguration(
       onStart: _onStart,
       autoStart: false,
@@ -37,34 +36,25 @@ Future<void> initializeShellBackgroundService() async {
   );
 }
 
-Future<void> startShellBackgroundService(ShellLaunchConfig config, {bool wait = false}) async {
+Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
   final service = FlutterBackgroundService();
   if (!(await service.isRunning())) {
     await service.startService();
-    if (wait) await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 500));
   }
   service.invoke('updateNotification', {
     'title': 'Deskconn Shell',
     'content': 'Connecting to ${config.desktopName}...',
   });
+  service.invoke('setAsBackground');
 }
 
 void setShellAppStatus(bool isBackground) {
   FlutterBackgroundService().invoke(isBackground ? 'setAsForeground' : 'setAsBackground');
 }
 
-Future<void> showShellNotification(String desktopName, String realm) async {
-  FlutterBackgroundService().invoke('updateNotification', {
-    'title': 'Deskconn Shell',
-    'content': 'Terminal is running on $desktopName',
-  });
-}
-
 Future<void> dismissShellNotification() async {
-  FlutterBackgroundService().invoke('updateNotification', {
-    'title': 'Deskconn Shell',
-    'content': 'Shell service is idle',
-  });
+  FlutterBackgroundService().invoke('stopService');
 }
 
 @pragma('vm:entry-point')
@@ -74,7 +64,7 @@ void _onStart(ServiceInstance service) {
     service.on('setAsBackground').listen((_) => service.setAsBackgroundService());
     service.on('updateNotification').listen((event) {
       if (event == null) return;
-      (service).setForegroundNotificationInfo(
+      service.setForegroundNotificationInfo(
         title: event['title'] as String? ?? 'Deskconn Shell',
         content: event['content'] as String? ?? '',
       );
