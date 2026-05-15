@@ -43,8 +43,8 @@ Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
     await Future.delayed(const Duration(milliseconds: 500));
   }
   service.invoke('updateNotification', {
-    'title': 'Deskconn Shell',
-    'content': 'Connecting to ${config.desktopName}...',
+    'title': 'Deskconn Terminal',
+    'content': 'connected to ${config.desktopName}...',
   });
   service.invoke('setAsBackground');
 }
