@@ -35,6 +35,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> with SingleTicker
 
     return AppShell(
       title: 'Invitations',
+      currentSection: AppShellSection.invitations,
       bottom: TabBar(
         controller: tabs,
         tabs: const [

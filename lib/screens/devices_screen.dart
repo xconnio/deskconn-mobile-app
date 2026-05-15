@@ -73,6 +73,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (loading) {
       return AppShell(
         title: 'Devices',
+        currentSection: AppShellSection.devices,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -80,6 +81,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (error != null) {
       return AppShell(
         title: 'Devices',
+        currentSection: AppShellSection.devices,
         body: Center(
           child: Text(error!, style: const TextStyle(color: Colors.red)),
         ),
@@ -88,6 +90,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     return AppShell(
       title: 'Devices',
+      currentSection: AppShellSection.devices,
       body: devices.isEmpty
           ? Center(
               child: Column(
