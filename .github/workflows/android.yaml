@@ -63,3 +63,10 @@ jobs:
           files: deskconn-mobile-app.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Discord
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d "{\"content\": \"New Deskconn Mobile Release successful\n [Download APK](https://github.com/${{ github.repository }}/releases/tag/v${{ github.run_number }})\nUpdate: *${{ steps.commit.outputs.message }}*\"}" \
+          ${{ secrets.DISCORD_WEBHOOK }}
