@@ -49,14 +49,14 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk ${{ secrets.KEY_ALIAS }}
 
           zipalign -v 4 build/app/outputs/flutter-apk/app-release.apk deskconn-mobile-app.apk
-
           apksigner verify deskconn-mobile-app.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Deskconn Mobile – Latest
+          tag_name: v${{ github.run_number }}
+          name: Deskconn Mobile – Release ${{ github.run_number }}
+          body: "Changes: ${{ github.event.head_commit.message }}"
           files: deskconn-mobile-app.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
