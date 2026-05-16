@@ -25,10 +25,6 @@ jobs:
           flutter-version: 3.38.7
           channel: stable
 
-      - name: Get commit message
-        id: commit
-        run: echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
-
       - name: Install dependencies
         run: make install
 
@@ -44,30 +40,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zipalign apksigner
 
-      - name: Sign APK
+      - name: Align and Sign APK (v2+)
         run: |
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
-            -keystore deskconn-release-key.jks \
-            -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
-            -keypass ${{ secrets.KEY_PASSWORD }} \
-            build/app/outputs/flutter-apk/app-release.apk ${{ secrets.KEY_ALIAS }}
+          zipalign -v 4 build/app/outputs/flutter-apk/app-release.apk aligned.apk
 
-          zipalign -v 4 build/app/outputs/flutter-apk/app-release.apk deskconn-mobile-app.apk
-          apksigner verify deskconn-mobile-app.apk
+          apksigner sign \
+            --ks deskconn-release-key.jks \
+            --ks-key-alias ${{ secrets.KEY_ALIAS }} \
+            --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
+            --key-pass pass:${{ secrets.KEY_PASSWORD }} \
+            --out deskconn-mobile-app.apk \
+            aligned.apk
+
+          apksigner verify --verbose deskconn-mobile-app.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: Deskconn Mobile – Release ${{ github.run_number }}
-          body: "Changes: ${{ steps.commit.outputs.message }}"
+          body: "Changes: ${{ github.event.head_commit.message }}"
           files: deskconn-mobile-app.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify Discord
-        if: success()
-        run: |
-          curl -H "Content-Type: application/json" \
-          -d "{\"content\": \"New Deskconn Mobile Release successful\n [Download APK](https://github.com/${{ github.repository }}/releases/tag/v${{ github.run_number }})\nUpdate: *${{ steps.commit.outputs.message }}*\"}" \
-          ${{ secrets.DISCORD_WEBHOOK }}
