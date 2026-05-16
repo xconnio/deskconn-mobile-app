@@ -35,9 +35,22 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > deskconn-release-key.jks
 
-      - name: Rename APK
+      - name: Install Android SDK Build Tools
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk deskconn-mobile-app.apk
+          sudo apt-get update
+          sudo apt-get install -y zipalign apksigner
+
+      - name: Sign APK
+        run: |
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore deskconn-release-key.jks \
+            -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
+            -keypass ${{ secrets.KEY_PASSWORD }} \
+            build/app/outputs/flutter-apk/app-release.apk ${{ secrets.KEY_ALIAS }}
+
+          zipalign -v 4 build/app/outputs/flutter-apk/app-release.apk deskconn-mobile-app.apk
+
+          apksigner verify deskconn-mobile-app.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
