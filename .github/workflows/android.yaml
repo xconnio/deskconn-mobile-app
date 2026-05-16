@@ -25,6 +25,10 @@ jobs:
           flutter-version: 3.38.7
           channel: stable
 
+      - name: Get commit message
+        id: commit
+        run: echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+
       - name: Install dependencies
         run: make install
 
@@ -56,7 +60,14 @@ jobs:
         with:
           tag_name: v${{ github.run_number }}
           name: Deskconn Mobile – Release ${{ github.run_number }}
-          body: "Changes: ${{ github.event.head_commit.message }}"
+          body: "Changes: ${{ steps.commit.outputs.message }}"
           files: deskconn-mobile-app.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Discord
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d "{\"content\": \"New Deskconn Mobile Release successful\n [Download APK](https://github.com/${{ github.repository }}/releases/tag/v${{ github.run_number }})\nUpdate: *${{ steps.commit.outputs.message }}*\"}" \
+          ${{ secrets.DISCORD_WEBHOOK }}
