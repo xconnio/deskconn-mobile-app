@@ -67,13 +67,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
               children: [
                 _ActionTile(
                   icon: Icons.terminal,
-                  title: "Shell",
+                  title: "Terminal",
                   enabled: shellEnabled,
                   onTap: () => _openShell(context),
                 ),
                 _ActionTile(
                   icon: Icons.folder_open,
-                  title: "File Explorer",
+                  title: "Files",
                   enabled: shellEnabled,
                   onTap: () => _openFileExplorer(context),
                 ),
