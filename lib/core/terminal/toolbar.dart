@@ -22,26 +22,8 @@ class _ToolbarState extends State<Toolbar> {
     setState(() {});
   }
 
-  Widget key(String label, VoidCallback onTap, {Color? color, bool active = false}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: active ? Colors.green : (color ?? Colors.black87),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Center(
-            child: Text(label, style: const TextStyle(color: Colors.white)),
-          ),
-        ),
-      ),
-    );
+  Widget key(String label, VoidCallback onTap, {bool active = false}) {
+    return _KeyButton(label: label, onTap: onTap, active: active);
   }
 
   @override
@@ -82,6 +64,54 @@ class _ToolbarState extends State<Toolbar> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _KeyButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool active;
+
+  const _KeyButton({required this.label, required this.onTap, this.active = false});
+
+  @override
+  State<_KeyButton> createState() => _KeyButtonState();
+}
+
+class _KeyButtonState extends State<_KeyButton> {
+  bool _pressed = false;
+
+  Color get _bgColor {
+    if (widget.active) return _pressed ? const Color(0xFFCCCCCC) : Colors.white;
+    return _pressed ? const Color(0xFFBABABA) : Colors.black87;
+  }
+
+  Color get _textColor => widget.active ? Colors.black : Colors.white;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTapDown: (_) {
+          HapticFeedback.selectionClick();
+          setState(() => _pressed = true);
+        },
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 60),
+          margin: const EdgeInsets.all(2),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(color: _bgColor, borderRadius: BorderRadius.circular(6)),
+          child: Center(
+            child: Text(widget.label, style: TextStyle(color: _textColor, fontSize: 13)),
+          ),
+        ),
       ),
     );
   }
