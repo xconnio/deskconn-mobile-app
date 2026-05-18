@@ -49,7 +49,7 @@ class Encryption {
   Uint8List encrypt(List<int> plaintext) {
     final key = _sendKey;
     if (key == null) {
-      throw StateError('Shell encryption handshake is not complete');
+      throw StateError('Terminal encryption handshake is not complete');
     }
 
     final secretBox = _cipher.encryptSync(plaintext, secretKey: key);
@@ -59,7 +59,7 @@ class Encryption {
   Uint8List decrypt(List<int> payload) {
     final key = _receiveKey;
     if (key == null) {
-      throw StateError('Shell encryption handshake is not complete');
+      throw StateError('Terminal encryption handshake is not complete');
     }
     if (payload.length < _cipher.nonceLength + _cipher.macAlgorithm.macLength) {
       throw const FormatException('Encrypted payload is too short');

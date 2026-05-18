@@ -7,13 +7,13 @@ import 'package:xterm/core.dart';
 import 'package:xconn/src/types.dart';
 
 import 'blocking_queue.dart';
-import 'shell_background_service.dart';
-import 'shell_encryption.dart';
+import 'terminal_background_service.dart';
+import 'terminal_encryption.dart';
 import '../wamp/desktop_connection_manager.dart';
 
-class ShellController {
+class TerminalController {
   final Terminal terminal = Terminal();
-  final ShellLaunchConfig config;
+  final TerminalLaunchConfig config;
 
   void Function()? onStarted;
   void Function()? onExit;
@@ -35,7 +35,7 @@ class ShellController {
   bool get isActive => _running;
   bool get isReady => _keyReceived;
 
-  ShellController({required this.config});
+  TerminalController({required this.config});
 
   Future<void> start() async {
     if (_running) return;
@@ -60,16 +60,16 @@ class ShellController {
     };
     _attachInput();
 
-    await startShellBackgroundService(config);
+    await startTerminalBackgroundService(config);
 
     try {
       await connection.session.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
     } catch (e) {
-      if (!_disposed) terminal.write('\r\nShell error: $e\r\n');
+      if (!_disposed) terminal.write('\r\nTerminal error: $e\r\n');
     } finally {
       _running = false;
       _cleanup();
-      unawaited(dismissShellNotification());
+      unawaited(dismissTerminalNotification());
       onClosed?.call();
       final exit = onExit;
       onExit = null;
@@ -131,11 +131,11 @@ class ShellController {
   }
 
   Future<Progress> _sender() async {
-    if (_disposed) throw StateError('Shell closed');
+    if (_disposed) throw StateError('Terminal closed');
     try {
       return await _outgoingQueue.take();
     } catch (_) {
-      throw StateError('Shell closed');
+      throw StateError('Terminal closed');
     }
   }
 
@@ -148,6 +148,12 @@ class ShellController {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
+        // Send correct terminal dimensions now that key exchange is done.
+        // The initial _sendSize() in start() may have sent SIZE:0:0 if the
+        // terminal widget had not rendered yet, and the 100ms resize timer
+        // is skipped while waiting for the key. This ensures the server PTY
+        // gets the real size before the shell writes its first prompt.
+        _sendSize();
         onStarted?.call();
         return;
       }
@@ -177,7 +183,7 @@ class ShellController {
     if (raw is Uint8List) return raw;
     if (raw is List<int>) return Uint8List.fromList(raw);
     if (raw is String) return Uint8List.fromList(base64.decode(raw));
-    throw FormatException('Unsupported shell payload type: ${raw.runtimeType}');
+    throw FormatException('Unsupported terminal payload type: ${raw.runtimeType}');
   }
 
   void sendSpecialKey(String sequence) {
@@ -197,13 +203,24 @@ class ShellController {
   void sendEnd() => sendSpecialKey('\x1b[F');
   void sendDel() => sendSpecialKey('\x1b[3~');
 
+  void clearScreen() {
+    terminal.write('\x1b[2J\x1b[3J\x1b[H');
+  }
+
+  // Called when resuming an already-active session to force the server-side
+  // shell to redraw its prompt via SIGWINCH.
+  void requestRedraw() {
+    if (!_running || !_keyReceived) return;
+    _sendSize();
+  }
+
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _running = false;
     _cleanup();
-    _outgoingQueue.cancelPending(StateError('Shell closed'));
-    unawaited(dismissShellNotification());
+    _outgoingQueue.cancelPending(StateError('Terminal closed'));
+    unawaited(dismissTerminalNotification());
     final exit = onExit;
     onExit = null;
     exit?.call();

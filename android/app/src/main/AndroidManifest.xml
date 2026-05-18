@@ -14,7 +14,7 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync" />
         <receiver
-            android:name=".ShellNotificationActionReceiver"
+            android:name=".TerminalNotificationActionReceiver"
             android:exported="false" />
 
         <activity

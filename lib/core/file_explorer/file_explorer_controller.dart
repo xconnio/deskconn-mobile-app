@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:xconn/xconn.dart';
-import 'package:deskconn_mobile_app/core/shell/shell_encryption.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'models.dart';
 
 class FileExplorerController {

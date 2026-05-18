@@ -1,16 +1,16 @@
 import 'dart:async';
 
 import '../wamp/desktop_connection_manager.dart';
-import 'shell_controller.dart';
+import 'terminal_controller.dart';
 
-class ShellRegistry {
-  static final _instance = ShellRegistry._();
-  factory ShellRegistry() => _instance;
-  ShellRegistry._();
+class TerminalRegistry {
+  static final _instance = TerminalRegistry._();
+  factory TerminalRegistry() => _instance;
+  TerminalRegistry._();
 
-  final Map<String, ShellController> _controllers = {};
+  final Map<String, TerminalController> _controllers = {};
 
-  ShellController? getActive(String realm) {
+  TerminalController? getActive(String realm) {
     final c = _controllers[realm];
     if (c == null) return null;
     if (!c.isActive) {
@@ -20,7 +20,7 @@ class ShellRegistry {
     return c;
   }
 
-  void register(String realm, ShellController controller) {
+  void register(String realm, TerminalController controller) {
     final existing = _controllers[realm];
     if (existing != null && existing != controller) {
       existing.dispose();
@@ -32,7 +32,7 @@ class ShellRegistry {
     if (_controllers.remove(realm) != null) {}
   }
 
-  void closeShell(String realm) {
+  void closeTerminal(String realm) {
     _controllers.remove(realm)?.dispose();
     unawaited(DesktopConnectionManager().release(realm));
   }
