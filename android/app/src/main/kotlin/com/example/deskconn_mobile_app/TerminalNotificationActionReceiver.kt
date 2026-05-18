@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import id.flutter.flutter_background_service.BackgroundService
 
-class ShellNotificationActionReceiver : BroadcastReceiver() {
+class TerminalNotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         context.stopService(Intent(context, BackgroundService::class.java))
         val notificationManager =

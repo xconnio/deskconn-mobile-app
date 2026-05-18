@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:deskconn_mobile_app/core/shell/shell_controller.dart';
-import 'package:deskconn_mobile_app/core/shell/shell_registry.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
@@ -9,9 +9,9 @@ import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
 
-import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 
 enum _DesktopConnectionStatus { checking, routed, p2p, offline }
 
@@ -25,7 +25,7 @@ class DesktopDetailsScreen extends StatefulWidget {
 }
 
 class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
-  bool _openingShell = false;
+  bool _openingTerminal = false;
   _DesktopConnectionStatus _connectionStatus = _DesktopConnectionStatus.checking;
 
   String? get _realm => widget.desktop['realm']?.toString();
@@ -47,9 +47,9 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final shellEnabled =
+    final terminalEnabled =
         (_connectionStatus == _DesktopConnectionStatus.routed || _connectionStatus == _DesktopConnectionStatus.p2p) &&
-        !_openingShell;
+        !_openingTerminal;
 
     final name = widget.desktop['name'] as String?;
     final authId = widget.desktop['authid']?.toString() ?? '';
@@ -68,13 +68,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                 _ActionTile(
                   icon: Icons.terminal,
                   title: "Terminal",
-                  enabled: shellEnabled,
-                  onTap: () => _openShell(context),
+                  enabled: terminalEnabled,
+                  onTap: () => _openTerminal(context),
                 ),
                 _ActionTile(
                   icon: Icons.folder_open,
                   title: "Files",
-                  enabled: shellEnabled,
+                  enabled: terminalEnabled,
                   onTap: () => _openFileExplorer(context),
                 ),
               ],
@@ -117,7 +117,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         );
       }
     } catch (e) {
-      _appendShellLog("Desktop connection failed: ${e.toString().split('\n').first}");
+      _appendTerminalLog("Desktop connection failed: ${e.toString().split('\n').first}");
       if (mounted) {
         setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
       }
@@ -140,7 +140,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
       if (!context.mounted) return;
 
-      final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+      final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
       await Navigator.push(context, MaterialPageRoute(builder: (_) => FileExplorerScreen(config: config)));
     } catch (e) {
@@ -150,67 +150,67 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<void> _openShell(BuildContext context) async {
+  Future<void> _openTerminal(BuildContext context) async {
     final realm = _realm;
-    if (_openingShell ||
+    if (_openingTerminal ||
         realm == null ||
         (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
       return;
     }
 
-    setState(() => _openingShell = true);
-    _appendShellLog("Starting shell connection");
+    setState(() => _openingTerminal = true);
+    _appendTerminalLog("Starting terminal connection");
 
     try {
-      var controller = ShellRegistry().getActive(realm);
+      var controller = TerminalRegistry().getActive(realm);
 
       if (controller == null) {
         final authId = await DeviceIdentity.lastEmail();
         final privateKey = await DeviceIdentity.privateKey();
         if (authId == null || privateKey == null) {
-          throw Exception("Missing shell credentials.");
+          throw Exception("Missing terminal credentials.");
         }
 
-        final config = _shellConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+        final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
-        controller = ShellController(config: config);
+        controller = TerminalController(config: config);
 
-        controller.onClosed = () => ShellRegistry().closeShell(realm);
+        controller.onClosed = () => TerminalRegistry().closeTerminal(realm);
 
-        ShellRegistry().register(realm, controller);
+        TerminalRegistry().register(realm, controller);
         unawaited(controller.start());
-        _appendShellLog("Shell controller created");
+        _appendTerminalLog("Terminal controller created");
       } else {
-        _appendShellLog("Reusing persistent shell controller");
+        _appendTerminalLog("Reusing persistent terminal controller");
       }
 
       if (!context.mounted) return;
 
-      setState(() => _openingShell = false);
-      _appendShellLog("Navigating to shell screen");
+      setState(() => _openingTerminal = false);
+      _appendTerminalLog("Navigating to terminal screen");
 
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShellScreen(controller: controller!)));
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => TerminalScreen(controller: controller!)));
     } catch (e) {
-      final message = _friendlyShellError(e);
-      _appendShellLog("Shell open failed: $message");
+      final message = _friendlyTerminalError(e);
+      _appendTerminalLog("Terminal open failed: $message");
       if (context.mounted) {
-        await _showShellErrorDialog(context, message);
+        await _showTerminalErrorDialog(context, message);
       }
     } finally {
       if (mounted) {
-        setState(() => _openingShell = false);
+        setState(() => _openingTerminal = false);
       }
     }
   }
 
-  ShellLaunchConfig _shellConfig({
+  TerminalLaunchConfig _terminalConfig({
     required String realm,
     required String authId,
     required String privateKey,
     required _DesktopConnectionStatus status,
   }) {
-    return ShellLaunchConfig(
-      sessionKey: 'shell:$realm',
+    return TerminalLaunchConfig(
+      sessionKey: 'terminal:$realm',
       desktopName: widget.desktop['name']?.toString() ?? 'Desktop',
       realm: realm,
       authId: authId,
@@ -219,17 +219,17 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     );
   }
 
-  void _appendShellLog(String message) {
+  void _appendTerminalLog(String message) {
     final line = "[${DateTime.now().toIso8601String()}] $message";
     debugPrint("DesktopDetailsScreen: $line");
   }
 
-  Future<void> _showShellErrorDialog(BuildContext context, String message) async {
+  Future<void> _showTerminalErrorDialog(BuildContext context, String message) async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text("Shell Unavailable"),
+          title: const Text("Terminal Unavailable"),
           content: Text(message),
           actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close"))],
         );
@@ -242,13 +242,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     return normalized.contains("wamp.error.no_such_procedure");
   }
 
-  String _friendlyShellError(Object error) {
+  String _friendlyTerminalError(Object error) {
     final errorText = error.toString();
     if (_isMissingProcedureError(errorText)) {
       return "Remote device offline. Check internet and try again.";
     }
     if (errorText.toLowerCase().contains("timeout")) {
-      return "Shell connection timed out. Try again.";
+      return "Terminal connection timed out. Try again.";
     }
     return "Remote device offline or Check internet and try again.";
   }

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:deskconn_mobile_app/core/shell/shell_registry.dart';
-import 'package:deskconn_mobile_app/core/shell/shell_screen.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'core/shell/shell_background_service.dart';
+import 'core/terminal/terminal_background_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -20,7 +20,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    if (error is StateError && error.message == 'Shell closed') return true;
+    if (error is StateError && error.message == 'Terminal closed') return true;
     if (error.toString().contains('WebRTC data channel closed')) return true;
     return false;
   };
@@ -32,20 +32,20 @@ Future<void> main() async {
         ?.toString();
 
     switch (call.method) {
-      case 'closeShell':
-        if (realm != null) ShellRegistry().closeShell(realm);
-      case 'openShell':
+      case 'closeTerminal':
+        if (realm != null) TerminalRegistry().closeTerminal(realm);
+      case 'openTerminal':
         if (realm != null) {
-          final controller = ShellRegistry().getActive(realm);
+          final controller = TerminalRegistry().getActive(realm);
           if (controller != null) {
-            navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ShellScreen(controller: controller)));
+            navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => TerminalScreen(controller: controller)));
           }
         }
     }
   });
 
   runApp(const DeskconnApp());
-  unawaited(initializeShellBackgroundService());
+  unawaited(initializeTerminalBackgroundService());
 }
 
 class DeskconnApp extends StatelessWidget {

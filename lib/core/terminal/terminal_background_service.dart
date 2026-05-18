@@ -1,6 +1,6 @@
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-class ShellLaunchConfig {
+class TerminalLaunchConfig {
   final String sessionKey;
   final String desktopName;
   final String realm;
@@ -9,7 +9,7 @@ class ShellLaunchConfig {
   final bool webRtcEnabled;
   final Map<String, dynamic>? turnCredentials;
 
-  ShellLaunchConfig({
+  TerminalLaunchConfig({
     required this.sessionKey,
     required this.desktopName,
     required this.realm,
@@ -20,15 +20,15 @@ class ShellLaunchConfig {
   });
 }
 
-Future<void> initializeShellBackgroundService() async {
+Future<void> initializeTerminalBackgroundService() async {
   await FlutterBackgroundService().configure(
     androidConfiguration: AndroidConfiguration(
       onStart: _onStart,
       autoStart: false,
       autoStartOnBoot: false,
       isForegroundMode: true,
-      initialNotificationTitle: 'Deskconn Shell',
-      initialNotificationContent: 'Shell service is idle',
+      initialNotificationTitle: 'Deskconn Terminal',
+      initialNotificationContent: 'Terminal service is idle',
       foregroundServiceNotificationId: 1107,
       foregroundServiceTypes: [AndroidForegroundType.dataSync],
     ),
@@ -36,7 +36,7 @@ Future<void> initializeShellBackgroundService() async {
   );
 }
 
-Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
+Future<void> startTerminalBackgroundService(TerminalLaunchConfig config) async {
   final service = FlutterBackgroundService();
   if (!(await service.isRunning())) {
     await service.startService();
@@ -49,11 +49,11 @@ Future<void> startShellBackgroundService(ShellLaunchConfig config) async {
   service.invoke('setAsBackground');
 }
 
-void setShellAppStatus(bool isBackground) {
+void setTerminalAppStatus(bool isBackground) {
   FlutterBackgroundService().invoke(isBackground ? 'setAsForeground' : 'setAsBackground');
 }
 
-Future<void> dismissShellNotification() async {
+Future<void> dismissTerminalNotification() async {
   FlutterBackgroundService().invoke('stopService');
 }
 
@@ -65,7 +65,7 @@ void _onStart(ServiceInstance service) {
     service.on('updateNotification').listen((event) {
       if (event == null) return;
       service.setForegroundNotificationInfo(
-        title: event['title'] as String? ?? 'Deskconn Shell',
+        title: event['title'] as String? ?? 'Deskconn Terminal',
         content: event['content'] as String? ?? '',
       );
     });

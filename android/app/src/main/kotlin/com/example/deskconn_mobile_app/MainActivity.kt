@@ -27,8 +27,8 @@ class MainActivity : FlutterActivity() {
         setIntent(intent)
         val realm = intent.getStringExtra("realm") ?: return
         val method = when (intent.action) {
-            "deskconn.OPEN_SHELL" -> "openShell"
-            "deskconn.CLOSE_SHELL" -> "closeShell"
+            "deskconn.OPEN_Terminal" -> "openTerminal"
+            "deskconn.CLOSE_Terminal" -> "closeTerminal"
             else -> return
         }
         flutterEngine?.let { engine ->

@@ -12,7 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
-import 'package:deskconn_mobile_app/core/shell/shell_background_service.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 
 const _kImageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico'};
 const _kTextExts = {
@@ -66,7 +66,7 @@ const _kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3
 const _kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
 
 class FileExplorerScreen extends StatefulWidget {
-  final ShellLaunchConfig config;
+  final TerminalLaunchConfig config;
 
   const FileExplorerScreen({super.key, required this.config});
 

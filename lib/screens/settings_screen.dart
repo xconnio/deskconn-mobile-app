@@ -42,7 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SwitchListTile(
             secondary: const Icon(Icons.settings_ethernet),
-            title: const Text('Use WebRTC for Shell'),
+            title: const Text('Use WebRTC for Terminal'),
             value: _webRtcEnabled,
             onChanged: _setWebRtc,
           ),
