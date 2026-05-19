@@ -281,8 +281,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         return _FileEntryTile(
-          controller: _controller!,
-          parentPath: _currentBrowse!.path,
           entry: entry,
           onTap: () => _onEntryTap(entry),
           onLongPress: () => _showEntryOptions(entry),
@@ -833,49 +831,24 @@ class _UnknownPreview extends StatelessWidget {
 }
 
 class _FileEntryTile extends StatelessWidget {
-  final FileExplorerController controller;
-  final String parentPath;
   final FileEntry entry;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const _FileEntryTile({
-    required this.controller,
-    required this.parentPath,
-    required this.entry,
-    required this.onTap,
-    required this.onLongPress,
-  });
+  const _FileEntryTile({required this.entry, required this.onTap, required this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
     final ext = entry.name.contains('.') ? entry.name.split('.').last.toLowerCase() : '';
-    final isImage = _kImageExts.contains(ext);
 
     return ListTile(
       leading: SizedBox(
         width: 40,
         height: 40,
-        child: isImage
-            ? FutureBuilder<Uint8List>(
-                future: controller.thumbnail(parentPath == '/' ? '/${entry.name}' : '$parentPath/${entry.name}'),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: Image.memory(snapshot.data!, fit: BoxFit.cover),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Icon(Icons.image_not_supported, color: Colors.grey[400], size: 20);
-                  }
-                  return Icon(Icons.image, color: Colors.grey[400]);
-                },
-              )
-            : Icon(
-                entry.isDir ? Icons.folder : _getFileIcon(ext),
-                color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
-              ),
+        child: Icon(
+          entry.isDir ? Icons.folder : _getFileIcon(ext),
+          color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
+        ),
       ),
       title: Text(entry.name),
       subtitle: entry.isDir ? null : Text(formatSize(entry.size)),
