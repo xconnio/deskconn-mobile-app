@@ -448,7 +448,6 @@ class _Breadcrumbs extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              reverse: true,
               child: Row(
                 children: [
                   for (var i = 0; i < parts.length; i++) ...[
