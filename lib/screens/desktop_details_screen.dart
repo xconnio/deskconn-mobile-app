@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:xconn/xconn.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
@@ -62,22 +64,26 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         children: [
           _StatusBar(status: _connectionStatus),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _ActionTile(
-                  icon: Icons.terminal,
-                  title: "Terminal",
-                  enabled: terminalEnabled,
-                  onTap: () => _openTerminal(context),
-                ),
-                _ActionTile(
-                  icon: Icons.folder_open,
-                  title: "Files",
-                  enabled: terminalEnabled,
-                  onTap: () => _openFileExplorer(context),
-                ),
-              ],
+            child: RefreshIndicator(
+              onRefresh: _probeDesktopConnection,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _ActionTile(
+                    icon: Icons.terminal,
+                    title: "Terminal",
+                    enabled: terminalEnabled,
+                    onTap: () => _openTerminal(context),
+                  ),
+                  _ActionTile(
+                    icon: Icons.folder_open,
+                    title: "Files",
+                    enabled: terminalEnabled,
+                    onTap: () => _openFileExplorer(context),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -111,9 +117,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         webRtcEnabled: webRtcEnabled,
       );
 
+      final desktopOnline = await _isDesktopAgentOnline(connection.session);
+
       if (mounted) {
         setState(
-          () => _connectionStatus = connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed,
+          () => _connectionStatus = desktopOnline
+              ? (connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed)
+              : _DesktopConnectionStatus.offline,
         );
       }
     } catch (e) {
@@ -121,6 +131,20 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       if (mounted) {
         setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
       }
+    }
+  }
+
+  Future<bool> _isDesktopAgentOnline(Session session) async {
+    try {
+      final enc = await Encryption.create();
+      await session
+          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
+          .timeout(const Duration(seconds: 3));
+      return true;
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('wamp.error.no_such_procedure')) return false;
+      if (e is TimeoutException) return false;
+      return true;
     }
   }
 
