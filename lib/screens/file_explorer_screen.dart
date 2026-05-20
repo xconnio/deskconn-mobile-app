@@ -180,17 +180,75 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
-  void _onEntryTap(FileEntry entry) {
-    if (entry.isDir) {
-      final newPath = _currentBrowse!.path == '/' ? '/${entry.name}' : '${_currentBrowse!.path}/${entry.name}';
-      _loadPath(newPath);
-    } else {
-      final path = _currentBrowse!.path == '/' ? '/${entry.name}' : '${_currentBrowse!.path}/${entry.name}';
+  String _fullPath(FileEntry entry) {
+    if (entry.path.isNotEmpty) return entry.path;
+    final dir = _currentBrowse!.path;
+    return dir == '/' ? '/${entry.name}' : '$dir/${entry.name}';
+  }
+
+  String? _resolveSymlinkTarget(FileEntry entry) {
+    final target = entry.symlinkTarget;
+    if (target == null || target.isEmpty) return null;
+    if (target.startsWith('/')) return target;
+    final lastSlash = entry.path.lastIndexOf('/');
+    final parentDir = lastSlash > 0 ? entry.path.substring(0, lastSlash) : '/';
+    final parts = '$parentDir/$target'.split('/');
+    final resolved = <String>[];
+    for (final part in parts) {
+      if (part == '..' && resolved.isNotEmpty) {
+        resolved.removeLast();
+      } else if (part != '.' && part.isNotEmpty) {
+        resolved.add(part);
+      }
+    }
+    return '/${resolved.join('/')}';
+  }
+
+  Future<void> _openSymlink(FileEntry entry) async {
+    final resolved = _resolveSymlinkTarget(entry);
+    final browsePath = resolved ?? _fullPath(entry);
+
+    final prevBrowse = _currentBrowse;
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await _controller!.browse(browsePath);
+      _browseCache['${widget.config.realm}:$browsePath'] = result;
+      if (mounted) {
+        setState(() {
+          _currentBrowse = result;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _currentBrowse = prevBrowse;
+        _isLoading = false;
+      });
       Navigator.push(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              FilePreviewScreen(controller: _controller!, entry: entry, path: path),
+              FilePreviewScreen(controller: _controller!, entry: entry, path: browsePath),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
+      );
+    }
+  }
+
+  void _onEntryTap(FileEntry entry) {
+    if (entry.isDir) {
+      _loadPath(_fullPath(entry));
+    } else if (entry.isSymlink) {
+      _openSymlink(entry);
+    } else {
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              FilePreviewScreen(controller: _controller!, entry: entry, path: _fullPath(entry)),
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
         ),
@@ -333,14 +391,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
     if (destPath == srcPath) {
       if (isCut) {
-        // Already at destination — nothing to do
         setState(() {
           _clipboardEntry = null;
           _clipboardIsCut = false;
         });
         return;
       }
-      // Copy to same dir: append _copy
       final name = entry.name;
       final dot = entry.isDir ? -1 : name.lastIndexOf('.');
       destPath = dot > 0 ? '$destDir/${name.substring(0, dot)}_copy${name.substring(dot)}' : '$destDir/${name}_copy';
@@ -602,7 +658,12 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     _contentFuture = widget.controller.read(widget.path);
   }
 
-  String get _ext => widget.entry.name.contains('.') ? widget.entry.name.split('.').last.toLowerCase() : '';
+  String get _ext {
+    final effectiveName = widget.entry.isSymlink && widget.entry.symlinkTarget != null
+        ? widget.entry.symlinkTarget!.split('/').last
+        : widget.entry.name;
+    return effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+  }
 
   Color get _bgColor {
     if (_ext == 'pdf') return Colors.grey.shade200;
@@ -945,19 +1006,37 @@ class _FileEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ext = entry.name.contains('.') ? entry.name.split('.').last.toLowerCase() : '';
+    final effectiveName = entry.isSymlink && entry.symlinkTarget != null
+        ? entry.symlinkTarget!.split('/').last
+        : entry.name;
+    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+
+    final Widget leadingIcon;
+    if (entry.isSymlink) {
+      leadingIcon = const Icon(Icons.link, color: Color(0xFFa78bfa), size: 36);
+    } else {
+      leadingIcon = Icon(
+        entry.isDir ? Icons.folder : _getFileIcon(ext),
+        color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
+        size: 36,
+      );
+    }
+
+    Widget? subtitle;
+    if (entry.isSymlink && entry.symlinkTarget != null) {
+      subtitle = Text(
+        '→ ${entry.symlinkTarget}',
+        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.secondary),
+        overflow: TextOverflow.ellipsis,
+      );
+    } else if (!entry.isDir) {
+      subtitle = Text(formatSize(entry.size));
+    }
 
     return ListTile(
-      leading: SizedBox(
-        width: 40,
-        height: 40,
-        child: Icon(
-          entry.isDir ? Icons.folder : _getFileIcon(ext),
-          color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
-        ),
-      ),
+      leading: SizedBox(width: 40, height: 40, child: leadingIcon),
       title: Text(entry.name),
-      subtitle: entry.isDir ? null : Text(formatSize(entry.size)),
+      subtitle: subtitle,
       onTap: onTap,
       onLongPress: onLongPress,
       trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: onLongPress),
