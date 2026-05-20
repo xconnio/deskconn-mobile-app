@@ -176,7 +176,7 @@ class FileExplorerController {
   Future<void> delete(String path) async => _callEncrypted('io.xconn.deskconn.deskconnd.file.delete', {'path': path});
 
   Future<void> copy(String srcPath, String destPath) async =>
-      _callEncrypted('io.xconn.deskconn.deskconnd.file.copy', {'src_path': srcPath, 'dest_path': destPath});
+      _callEncrypted('io.xconn.deskconn.deskconnd.file.copy', {'src': srcPath, 'dst': destPath});
 
   Future<void> _callEncrypted(String procedure, Map<String, dynamic> payload) async {
     await ensureKeyExchanged();
