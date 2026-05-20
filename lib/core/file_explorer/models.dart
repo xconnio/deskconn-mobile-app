@@ -28,7 +28,7 @@ class FileEntry {
       mtime: _toInt(json['mtime']),
       mode: _toInt(json['mode']),
       isSymlink: _toBool(json['is_symlink']),
-      symlinkTarget: json['symlink_target'] as String?,
+      symlinkTarget: (json['symlink_target'] ?? json['link_target']) as String?,
     );
   }
 
