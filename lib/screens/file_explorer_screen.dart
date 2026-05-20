@@ -82,6 +82,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _showHidden = false;
 
   FileEntry? _clipboardEntry;
+  bool _clipboardIsCut = false;
 
   static final Map<String, FileBrowseResult> _browseCache = {};
 
@@ -295,11 +296,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           children: [
-            const Icon(Icons.content_copy, size: 16),
+            Icon(_clipboardIsCut ? Icons.content_cut : Icons.content_copy, size: 16),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Copied: ${_clipboardEntry!.name}',
+                '${_clipboardIsCut ? 'Cut' : 'Copied'}: ${_clipboardEntry!.name}',
                 style: const TextStyle(fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -307,7 +308,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             TextButton(onPressed: _pasteHere, child: const Text('Paste here')),
             IconButton(
               icon: const Icon(Icons.close, size: 18),
-              onPressed: () => setState(() => _clipboardEntry = null),
+              onPressed: () => setState(() {
+                _clipboardEntry = null;
+                _clipboardIsCut = false;
+              }),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               visualDensity: VisualDensity.compact,
@@ -321,19 +325,38 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   Future<void> _pasteHere() async {
     if (_clipboardEntry == null || _currentBrowse == null) return;
     final entry = _clipboardEntry!;
+    final isCut = _clipboardIsCut;
     final srcPath = entry.path;
+    final srcDir = srcPath.substring(0, srcPath.lastIndexOf('/'));
     final destDir = _currentBrowse!.path;
     var destPath = '$destDir/${entry.name}';
 
     if (destPath == srcPath) {
+      if (isCut) {
+        // Already at destination — nothing to do
+        setState(() {
+          _clipboardEntry = null;
+          _clipboardIsCut = false;
+        });
+        return;
+      }
+      // Copy to same dir: append _copy
       final name = entry.name;
       final dot = entry.isDir ? -1 : name.lastIndexOf('.');
       destPath = dot > 0 ? '$destDir/${name.substring(0, dot)}_copy${name.substring(dot)}' : '$destDir/${name}_copy';
     }
 
     try {
-      await _controller!.copy(srcPath, destPath);
-      setState(() => _clipboardEntry = null);
+      if (isCut) {
+        await _controller!.rename(srcPath, destPath);
+        _invalidateCacheFor(srcDir);
+      } else {
+        await _controller!.copy(srcPath, destPath);
+      }
+      setState(() {
+        _clipboardEntry = null;
+        _clipboardIsCut = false;
+      });
       _invalidateCacheFor(destDir);
       _loadPath(destDir);
     } catch (e) {
@@ -365,9 +388,26 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               title: const Text('Copy'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _clipboardEntry = entry);
+                setState(() {
+                  _clipboardEntry = entry;
+                  _clipboardIsCut = false;
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('"${entry.name}" copied — navigate to destination and tap Paste here')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_cut),
+              title: const Text('Cut'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _clipboardEntry = entry;
+                  _clipboardIsCut = true;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"${entry.name}" cut — navigate to destination and tap Paste here')),
                 );
               },
             ),
