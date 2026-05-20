@@ -81,7 +81,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String? _error;
   bool _showHidden = false;
 
-  // Cache for directory listings to make back navigation instant
+  FileEntry? _clipboardEntry;
+
   static final Map<String, FileBrowseResult> _browseCache = {};
 
   @override
@@ -93,11 +94,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   Future<void> _initialize() async {
     if (!mounted) return;
 
-    // Fast path: session already established by DesktopDetailsScreen — no async needed
     final existing = DesktopConnectionManager().get(widget.config.realm);
     if (existing != null) {
       _controller = FileExplorerController.getOrCreate(existing.session, widget.config.realm);
-      // If controller is reused (key exchange already done), skip the loading state entirely
       if (_controller!.isKeyExchanged) {
         await _loadPath(_currentBrowse?.path ?? '');
         return;
@@ -131,7 +130,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
-  // Force-release and reconnect — used by Reconnect button and auto-reconnect
   Future<void> _reconnect() async {
     FileExplorerController.invalidate(widget.config.realm);
     await DesktopConnectionManager().release(widget.config.realm);
@@ -241,6 +239,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         body: Column(
           children: [
             if (_currentBrowse != null) _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
+            if (_clipboardEntry != null) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
         ),
@@ -289,6 +288,63 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
+  Widget _buildClipboardBanner() {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.content_copy, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Copied: ${_clipboardEntry!.name}',
+                style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton(onPressed: _pasteHere, child: const Text('Paste here')),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => setState(() => _clipboardEntry = null),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pasteHere() async {
+    if (_clipboardEntry == null || _currentBrowse == null) return;
+    final entry = _clipboardEntry!;
+    final srcPath = entry.path;
+    final destDir = _currentBrowse!.path;
+    var destPath = '$destDir/${entry.name}';
+
+    if (destPath == srcPath) {
+      final name = entry.name;
+      final dot = entry.isDir ? -1 : name.lastIndexOf('.');
+      destPath = dot > 0 ? '$destDir/${name.substring(0, dot)}_copy${name.substring(dot)}' : '$destDir/${name}_copy';
+    }
+
+    try {
+      await _controller!.copy(srcPath, destPath);
+      setState(() => _clipboardEntry = null);
+      _invalidateCacheFor(destDir);
+      _loadPath(destDir);
+    } catch (e) {
+      _showErrorSnackBar('Paste failed: $e');
+    }
+  }
+
+  void _invalidateCacheFor(String path) {
+    _browseCache.remove('${widget.config.realm}:$path');
+  }
+
   void _showEntryOptions(FileEntry entry) {
     showModalBottomSheet(
       context: context,
@@ -302,6 +358,17 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               onTap: () {
                 Navigator.pop(context);
                 _showProperties(entry);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_copy),
+              title: const Text('Copy'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => _clipboardEntry = entry);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"${entry.name}" copied — navigate to destination and tap Paste here')),
+                );
               },
             ),
             ListTile(

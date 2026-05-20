@@ -1,5 +1,6 @@
 class FileEntry {
   final String name;
+  final String path;
   final bool isDir;
   final int size;
   final int mtime;
@@ -9,6 +10,7 @@ class FileEntry {
 
   FileEntry({
     required this.name,
+    required this.path,
     required this.isDir,
     required this.size,
     required this.mtime,
@@ -20,6 +22,7 @@ class FileEntry {
   factory FileEntry.fromJson(Map<String, dynamic> json) {
     return FileEntry(
       name: (json['name'] as String?) ?? '',
+      path: (json['path'] as String?) ?? '',
       isDir: _toBool(json['is_dir']),
       size: _toInt(json['size']),
       mtime: _toInt(json['mtime']),
@@ -31,6 +34,7 @@ class FileEntry {
 
   Map<String, dynamic> toJson() => {
     'name': name,
+    'path': path,
     'is_dir': isDir,
     'size': size,
     'mtime': mtime,
