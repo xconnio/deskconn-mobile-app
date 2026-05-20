@@ -178,8 +178,6 @@ class FileExplorerController {
   Future<void> copy(String srcPath, String destPath) async =>
       _callEncrypted('io.xconn.deskconn.deskconnd.file.copy', {'src': srcPath, 'dst': destPath});
 
-  Future<void> mkdir(String path) async => _callEncrypted('io.xconn.deskconn.deskconnd.file.mkdir', {'path': path});
-
   Future<void> _callEncrypted(String procedure, Map<String, dynamic> payload) async {
     await ensureKeyExchanged();
     final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
