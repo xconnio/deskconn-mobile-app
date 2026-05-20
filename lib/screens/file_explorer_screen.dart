@@ -288,11 +288,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           title: const Text('File Explorer'),
           actions: [
             IconButton(
-              icon: const Icon(Icons.create_new_folder_outlined),
-              onPressed: _currentBrowse != null ? _showNewFolderDialog : null,
-              tooltip: 'New folder',
-            ),
-            IconButton(
               icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
               onPressed: () => setState(() => _showHidden = !_showHidden),
               tooltip: 'Show hidden files',
@@ -495,19 +490,32 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   void _showProperties(FileEntry entry) {
+    final location = entry.path.isNotEmpty
+        ? entry.path.substring(0, entry.path.lastIndexOf('/'))
+        : _currentBrowse?.path ?? '';
+
+    String type;
+    if (entry.isSymlink) {
+      type = 'Symlink';
+    } else if (entry.isDir) {
+      type = 'Directory';
+    } else {
+      type = 'File';
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(entry.name),
+        title: Text(entry.name, maxLines: 2, overflow: TextOverflow.ellipsis),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Type: ${entry.isDir ? 'Directory' : 'File'}'),
-            Text('Size: ${formatSize(entry.size)}'),
-            Text('Modified: ${DateTime.fromMillisecondsSinceEpoch(entry.mtime * 1000)}'),
-            Text('Permissions: ${entry.mode.toRadixString(8)}'),
-            if (entry.isSymlink) Text('Symlink target: ${entry.symlinkTarget}'),
+            _PropRow('Type', type),
+            if (location.isNotEmpty) _PropRow('Location', location),
+            if (!entry.isDir) _PropRow('Size', formatSize(entry.size)),
+            if (entry.mtime > 0) _PropRow('Modified', _formatMtime(entry.mtime)),
+            if (entry.mode > 0) _PropRow('Permissions', _formatMode(entry.mode)),
+            if (entry.isSymlink && entry.symlinkTarget != null) _PropRow('Links to', entry.symlinkTarget!),
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
@@ -515,40 +523,22 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
-  void _showNewFolderDialog() {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Folder'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Folder name'),
-          autofocus: true,
-          textCapitalization: TextCapitalization.none,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(context);
-              try {
-                final dir = _currentBrowse!.path;
-                final newPath = '$dir/$name';
-                await _controller!.mkdir(newPath);
-                _invalidateCacheFor(dir);
-                _loadPath(dir);
-              } catch (e) {
-                _showErrorSnackBar('Failed to create folder: $e');
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
+  static String _formatMtime(int mtime) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(mtime * 1000).toLocal();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m';
+  }
+
+  static String _formatMode(int mode) {
+    final perm = mode & 0x1FF;
+    const r = ['r', 'w', 'x'];
+    final buf = StringBuffer();
+    for (int i = 8; i >= 0; i--) {
+      buf.write((perm >> i) & 1 == 1 ? r[i % 3] : '-');
+    }
+    return '${buf.toString()}  (${perm.toRadixString(8).padLeft(3, '0')})';
   }
 
   void _showRenameDialog(FileEntry entry) {
@@ -1131,5 +1121,32 @@ class _FileEntryTile extends StatelessWidget {
       default:
         return null;
     }
+  }
+}
+
+class _PropRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _PropRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(label, style: TextStyle(fontSize: 13, color: muted)),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 13), overflow: TextOverflow.visible),
+          ),
+        ],
+      ),
+    );
   }
 }
