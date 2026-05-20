@@ -288,6 +288,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           title: const Text('File Explorer'),
           actions: [
             IconButton(
+              icon: const Icon(Icons.create_new_folder_outlined),
+              onPressed: _currentBrowse != null ? _showNewFolderDialog : null,
+              tooltip: 'New folder',
+            ),
+            IconButton(
               icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
               onPressed: () => setState(() => _showHidden = !_showHidden),
               tooltip: 'Show hidden files',
@@ -506,6 +511,42 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _showNewFolderDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Folder'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Folder name'),
+          autofocus: true,
+          textCapitalization: TextCapitalization.none,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(context);
+              try {
+                final dir = _currentBrowse!.path;
+                final newPath = '$dir/$name';
+                await _controller!.mkdir(newPath);
+                _invalidateCacheFor(dir);
+                _loadPath(dir);
+              } catch (e) {
+                _showErrorSnackBar('Failed to create folder: $e');
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
       ),
     );
   }
