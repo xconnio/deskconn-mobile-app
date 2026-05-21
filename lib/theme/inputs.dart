@@ -5,10 +5,14 @@ class DeskconnInputs {
   static InputDecorationTheme light() {
     return InputDecorationTheme(
       filled: true,
-      fillColor: DeskconnColors.lightSurface,
-      border: _border(Colors.grey.shade300),
-      enabledBorder: _border(Colors.grey.shade300),
+      fillColor: DeskconnColors.surface,
+      border: _border(DeskconnColors.border),
+      enabledBorder: _border(DeskconnColors.border),
       focusedBorder: _border(DeskconnColors.primary),
+      errorBorder: _border(Colors.red.shade400),
+      focusedErrorBorder: _border(Colors.red.shade700),
+      labelStyle: const TextStyle(color: DeskconnColors.muted),
+      hintStyle: const TextStyle(color: DeskconnColors.subtle),
     );
   }
 
@@ -19,6 +23,8 @@ class DeskconnInputs {
       border: _border(DeskconnColors.darkBorder),
       enabledBorder: _border(DeskconnColors.darkBorder),
       focusedBorder: _border(DeskconnColors.primary),
+      errorBorder: _border(Colors.red.shade300),
+      focusedErrorBorder: _border(Colors.red.shade300),
       labelStyle: const TextStyle(color: Colors.white70),
       hintStyle: const TextStyle(color: Colors.white54),
     );

@@ -13,6 +13,7 @@ import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 
 const _kImageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico'};
 const _kTextExts = {
@@ -1037,6 +1038,7 @@ class _FileEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveName = entry.isSymlink && entry.symlinkTarget != null
         ? entry.symlinkTarget!.split('/').last
         : entry.name;
@@ -1044,11 +1046,13 @@ class _FileEntryTile extends StatelessWidget {
 
     final Widget leadingIcon;
     if (entry.isSymlink) {
-      leadingIcon = const Icon(Icons.link, color: Color(0xFFa78bfa), size: 36);
+      leadingIcon = Icon(Icons.link, color: isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary, size: 36);
     } else {
       leadingIcon = Icon(
         entry.isDir ? Icons.folder : _getFileIcon(ext),
-        color: entry.isDir ? Colors.amber : _getFileIconColor(ext),
+        color: entry.isDir
+            ? (isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary)
+            : _getFileIconColor(ext, isDark: isDark),
         size: 36,
       );
     }
@@ -1105,21 +1109,27 @@ class _FileEntryTile extends StatelessWidget {
     }
   }
 
-  Color? _getFileIconColor(String ext) {
-    if (_kVideoExts.contains(ext)) return Colors.blue.shade300;
-    if (_kAudioExts.contains(ext)) return Colors.purple.shade300;
-    if (_kTextExts.contains(ext)) return Colors.teal.shade300;
+  Color? _getFileIconColor(String ext, {required bool isDark}) {
+    if (_kVideoExts.contains(ext)) {
+      return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
+    }
+    if (_kAudioExts.contains(ext)) {
+      return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
+    }
+    if (_kTextExts.contains(ext)) {
+      return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
+    }
     switch (ext) {
       case 'pdf':
-        return Colors.red.shade400;
+        return isDark ? const Color(0xFFFCA5A5) : Colors.red.shade400;
       case 'zip':
       case 'rar':
       case '7z':
       case 'tar':
       case 'gz':
-        return Colors.orange.shade400;
+        return isDark ? const Color(0xFFFCD34D) : const Color(0xFF475569);
       default:
-        return null;
+        return isDark ? const Color(0xFFCBD5E1) : null;
     }
   }
 }

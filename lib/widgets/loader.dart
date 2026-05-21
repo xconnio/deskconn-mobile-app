@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 
@@ -31,7 +32,7 @@ class _DeskconnLoaderState extends State<DeskconnLoader> with SingleTickerProvid
       child: AbsorbPointer(
         absorbing: true,
         child: Container(
-          color: Colors.orange.withValues(alpha: 0.2),
+          color: DeskconnColors.overlay,
           child: Center(
             child: FadeTransition(
               opacity: Tween(begin: 0.4, end: 1.0).animate(_controller),

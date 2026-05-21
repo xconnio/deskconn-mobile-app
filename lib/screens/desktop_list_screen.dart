@@ -11,6 +11,7 @@ class DesktopListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AppShell(
       title: 'Desktops',
@@ -73,17 +74,22 @@ class DesktopListScreen extends StatelessWidget {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+                      side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: isDark ? 0.35 : 0.7)),
                     ),
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Theme.of(context).primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(Icons.desktop_windows, color: Theme.of(context).primaryColor),
+                        child: Icon(
+                          Icons.desktop_windows,
+                          color: isDark ? Colors.white : Theme.of(context).primaryColor,
+                        ),
                       ),
                       title: Text(name ?? 'Unnamed Desktop', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('• $shortId', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),

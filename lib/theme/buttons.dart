@@ -8,15 +8,19 @@ class DeskconnButtons {
       foregroundColor: DeskconnColors.onPrimary,
       minimumSize: const Size.fromHeight(48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
     ),
   );
 
   static ElevatedButtonThemeData dark = ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.white,
-      foregroundColor: DeskconnColors.darkBackground,
+      backgroundColor: DeskconnColors.primary,
+      foregroundColor: DeskconnColors.onPrimary,
       minimumSize: const Size.fromHeight(48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
     ),
   );
 }
