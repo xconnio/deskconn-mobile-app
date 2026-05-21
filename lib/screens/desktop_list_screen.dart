@@ -1,12 +1,47 @@
+import 'dart:async';
+
+import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/desktop_details_screen.dart';
+import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 
-class DesktopListScreen extends StatelessWidget {
+class DesktopListScreen extends StatefulWidget {
   const DesktopListScreen({super.key});
+
+  @override
+  State<DesktopListScreen> createState() => _DesktopListScreenState();
+}
+
+class _DesktopListScreenState extends State<DesktopListScreen> {
+  Future<void> _prewarmDesktopSession(Map<String, dynamic> desktop) async {
+    final realm = desktop['realm']?.toString();
+    if (realm == null || realm.isEmpty) return;
+
+    final existing = DesktopConnectionManager().get(realm);
+    if (existing != null) return;
+
+    final authId = await DeviceIdentity.lastEmail();
+    final privateKey = await DeviceIdentity.privateKey();
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+
+    if (authId == null || privateKey == null) return;
+
+    try {
+      await DesktopConnectionManager().acquire(
+        realm: realm,
+        authId: authId,
+        privateKey: privateKey,
+        webRtcEnabled: webRtcEnabled,
+      );
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +130,7 @@ class DesktopListScreen extends StatelessWidget {
                       subtitle: Text('• $shortId', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
                       trailing: const Icon(Icons.chevron_right, size: 20),
                       onTap: () {
+                        unawaited(_prewarmDesktopSession(d));
                         Navigator.push(context, MaterialPageRoute(builder: (_) => DesktopDetailsScreen(desktop: d)));
                       },
                     ),

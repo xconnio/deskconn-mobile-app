@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -130,6 +131,8 @@ class SessionProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await DesktopConnectionManager().invalidateAll();
+
     try {
       final identity = await DeviceIdentity.deviceId();
       if (identity != null) {

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -46,7 +47,7 @@ Future<void> main() async {
   });
 
   runApp(const DeskconnApp());
-  unawaited(initializeTerminalBackgroundService());
+  unawaited(initializeDesktopSessionBackgroundService());
 }
 
 class DeskconnApp extends StatelessWidget {
@@ -87,9 +88,36 @@ class _AppBootstrapState extends State<AppBootstrap> {
   late final Future<void> _initialization;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  @override
   void initState() {
     super.initState();
-    _initialization = context.read<SessionProvider>().initialize();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    final completer = Completer<void>();
+    _initialization = completer.future;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        if (!completer.isCompleted) completer.complete();
+        return;
+      }
+      try {
+        await context.read<SessionProvider>().initialize();
+        if (!completer.isCompleted) completer.complete();
+      } catch (e, st) {
+        if (!completer.isCompleted) completer.completeError(e, st);
+      }
+    });
+  }
+
+  final _lifecycleObserver = _AppLifecycleObserver();
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
   }
 
   @override
@@ -107,5 +135,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
         return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
       },
     );
+  }
+}
+
+class _AppLifecycleObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isBackground =
+        state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.detached;
+    DesktopConnectionManager().setAppInBackground(isBackground);
   }
 }

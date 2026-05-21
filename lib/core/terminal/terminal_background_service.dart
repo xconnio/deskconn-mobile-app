@@ -1,6 +1,6 @@
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-class TerminalLaunchConfig {
+class DesktopSessionLaunchConfig {
   final String sessionKey;
   final String desktopName;
   final String realm;
@@ -9,7 +9,7 @@ class TerminalLaunchConfig {
   final bool webRtcEnabled;
   final Map<String, dynamic>? turnCredentials;
 
-  TerminalLaunchConfig({
+  DesktopSessionLaunchConfig({
     required this.sessionKey,
     required this.desktopName,
     required this.realm,
@@ -20,15 +20,15 @@ class TerminalLaunchConfig {
   });
 }
 
-Future<void> initializeTerminalBackgroundService() async {
+Future<void> initializeDesktopSessionBackgroundService() async {
   await FlutterBackgroundService().configure(
     androidConfiguration: AndroidConfiguration(
       onStart: _onStart,
       autoStart: false,
       autoStartOnBoot: false,
       isForegroundMode: true,
-      initialNotificationTitle: 'Deskconn Terminal',
-      initialNotificationContent: 'Terminal service is idle',
+      initialNotificationTitle: 'Deskconn',
+      initialNotificationContent: 'Desktop session service is idle',
       foregroundServiceNotificationId: 1107,
       foregroundServiceTypes: [AndroidForegroundType.dataSync],
     ),
@@ -36,25 +36,35 @@ Future<void> initializeTerminalBackgroundService() async {
   );
 }
 
-Future<void> startTerminalBackgroundService(TerminalLaunchConfig config) async {
+Future<void> startDesktopSessionBackgroundService(DesktopSessionLaunchConfig config) async {
+  await syncDesktopSessionService(activeConnections: 1, appInBackground: true);
+}
+
+void setDesktopSessionAppStatus(bool isBackground) {
+  FlutterBackgroundService().invoke(isBackground ? 'setAsForeground' : 'setAsBackground');
+}
+
+Future<void> dismissDesktopSessionNotification() async {
+  await syncDesktopSessionService(activeConnections: 0, appInBackground: false);
+}
+
+Future<void> syncDesktopSessionService({required int activeConnections, required bool appInBackground}) async {
   final service = FlutterBackgroundService();
+
+  if (activeConnections <= 0) {
+    service.invoke('stopService');
+    return;
+  }
+
   if (!(await service.isRunning())) {
     await service.startService();
     await Future.delayed(const Duration(milliseconds: 500));
   }
-  service.invoke('updateNotification', {
-    'title': 'Deskconn Terminal',
-    'content': 'connected to ${config.desktopName}...',
-  });
-  service.invoke('setAsBackground');
-}
 
-void setTerminalAppStatus(bool isBackground) {
-  FlutterBackgroundService().invoke(isBackground ? 'setAsForeground' : 'setAsBackground');
-}
+  final label = activeConnections == 1 ? '1 desktop session ready' : '$activeConnections desktop sessions ready';
 
-Future<void> dismissTerminalNotification() async {
-  FlutterBackgroundService().invoke('stopService');
+  service.invoke('updateNotification', {'title': 'Deskconn', 'content': label});
+  service.invoke(appInBackground ? 'setAsForeground' : 'setAsBackground');
 }
 
 @pragma('vm:entry-point')
@@ -65,7 +75,7 @@ void _onStart(ServiceInstance service) {
     service.on('updateNotification').listen((event) {
       if (event == null) return;
       service.setForegroundNotificationInfo(
-        title: event['title'] as String? ?? 'Deskconn Terminal',
+        title: event['title'] as String? ?? 'Deskconn',
         content: event['content'] as String? ?? '',
       );
     });
