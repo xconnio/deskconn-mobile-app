@@ -142,7 +142,9 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
           .timeout(const Duration(seconds: 3));
       return true;
     } catch (e) {
-      if (e.toString().toLowerCase().contains('wamp.error.no_such_procedure')) return false;
+      if (e.toString().toLowerCase().contains('wamp.error.no_such_procedure')) {
+        return false;
+      }
       if (e is TimeoutException) return false;
       return true;
     }
@@ -307,7 +309,7 @@ class _StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label) = switch (status) {
-      _DesktopConnectionStatus.checking => (Colors.orange, 'Connecting'),
+      _DesktopConnectionStatus.checking => (Theme.of(context).colorScheme.secondary, 'Connecting'),
       _DesktopConnectionStatus.routed => (Colors.green, 'Online (routed)'),
       _DesktopConnectionStatus.p2p => (Colors.green, 'Online (p2p)'),
       _DesktopConnectionStatus.offline => (Colors.red, 'Offline'),

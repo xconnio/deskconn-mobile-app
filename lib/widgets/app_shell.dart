@@ -2,6 +2,7 @@ import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -40,6 +41,7 @@ class AppShell extends StatelessWidget {
     final session = context.watch<SessionProvider>();
     final account = session.account;
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final name = (account?['name'] as String? ?? '').trim();
     final email = (account?['email'] as String? ?? '').trim();
@@ -60,7 +62,7 @@ class AppShell extends StatelessWidget {
                 onTap: () =>
                     _openSection(context, section: AppShellSection.account, builder: (_) => const AccountScreen()),
                 child: Container(
-                  color: colorScheme.primary,
+                  color: isDark ? DeskconnColors.darkSurfaceTint : colorScheme.primary,
                   padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,7 +105,6 @@ class AppShell extends StatelessWidget {
                         builder: (_) => const DesktopListScreen(),
                       ),
                     ),
-                    const Divider(indent: 16, endIndent: 16),
                     _NavTile(
                       icon: Icons.settings_outlined,
                       label: 'Settings',
@@ -118,21 +119,24 @@ class AppShell extends StatelessWidget {
                 ),
               ),
 
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text('Logout', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await session.logout();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignInScreen()),
-                      (_) => false,
-                    );
-                  }
-                },
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                child: ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: const Text('Logout', style: TextStyle(color: Colors.red)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await session.logout();
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SignInScreen()),
+                        (_) => false,
+                      );
+                    }
+                  },
+                ),
               ),
             ],
           ),
@@ -154,20 +158,23 @@ class _NavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final defaultColor = isDark ? colorScheme.onSurface.withValues(alpha: 0.88) : null;
+    final selectedColor = isDark ? Colors.white : colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: ListTile(
-        leading: Icon(icon, color: selected ? colorScheme.primary : null),
+        leading: Icon(icon, color: selected ? selectedColor : defaultColor),
         title: Text(
           label,
           style: TextStyle(
-            color: selected ? colorScheme.primary : null,
+            color: selected ? selectedColor : defaultColor,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),
         ),
         selected: selected,
-        selectedTileColor: colorScheme.primary.withValues(alpha: 0.08),
+        selectedTileColor: isDark ? Colors.white.withValues(alpha: 0.06) : colorScheme.primary.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         onTap: onTap,
       ),

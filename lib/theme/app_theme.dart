@@ -8,38 +8,91 @@ class DeskconnTheme {
     final scheme = ColorScheme.light(
       primary: DeskconnColors.primary,
       onPrimary: DeskconnColors.onPrimary,
-      surface: DeskconnColors.lightSurface,
-      onSurface: DeskconnColors.lightOnSurface,
+      secondary: DeskconnColors.secondary,
+      onSecondary: Colors.white,
+      surface: DeskconnColors.surface,
+      onSurface: DeskconnColors.text,
+      error: Colors.red.shade700,
+      outline: DeskconnColors.border,
+      outlineVariant: DeskconnColors.cardBorder,
+      surfaceContainerHighest: DeskconnColors.surfaceTint,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
+      scaffoldBackgroundColor: DeskconnColors.body,
       cardColor: scheme.surface,
-      textTheme: ThemeData.light().textTheme,
+      dividerColor: DeskconnColors.cardBorder,
+      disabledColor: DeskconnColors.subtle.withValues(alpha: 0.45),
+      textTheme: ThemeData.light().textTheme.apply(
+        bodyColor: DeskconnColors.text,
+        displayColor: DeskconnColors.heading,
+      ),
+      cardTheme: CardThemeData(
+        color: DeskconnColors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: DeskconnColors.cardBorder),
+        ),
+      ),
       inputDecorationTheme: DeskconnInputs.light(),
       elevatedButtonTheme: DeskconnButtons.light,
-      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, elevation: 0),
+      textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: DeskconnColors.primary)),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: DeskconnColors.primary),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: DeskconnColors.body,
+        foregroundColor: DeskconnColors.heading,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.surface),
     );
   }
 
   static ThemeData dark() {
     final scheme = ColorScheme.dark(
       primary: DeskconnColors.primary,
+      onPrimary: DeskconnColors.onPrimary,
+      secondary: DeskconnColors.secondary,
+      onSecondary: Colors.white,
       surface: DeskconnColors.darkSurface,
-      onSurface: Colors.white,
+      onSurface: DeskconnColors.darkOnSurface,
+      error: Colors.red.shade300,
+      outline: DeskconnColors.darkBorder,
+      outlineVariant: DeskconnColors.darkBorder,
+      surfaceContainerHighest: DeskconnColors.darkSurfaceTint,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
+      scaffoldBackgroundColor: DeskconnColors.darkBackground,
       cardColor: scheme.surface,
-      textTheme: ThemeData.dark().textTheme,
+      dividerColor: DeskconnColors.darkBorder,
+      disabledColor: DeskconnColors.darkOnSurface.withValues(alpha: 0.45),
+      textTheme: ThemeData.dark().textTheme.apply(bodyColor: DeskconnColors.darkOnSurface, displayColor: Colors.white),
+      cardTheme: CardThemeData(
+        color: DeskconnColors.darkSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: DeskconnColors.darkBorder),
+        ),
+      ),
       inputDecorationTheme: DeskconnInputs.dark(),
       elevatedButtonTheme: DeskconnButtons.dark,
-      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, elevation: 0),
+      textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: DeskconnColors.darkOnSurface)),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: Colors.white),
+      appBarTheme: AppBarTheme(
+        backgroundColor: DeskconnColors.darkBackground,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+      ),
+      drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.darkBackground),
     );
   }
 }

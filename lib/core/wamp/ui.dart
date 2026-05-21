@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 
 class DeskconnUI {
-  static const background = Color(0xFFF7F7F9);
+  static const background = DeskconnColors.body;
   static const cardRadius = 16.0;
   static const cardWidth = 380.0;
   static const buttonHeight = 48.0;
