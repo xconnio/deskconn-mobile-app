@@ -12,7 +12,6 @@ class FileExplorerController {
   Encryption? _encryption;
   bool _keyExchanged = false;
 
-  static final Map<String, FileExplorerController> _controllerCache = {};
   static final Map<String, Uint8List> _thumbnailCache = {};
   static final Map<String, Future<Uint8List>> _thumbnailFutures = {};
 
@@ -20,21 +19,9 @@ class FileExplorerController {
   static const int _maxConcurrentDownloads = 4;
   static final List<Completer<void>> _downloadWaiters = [];
 
-  FileExplorerController._(this.session, this.realm);
+  FileExplorerController(this.session, this.realm);
 
   bool get isKeyExchanged => _keyExchanged;
-
-  static FileExplorerController getOrCreate(Session session, String realm) {
-    final cached = _controllerCache[realm];
-    if (cached != null && cached.session.isConnected()) return cached;
-    final controller = FileExplorerController._(session, realm);
-    _controllerCache[realm] = controller;
-    return controller;
-  }
-
-  static void invalidate(String realm) {
-    _controllerCache.remove(realm);
-  }
 
   Future<void> ensureKeyExchanged() async {
     if (_keyExchanged) return;
@@ -42,7 +29,9 @@ class FileExplorerController {
     _encryption = await Encryption.create();
     final res = await session.call('io.xconn.deskconn.deskconnd.key.exchange', args: [_encryption!.clientPublicKey]);
 
-    if (res.args.isEmpty) throw Exception('Key exchange failed: empty response');
+    if (res.args.isEmpty) {
+      throw Exception('Key exchange failed: empty response');
+    }
 
     final serverKey = _coerceBytes(res.args[0]);
     final keyPayload = serverKey.length == 32 ? Uint8List.fromList([...utf8.encode('KEY:'), ...serverKey]) : serverKey;
@@ -64,8 +53,12 @@ class FileExplorerController {
 
   Future<Uint8List> thumbnail(String path) async {
     final cacheKey = '$realm:$path';
-    if (_thumbnailCache.containsKey(cacheKey)) return _thumbnailCache[cacheKey]!;
-    if (_thumbnailFutures.containsKey(cacheKey)) return _thumbnailFutures[cacheKey]!;
+    if (_thumbnailCache.containsKey(cacheKey)) {
+      return _thumbnailCache[cacheKey]!;
+    }
+    if (_thumbnailFutures.containsKey(cacheKey)) {
+      return _thumbnailFutures[cacheKey]!;
+    }
 
     final future = _runThumbnailDownload(cacheKey, path);
     _thumbnailFutures[cacheKey] = future;

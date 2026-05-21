@@ -39,15 +39,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   }
 
   @override
-  void dispose() {
-    final realm = _realm;
-    if (realm != null) {
-      unawaited(DesktopConnectionManager().release(realm));
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final terminalEnabled =
         (_connectionStatus == _DesktopConnectionStatus.routed || _connectionStatus == _DesktopConnectionStatus.p2p) &&
@@ -110,7 +101,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
 
     try {
-      final connection = await DesktopConnectionManager().connect(
+      final connection = await DesktopConnectionManager().acquire(
         realm: realm,
         authId: authId,
         privateKey: privateKey,
@@ -201,7 +192,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
         controller = TerminalController(config: config);
 
-        controller.onClosed = () => TerminalRegistry().closeTerminal(realm);
+        controller.onClosed = () => TerminalRegistry().remove(realm);
 
         TerminalRegistry().register(realm, controller);
         unawaited(controller.start());
@@ -229,13 +220,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  TerminalLaunchConfig _terminalConfig({
+  DesktopSessionLaunchConfig _terminalConfig({
     required String realm,
     required String authId,
     required String privateKey,
     required _DesktopConnectionStatus status,
   }) {
-    return TerminalLaunchConfig(
+    return DesktopSessionLaunchConfig(
       sessionKey: 'terminal:$realm',
       desktopName: widget.desktop['name']?.toString() ?? 'Desktop',
       realm: realm,

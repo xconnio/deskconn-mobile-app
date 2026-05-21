@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:xterm/core.dart';
 // ignore: implementation_imports
 import 'package:xconn/src/types.dart';
@@ -13,7 +13,7 @@ import '../wamp/desktop_connection_manager.dart';
 
 class TerminalController {
   final Terminal terminal = Terminal();
-  final TerminalLaunchConfig config;
+  final DesktopSessionLaunchConfig config;
 
   void Function()? onStarted;
   void Function()? onExit;
@@ -29,6 +29,7 @@ class TerminalController {
   Timer? _resizeTimer;
   String _inputBuffer = '';
   Encryption? _encryption;
+  bool _closeFrameSent = false;
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
@@ -37,8 +38,13 @@ class TerminalController {
 
   TerminalController({required this.config});
 
+  void _log(String message) {
+    debugPrint('[Terminal ${config.realm} ${DateTime.now().toIso8601String()}] $message');
+  }
+
   Future<void> start() async {
     if (_running) return;
+    _log('start requested');
 
     final connection =
         DesktopConnectionManager().get(config.realm) ??
@@ -49,6 +55,7 @@ class TerminalController {
           webRtcEnabled: config.webRtcEnabled,
           turnCredentials: config.turnCredentials,
         );
+    _log('session ready p2p=${connection.isP2P}');
 
     _encryption = await Encryption.create();
     _running = true;
@@ -60,16 +67,15 @@ class TerminalController {
     };
     _attachInput();
 
-    await startTerminalBackgroundService(config);
-
     try {
       await connection.session.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
     } catch (e) {
       if (!_disposed) terminal.write('\r\nTerminal error: $e\r\n');
+      _log('shell stream error=$e');
     } finally {
       _running = false;
       _cleanup();
-      unawaited(dismissTerminalNotification());
+      _log('shell stream finished disposed=$_disposed');
       onClosed?.call();
       final exit = onExit;
       onExit = null;
@@ -148,6 +154,7 @@ class TerminalController {
       if (!_keyReceived) {
         await _encryption!.acceptServerKey(bytes);
         _keyReceived = true;
+        _log('key exchange complete');
         // Send correct terminal dimensions now that key exchange is done.
         // The initial _sendSize() in start() may have sent SIZE:0:0 if the
         // terminal widget had not rendered yet, and the 100ms resize timer
@@ -170,6 +177,13 @@ class TerminalController {
 
   void _cleanup() {
     _resizeTimer?.cancel();
+  }
+
+  void _requestShellClose() {
+    if (_closeFrameSent) return;
+    _closeFrameSent = true;
+    _log('send terminal close frame');
+    _outgoingQueue.put(Progress(args: const [], options: const {}));
   }
 
   Uint8List _encodeOutboundText(String text, {bool encrypt = true}) {
@@ -211,16 +225,17 @@ class TerminalController {
   // shell to redraw its prompt via SIGWINCH.
   void requestRedraw() {
     if (!_running || !_keyReceived) return;
+    _log('request redraw');
     _sendSize();
   }
 
   void dispose() {
     if (_disposed) return;
+    _log('dispose');
+    _requestShellClose();
     _disposed = true;
     _running = false;
     _cleanup();
-    _outgoingQueue.cancelPending(StateError('Terminal closed'));
-    unawaited(dismissTerminalNotification());
     final exit = onExit;
     onExit = null;
     exit?.call();

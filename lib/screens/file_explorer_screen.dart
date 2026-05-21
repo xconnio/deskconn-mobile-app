@@ -67,7 +67,7 @@ const _kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3
 const _kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
 
 class FileExplorerScreen extends StatefulWidget {
-  final TerminalLaunchConfig config;
+  final DesktopSessionLaunchConfig config;
 
   const FileExplorerScreen({super.key, required this.config});
 
@@ -87,6 +87,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   static final Map<String, FileBrowseResult> _browseCache = {};
 
+  void _log(String message) {
+    debugPrint('[FileExplorer ${widget.config.realm} ${DateTime.now().toIso8601String()}] $message');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,10 +99,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   Future<void> _initialize() async {
     if (!mounted) return;
+    _log('initialize');
 
     final existing = DesktopConnectionManager().get(widget.config.realm);
     if (existing != null) {
-      _controller = FileExplorerController.getOrCreate(existing.session, widget.config.realm);
+      _log('reusing cached desktop session');
+      _controller = FileExplorerController(existing.session, widget.config.realm);
       if (_controller!.isKeyExchanged) {
         await _loadPath(_currentBrowse?.path ?? '');
         return;
@@ -113,14 +119,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     try {
       final connection =
           existing ??
-          await DesktopConnectionManager().connect(
+          await DesktopConnectionManager().acquire(
             realm: widget.config.realm,
             authId: widget.config.authId,
             privateKey: widget.config.privateKey,
             webRtcEnabled: widget.config.webRtcEnabled,
             turnCredentials: widget.config.turnCredentials,
           );
-      _controller = FileExplorerController.getOrCreate(connection.session, widget.config.realm);
+      _log('controller ready p2p=${connection.isP2P}');
+      _controller = FileExplorerController(connection.session, widget.config.realm);
       await _loadPath('');
     } catch (e) {
       if (mounted) {
@@ -129,11 +136,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           _isLoading = false;
         });
       }
+      _log('initialize failed error=$e');
     }
   }
 
   Future<void> _reconnect() async {
-    FileExplorerController.invalidate(widget.config.realm);
+    _log('reconnect');
     await DesktopConnectionManager().release(widget.config.realm);
     _controller = null;
     await _initialize();
@@ -144,6 +152,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
     final cacheKey = '${widget.config.realm}:$path';
     if (_browseCache.containsKey(cacheKey)) {
+      _log('browse cache hit path=$path');
       setState(() {
         _currentBrowse = _browseCache[cacheKey];
         _isLoading = false;
@@ -158,6 +167,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   Future<void> _refreshPath(String path) async {
     try {
+      _log('browse path=$path');
       final result = await _controller!.browse(path);
       final cacheKey = '${widget.config.realm}:$path';
       _browseCache[cacheKey] = result;
@@ -171,6 +181,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (!mounted) return;
       final sessionAlive = _controller?.session.isConnected() ?? false;
       if (!sessionAlive) {
+        _log('session lost during browse path=$path');
         await _reconnect();
         return;
       }
@@ -178,6 +189,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+      _log('browse failed path=$path error=$e');
     }
   }
 
