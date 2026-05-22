@@ -1,6 +1,7 @@
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 
 const String prefKeyWebRtcEnabled = 'webrtc_enabled';
 
@@ -31,6 +32,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(prefKeyWebRtcEnabled, value);
     setState(() => _webRtcEnabled = value);
+    // Invalidate cached sessions so the next connection uses the new mode
+    await DesktopConnectionManager().invalidateAll();
   }
 
   @override
@@ -42,7 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SwitchListTile(
             secondary: const Icon(Icons.settings_ethernet),
-            title: const Text('Use WebRTC for Terminal'),
+            title: const Text('Use WebRTC (P2P)'),
+            subtitle: const Text('Direct connection; falls back to routed if unavailable'),
             value: _webRtcEnabled,
             onChanged: _setWebRtc,
           ),

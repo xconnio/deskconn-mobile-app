@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/ui.dart' hide TerminalController;
-import '../wamp/desktop_connection_manager.dart';
 import 'terminal_controller.dart';
 import 'toolbar.dart';
 
@@ -56,15 +55,6 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     widget.controller.onExit = null;
     widget.controller.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      DesktopConnectionManager().setAppInBackground(true);
-    } else if (state == AppLifecycleState.resumed) {
-      DesktopConnectionManager().setAppInBackground(false);
-    }
   }
 
   @override

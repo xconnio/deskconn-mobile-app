@@ -9,9 +9,8 @@ import id.flutter.flutter_background_service.BackgroundService
 class TerminalNotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         context.stopService(Intent(context, BackgroundService::class.java))
-        val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(1107)
-        notificationManager.cancel(1108)
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancelAll()
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 }
