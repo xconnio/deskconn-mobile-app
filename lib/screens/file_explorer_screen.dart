@@ -82,6 +82,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String? _error;
   bool _showHidden = false;
 
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
   FileEntry? _clipboardEntry;
   bool _clipboardIsCut = false;
 
@@ -95,6 +99,20 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   void initState() {
     super.initState();
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _exitSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+      _searchController.clear();
+    });
   }
 
   Future<void> _initialize() async {
@@ -291,31 +309,67 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _currentBrowse!.path.isEmpty;
 
     return PopScope(
-      canPop: isAtRoot,
+      canPop: isAtRoot && !_isSearching,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _goUp();
+        if (_isSearching) {
+          _exitSearch();
+        } else {
+          _goUp();
+        }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('File Explorer'),
-          actions: [
-            IconButton(
-              icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
-              onPressed: () => setState(() => _showHidden = !_showHidden),
-              tooltip: 'Show hidden files',
-            ),
-            IconButton(icon: const Icon(Icons.refresh), onPressed: () => _loadPath(_currentBrowse?.path ?? '')),
-          ],
-        ),
+        appBar: _isSearching ? _buildSearchAppBar() : _buildNormalAppBar(),
         body: Column(
           children: [
-            if (_currentBrowse != null) _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
+            if (!_isSearching && _currentBrowse != null)
+              _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
             if (_clipboardEntry != null) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
         ),
       ),
+    );
+  }
+
+  AppBar _buildNormalAppBar() {
+    return AppBar(
+      title: const Text('File Explorer'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          tooltip: 'Search',
+          onPressed: () => setState(() => _isSearching = true),
+        ),
+        IconButton(
+          icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
+          onPressed: () => setState(() => _showHidden = !_showHidden),
+          tooltip: 'Show hidden files',
+        ),
+        IconButton(icon: const Icon(Icons.refresh), onPressed: () => _loadPath(_currentBrowse?.path ?? '')),
+      ],
+    );
+  }
+
+  AppBar _buildSearchAppBar() {
+    return AppBar(
+      leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _exitSearch),
+      title: TextField(
+        controller: _searchController,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'Search files…', border: InputBorder.none),
+        onChanged: (q) => setState(() => _searchQuery = q),
+      ),
+      actions: [
+        if (_searchQuery.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => setState(() {
+              _searchQuery = '';
+              _searchController.clear();
+            }),
+          ),
+      ],
     );
   }
 
@@ -336,15 +390,22 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       );
     }
 
+    final q = _searchQuery.toLowerCase();
     final entries =
         _currentBrowse?.entries.where((e) {
           if (!_showHidden && e.name.startsWith('.')) return false;
+          if (q.isNotEmpty && !e.name.toLowerCase().contains(q)) return false;
           return true;
         }).toList() ??
         [];
 
     if (entries.isEmpty) {
-      return const Center(child: Text('No files found'));
+      return Center(
+        child: Text(
+          q.isNotEmpty ? 'No results for "$_searchQuery"' : 'No files found',
+          style: TextStyle(color: Theme.of(context).hintColor),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -355,6 +416,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           entry: entry,
           onTap: () => _onEntryTap(entry),
           onLongPress: () => _showEntryOptions(entry),
+          highlight: q.isNotEmpty ? q : null,
         );
       },
     );
@@ -1045,8 +1107,9 @@ class _FileEntryTile extends StatelessWidget {
   final FileEntry entry;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final String? highlight;
 
-  const _FileEntryTile({required this.entry, required this.onTap, required this.onLongPress});
+  const _FileEntryTile({required this.entry, required this.onTap, required this.onLongPress, this.highlight});
 
   @override
   Widget build(BuildContext context) {
@@ -1082,11 +1145,34 @@ class _FileEntryTile extends StatelessWidget {
 
     return ListTile(
       leading: SizedBox(width: 40, height: 40, child: leadingIcon),
-      title: Text(entry.name),
+      title: _buildTitle(context),
       subtitle: subtitle,
       onTap: onTap,
       onLongPress: onLongPress,
       trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: onLongPress),
+    );
+  }
+
+  Widget _buildTitle(BuildContext context) {
+    final name = entry.name;
+    final q = highlight;
+    if (q == null || q.isEmpty) return Text(name);
+    final lower = name.toLowerCase();
+    final idx = lower.indexOf(q);
+    if (idx < 0) return Text(name);
+    final color = Theme.of(context).colorScheme.primary;
+    return RichText(
+      text: TextSpan(
+        style: DefaultTextStyle.of(context).style,
+        children: [
+          if (idx > 0) TextSpan(text: name.substring(0, idx)),
+          TextSpan(
+            text: name.substring(idx, idx + q.length),
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+          if (idx + q.length < name.length) TextSpan(text: name.substring(idx + q.length)),
+        ],
+      ),
     );
   }
 
