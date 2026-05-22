@@ -4,12 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
-import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
 class DesktopConnection {
   final Session session;
   final bool isP2P;
+  bool isAgentOnline = false;
 
   DesktopConnection({required this.session, required this.isP2P});
 
@@ -27,7 +27,6 @@ class DesktopConnectionManager {
 
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
-  bool _appInBackground = false;
 
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
@@ -75,7 +74,7 @@ class DesktopConnectionManager {
     required String privateKey,
     Map<String, dynamic>? turnCredentials,
   }) async {
-    final pendingKey = 'session:$realm:${webRtcEnabled ? 'p2p' : 'routed'}';
+    final pendingKey = 'session:$realm';
     final pending = _pendingConnections[pendingKey];
     if (pending != null) {
       _log('join pending connect realm=$realm webrtc=$webRtcEnabled');
@@ -110,22 +109,14 @@ class DesktopConnectionManager {
     final key = 'session:$realm';
     final existing = _connections[key];
     if (existing != null) {
-      bool connected = false;
       try {
-        connected = existing.session.isConnected();
-      } catch (_) {}
-
-      if (connected) {
-        if (existing.isP2P == webRtcEnabled) {
+        if (existing.session.isConnected()) {
           _log('reuse realm=$realm p2p=${existing.isP2P}');
           return existing;
         }
-        _log('mode change realm=$realm oldP2p=${existing.isP2P} newWebrtc=$webRtcEnabled');
-        await release(realm);
-      } else {
-        _log('dropping disconnected cached session realm=$realm');
-        await release(realm);
-      }
+      } catch (_) {}
+      _log('dropping disconnected cached session realm=$realm');
+      await release(realm);
     }
 
     _log('connect start realm=$realm webrtcPreferred=$webRtcEnabled');
@@ -176,14 +167,12 @@ class DesktopConnectionManager {
     final connection = DesktopConnection(session: finalSession, isP2P: isP2P);
     _connections[key] = connection;
     _log('session cached realm=$realm p2p=$isP2P active=${_connections.length}');
-    unawaited(_syncBackgroundService());
 
-    // Auto-remove from cache when the session drops (mirrors web app sessionCache pattern)
     finalSession.onDisconnect(() {
       if (_connections[key] == connection) {
         _connections.remove(key);
+        connection.isAgentOnline = false;
         _log('session disconnected realm=$realm active=${_connections.length}');
-        unawaited(_syncBackgroundService());
       }
     });
 
@@ -199,7 +188,6 @@ class DesktopConnectionManager {
     } else {
       _log('release realm=$realm skipped=no_session');
     }
-    await _syncBackgroundService();
   }
 
   Future<void> invalidateAll() async {
@@ -211,17 +199,6 @@ class DesktopConnectionManager {
     }
   }
 
-  void setAppInBackground(bool isBackground) {
-    _appInBackground = isBackground;
-    _log('app_background=$isBackground active=${_connections.length}');
-    unawaited(_syncBackgroundService());
-  }
-
-  Future<void> _syncBackgroundService() {
-    _log('service_sync active=${_connections.length} background=$_appInBackground');
-    return syncDesktopSessionService(activeConnections: _connections.length, appInBackground: _appInBackground);
-  }
-
   Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) async {
     final cached = _turnCredentials;
     final expiry = _turnCredentialsExpiry;
@@ -230,16 +207,6 @@ class DesktopConnectionManager {
       return cached;
     }
     _log('turn fetch start');
-    final creds = await fetchTurnCredentials(authId, privateKey);
-    _turnCredentials = creds;
-    final expiresAt = creds['expires_at'];
-    _turnCredentialsExpiry = expiresAt is int
-        ? DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000).subtract(const Duration(minutes: 1))
-        : DateTime.now().add(const Duration(hours: 1));
-    return creds;
-  }
-
-  Future<Map<String, dynamic>> fetchTurnCredentials(String authId, String privateKey) async {
     final turnClient = WampClient();
     try {
       final session = await turnClient.connectCryptoSign(
@@ -248,14 +215,20 @@ class DesktopConnectionManager {
         realm: DeskconnConfig.realm,
       );
       final result = await session.call('io.xconn.deskconn.coturn.credentials.create');
-      final turnCredential = result.args[0];
+      final c = result.args[0] as Map<String, dynamic>;
       _log('turn fetch success');
-      return {
-        'username': turnCredential['username'],
-        'credential': turnCredential['credential'],
-        'urls': turnCredential['urls'],
-        'expires_at': turnCredential['expires_at'],
+      final creds = {
+        'username': c['username'],
+        'credential': c['credential'],
+        'urls': c['urls'],
+        'expires_at': c['expires_at'],
       };
+      _turnCredentials = creds;
+      final expiresAt = creds['expires_at'];
+      _turnCredentialsExpiry = expiresAt is int
+          ? DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000).subtract(const Duration(minutes: 1))
+          : DateTime.now().add(const Duration(hours: 1));
+      return creds;
     } finally {
       await turnClient.disconnect();
     }

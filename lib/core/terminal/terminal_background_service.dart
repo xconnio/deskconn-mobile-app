@@ -1,4 +1,9 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+
+const _kAppNotificationChannel = 'deskconn/notification';
+const _kNotifId = 1107;
+const _kNotifChannelId = 'deskconn_session';
 
 class DesktopSessionLaunchConfig {
   final String sessionKey;
@@ -26,59 +31,46 @@ Future<void> initializeDesktopSessionBackgroundService() async {
       onStart: _onStart,
       autoStart: false,
       autoStartOnBoot: false,
-      isForegroundMode: true,
+      isForegroundMode: false,
+      // Use the same ID and channel as our custom notification so the plugin's
+      // startForeground() and our nm.notify() both target the same slot → one notification.
+      notificationChannelId: _kNotifChannelId,
       initialNotificationTitle: 'Deskconn',
-      initialNotificationContent: 'Desktop session service is idle',
-      foregroundServiceNotificationId: 1107,
-      foregroundServiceTypes: [AndroidForegroundType.dataSync],
+      initialNotificationContent: 'Deskconn is running',
+      foregroundServiceNotificationId: _kNotifId,
+      foregroundServiceTypes: [AndroidForegroundType.remoteMessaging],
     ),
     iosConfiguration: IosConfiguration(autoStart: false, onForeground: _onStart, onBackground: (instance) => true),
   );
 }
 
-Future<void> startDesktopSessionBackgroundService(DesktopSessionLaunchConfig config) async {
-  await syncDesktopSessionService(activeConnections: 1, appInBackground: true);
+/// Show the persistent notification with Close button.
+/// Promotes the service to foreground first so Android keeps the process alive,
+/// then updates the notification slot with our custom content + Close button.
+Future<void> showAppNotification() async {
+  // 1. Promote service → plugin calls startForeground(1107, ...) on the same slot
+  FlutterBackgroundService().invoke('promote');
+  // 2. Wait for startForeground to complete before updating the notification
+  await Future.delayed(const Duration(milliseconds: 300));
+  // 3. Update slot 1107 to add the Close button
+  try {
+    await const MethodChannel(_kAppNotificationChannel).invokeMethod('show');
+  } catch (_) {}
 }
 
-void setDesktopSessionAppStatus(bool isBackground) {
-  FlutterBackgroundService().invoke(isBackground ? 'setAsForeground' : 'setAsBackground');
-}
-
-Future<void> dismissDesktopSessionNotification() async {
-  await syncDesktopSessionService(activeConnections: 0, appInBackground: false);
-}
-
-Future<void> syncDesktopSessionService({required int activeConnections, required bool appInBackground}) async {
-  final service = FlutterBackgroundService();
-
-  if (activeConnections <= 0) {
-    service.invoke('stopService');
-    return;
-  }
-
-  if (!(await service.isRunning())) {
-    await service.startService();
-    await Future.delayed(const Duration(milliseconds: 500));
-  }
-
-  final label = activeConnections == 1 ? '1 desktop session ready' : '$activeConnections desktop sessions ready';
-
-  service.invoke('updateNotification', {'title': 'Deskconn', 'content': label});
-  service.invoke(appInBackground ? 'setAsForeground' : 'setAsBackground');
+/// Remove the notification and demote the service. Call on logout.
+Future<void> hideAppNotification() async {
+  try {
+    await const MethodChannel(_kAppNotificationChannel).invokeMethod('hide');
+  } catch (_) {}
+  FlutterBackgroundService().invoke('demote');
 }
 
 @pragma('vm:entry-point')
 void _onStart(ServiceInstance service) {
   if (service is AndroidServiceInstance) {
-    service.on('setAsForeground').listen((_) => service.setAsForegroundService());
-    service.on('setAsBackground').listen((_) => service.setAsBackgroundService());
-    service.on('updateNotification').listen((event) {
-      if (event == null) return;
-      service.setForegroundNotificationInfo(
-        title: event['title'] as String? ?? 'Deskconn',
-        content: event['content'] as String? ?? '',
-      );
-    });
+    service.on('promote').listen((_) => service.setAsForegroundService());
+    service.on('demote').listen((_) => service.setAsBackgroundService());
   }
   service.on('stopService').listen((_) => service.stopSelf());
 }

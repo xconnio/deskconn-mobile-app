@@ -108,7 +108,17 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         webRtcEnabled: webRtcEnabled,
       );
 
+      if (connection.isAgentOnline) {
+        if (mounted) {
+          setState(
+            () => _connectionStatus = connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed,
+          );
+        }
+        return;
+      }
+
       final desktopOnline = await _isDesktopAgentOnline(connection.session);
+      if (desktopOnline) connection.isAgentOnline = true;
 
       if (mounted) {
         setState(

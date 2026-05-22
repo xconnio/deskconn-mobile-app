@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
-import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -12,9 +12,8 @@ import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:provider/provider.dart';
-
-import 'core/terminal/terminal_background_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -46,8 +45,10 @@ Future<void> main() async {
     }
   });
 
+  await initializeDesktopSessionBackgroundService();
+  unawaited(FlutterBackgroundService().startService());
+
   runApp(const DeskconnApp());
-  unawaited(initializeDesktopSessionBackgroundService());
 }
 
 class DeskconnApp extends StatelessWidget {
@@ -86,16 +87,11 @@ class AppBootstrap extends StatefulWidget {
 
 class _AppBootstrapState extends State<AppBootstrap> {
   late final Future<void> _initialization;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
+  bool _notificationActive = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(_lifecycleObserver);
     final completer = Completer<void>();
     _initialization = completer.future;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -112,12 +108,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
     });
   }
 
-  final _lifecycleObserver = _AppLifecycleObserver();
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
-    super.dispose();
+  void _syncNotification(bool loggedIn) {
+    if (loggedIn && !_notificationActive) {
+      _notificationActive = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(showAppNotification()));
+    } else if (!loggedIn && _notificationActive) {
+      _notificationActive = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(hideAppNotification()));
+    }
   }
 
   @override
@@ -132,17 +130,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
         }
 
         final session = context.watch<SessionProvider>();
+        _syncNotification(session.loggedIn);
         return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
       },
     );
-  }
-}
-
-class _AppLifecycleObserver with WidgetsBindingObserver {
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final isBackground =
-        state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.detached;
-    DesktopConnectionManager().setAppInBackground(isBackground);
   }
 }

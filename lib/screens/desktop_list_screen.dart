@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/desktop_details_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
@@ -19,12 +20,24 @@ class DesktopListScreen extends StatefulWidget {
 }
 
 class _DesktopListScreenState extends State<DesktopListScreen> {
-  Future<void> _prewarmDesktopSession(Map<String, dynamic> desktop) async {
+  final Set<String> _prewarmedRealms = {};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final desktops = context.read<SessionProvider>().desktops;
+    for (final d in desktops) {
+      final realm = d['realm']?.toString();
+      if (realm != null && realm.isNotEmpty && _prewarmedRealms.add(realm)) {
+        unawaited(_prewarm(d));
+      }
+    }
+  }
+
+  Future<void> _prewarm(Map<String, dynamic> desktop) async {
     final realm = desktop['realm']?.toString();
     if (realm == null || realm.isEmpty) return;
-
-    final existing = DesktopConnectionManager().get(realm);
-    if (existing != null) return;
+    if (DesktopConnectionManager().get(realm) != null) return;
 
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
@@ -34,12 +47,18 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     if (authId == null || privateKey == null) return;
 
     try {
-      await DesktopConnectionManager().acquire(
+      final connection = await DesktopConnectionManager().acquire(
         realm: realm,
         authId: authId,
         privateKey: privateKey,
         webRtcEnabled: webRtcEnabled,
       );
+      // Mark agent online so DesktopDetailsScreen skips the probe round-trip
+      final enc = Encryption.create();
+      await connection.session
+          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [(await enc).clientPublicKey])
+          .timeout(const Duration(seconds: 5));
+      connection.isAgentOnline = true;
     } catch (_) {}
   }
 
@@ -130,7 +149,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
                       subtitle: Text('• $shortId', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
                       trailing: const Icon(Icons.chevron_right, size: 20),
                       onTap: () {
-                        unawaited(_prewarmDesktopSession(d));
                         Navigator.push(context, MaterialPageRoute(builder: (_) => DesktopDetailsScreen(desktop: d)));
                       },
                     ),
