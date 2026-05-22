@@ -82,6 +82,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String? _error;
   bool _showHidden = false;
 
+  bool _isGrid = true;
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -342,6 +343,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           onPressed: () => setState(() => _isSearching = true),
         ),
         IconButton(
+          icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
+          tooltip: _isGrid ? 'List view' : 'Grid view',
+          onPressed: () => setState(() => _isGrid = !_isGrid),
+        ),
+        IconButton(
           icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
           onPressed: () => setState(() => _showHidden = !_showHidden),
           tooltip: 'Show hidden files',
@@ -405,6 +411,28 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           q.isNotEmpty ? 'No results for "$_searchQuery"' : 'No files found',
           style: TextStyle(color: Theme.of(context).hintColor),
         ),
+      );
+    }
+
+    if (_isGrid) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+          childAspectRatio: 0.8,
+        ),
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          return _FileEntryGrid(
+            entry: entry,
+            onTap: () => _onEntryTap(entry),
+            onLongPress: () => _showEntryOptions(entry),
+            highlight: q.isNotEmpty ? q : null,
+          );
+        },
       );
     }
 
@@ -1100,6 +1128,142 @@ class _UnknownPreview extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _FileEntryGrid extends StatelessWidget {
+  final FileEntry entry;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final String? highlight;
+
+  const _FileEntryGrid({required this.entry, required this.onTap, required this.onLongPress, this.highlight});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveName = entry.isSymlink && entry.symlinkTarget != null
+        ? entry.symlinkTarget!.split('/').last
+        : entry.name;
+    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+
+    final Color iconColor;
+    final IconData iconData;
+    if (entry.isSymlink) {
+      iconData = Icons.link;
+      iconColor = isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary;
+    } else if (entry.isDir) {
+      iconData = Icons.folder;
+      iconColor = isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary;
+    } else {
+      iconData = _getFileIcon(ext);
+      iconColor = _getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
+    }
+
+    final name = entry.name;
+    final q = highlight?.toLowerCase() ?? '';
+    final nameWidget = q.isNotEmpty && name.toLowerCase().contains(q)
+        ? _buildHighlightedName(context, name, q)
+        : Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11),
+          );
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(iconData, color: iconColor, size: 48),
+          const SizedBox(height: 4),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHighlightedName(BuildContext context, String name, String q) {
+    final lower = name.toLowerCase();
+    final idx = lower.indexOf(q);
+    if (idx < 0) {
+      return Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 11),
+      );
+    }
+    final color = Theme.of(context).colorScheme.primary;
+    return RichText(
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
+        children: [
+          if (idx > 0) TextSpan(text: name.substring(0, idx)),
+          TextSpan(
+            text: name.substring(idx, idx + q.length),
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+          if (idx + q.length < name.length) TextSpan(text: name.substring(idx + q.length)),
+        ],
+      ),
+    );
+  }
+
+  IconData _getFileIcon(String ext) {
+    if (_kImageExts.contains(ext) || ext == 'svg') return Icons.image;
+    if (_kVideoExts.contains(ext)) return Icons.movie;
+    if (_kAudioExts.contains(ext)) return Icons.audiotrack;
+    if (_kTextExts.contains(ext)) return Icons.description;
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+      case 'gz':
+      case 'xz':
+      case 'bz2':
+        return Icons.archive;
+      case 'apk':
+        return Icons.android;
+      case 'exe':
+      case 'msi':
+      case 'dmg':
+        return Icons.computer;
+      case 'db':
+      case 'sqlite':
+      case 'sqlite3':
+        return Icons.storage;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Color? _getFileIconColor(String ext, {required bool isDark}) {
+    if (_kVideoExts.contains(ext)) return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
+    if (_kAudioExts.contains(ext)) return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
+    if (_kTextExts.contains(ext)) return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
+    switch (ext) {
+      case 'pdf':
+        return isDark ? const Color(0xFFFCA5A5) : Colors.red.shade400;
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+      case 'gz':
+        return isDark ? const Color(0xFFFCD34D) : const Color(0xFF475569);
+      default:
+        return isDark ? const Color(0xFFCBD5E1) : null;
+    }
   }
 }
 
