@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:video_player/video_player.dart';
@@ -527,6 +527,40 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     _browseCache.remove('${widget.config.realm}:$path');
   }
 
+  Future<void> _downloadFile(FileEntry entry) async {
+    final path = _fullPath(entry);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(child: Text('Downloading ${entry.name}…', overflow: TextOverflow.ellipsis)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final bytes = await _controller!.read(path);
+      final savedPath = await saveToDevice(entry.name, bytes);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Saved: $savedPath'), duration: const Duration(seconds: 5)));
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showErrorSnackBar('Download failed: $e');
+      }
+    }
+  }
+
   void _showEntryOptions(FileEntry entry) {
     showModalBottomSheet(
       context: context,
@@ -542,6 +576,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 _showProperties(entry);
               },
             ),
+            if (!entry.isDir)
+              ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('Download'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _downloadFile(entry);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.content_copy),
               title: const Text('Copy'),
@@ -710,6 +753,41 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 }
 
+/// Save [bytes] to the public Downloads folder via the native MediaStore API
+/// (Android 10+) or direct file write (Android 9). Falls back to app-specific
+/// external storage if the native channel fails.
+Future<String> saveToDevice(String filename, Uint8List bytes) async {
+  try {
+    final path = await const MethodChannel(
+      'deskconn/file',
+    ).invokeMethod<String>('saveToDownloads', {'filename': filename, 'bytes': bytes});
+    return path ?? 'Downloads/$filename';
+  } catch (_) {
+    // Fallback: app-specific external storage
+    Directory? base;
+    try {
+      base = await getExternalStorageDirectory();
+    } catch (_) {
+      base = await getApplicationDocumentsDirectory();
+    }
+    final dir = Directory('${base!.path}/Downloads');
+    await dir.create(recursive: true);
+    var target = File('${dir.path}/$filename');
+    if (await target.exists()) {
+      final dot = filename.lastIndexOf('.');
+      final stem = dot > 0 ? filename.substring(0, dot) : filename;
+      final ext = dot > 0 ? filename.substring(dot) : '';
+      int n = 1;
+      while (await target.exists()) {
+        target = File('${dir.path}/$stem ($n)$ext');
+        n++;
+      }
+    }
+    await target.writeAsBytes(bytes);
+    return target.path;
+  }
+}
+
 String formatSize(int bytes) {
   if (bytes <= 0) return "0 B";
   const suffixes = ["B", "KB", "MB", "GB", "TB"];
@@ -785,11 +863,34 @@ class FilePreviewScreen extends StatefulWidget {
 
 class _FilePreviewScreenState extends State<FilePreviewScreen> {
   late Future<Uint8List> _contentFuture;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _contentFuture = widget.controller.read(widget.path);
+  }
+
+  Future<void> _download() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+    try {
+      final bytes = await _contentFuture;
+      final savedPath = await saveToDevice(widget.entry.name, bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Saved: $savedPath'), duration: const Duration(seconds: 5)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   String get _ext {
@@ -815,6 +916,20 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
         backgroundColor: const Color(0xFF1E1E1E),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          _isSaving
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ),
+                  ),
+                )
+              : IconButton(icon: const Icon(Icons.download_outlined), tooltip: 'Save to device', onPressed: _download),
+        ],
       ),
       body: FutureBuilder<Uint8List>(
         future: _contentFuture,
