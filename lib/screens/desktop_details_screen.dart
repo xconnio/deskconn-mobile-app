@@ -57,17 +57,20 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _probeDesktopConnection,
-              child: ListView(
+              child: GridView.count(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
                 children: [
-                  _ActionTile(
+                  _LauncherTile(
                     icon: Icons.terminal,
                     title: "Terminal",
                     enabled: terminalEnabled,
                     onTap: () => _openTerminal(context),
                   ),
-                  _ActionTile(
+                  _LauncherTile(
                     icon: Icons.folder_open,
                     title: "Files",
                     enabled: terminalEnabled,
@@ -281,22 +284,34 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   }
 }
 
-class _ActionTile extends StatelessWidget {
+class _LauncherTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final VoidCallback onTap;
   final bool enabled;
 
-  const _ActionTile({required this.icon, required this.title, required this.onTap, this.enabled = true});
+  const _LauncherTile({required this.icon, required this.title, required this.onTap, this.enabled = true});
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = enabled ? Theme.of(context).colorScheme.primary : Theme.of(context).disabledColor;
+    final textColor = enabled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).disabledColor;
+
     return Card(
-      child: ListTile(
-        leading: Icon(icon, color: enabled ? null : Theme.of(context).disabledColor),
-        title: Text(title, style: enabled ? null : TextStyle(color: Theme.of(context).disabledColor)),
-        trailing: const Icon(Icons.chevron_right),
+      child: InkWell(
         onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 36, color: iconColor),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }
