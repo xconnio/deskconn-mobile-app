@@ -7,6 +7,7 @@ class FileEntry {
   final int mode;
   final bool isSymlink;
   final String? symlinkTarget;
+  final String? thumbnail;
 
   FileEntry({
     required this.name,
@@ -17,6 +18,7 @@ class FileEntry {
     required this.mode,
     required this.isSymlink,
     this.symlinkTarget,
+    this.thumbnail,
   });
 
   factory FileEntry.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class FileEntry {
       mode: _toInt(json['mode']),
       isSymlink: _toBool(json['is_symlink']),
       symlinkTarget: (json['symlink_target'] ?? json['link_target']) as String?,
+      thumbnail: json['thumbnail'] as String?,
     );
   }
 
@@ -41,6 +44,7 @@ class FileEntry {
     'mode': mode,
     'is_symlink': isSymlink,
     'symlink_target': symlinkTarget,
+    'thumbnail': thumbnail,
   };
 }
 

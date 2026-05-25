@@ -1256,24 +1256,10 @@ class _FileEntryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveName = entry.isSymlink && entry.symlinkTarget != null
         ? entry.symlinkTarget!.split('/').last
         : entry.name;
     final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
-
-    final Color iconColor;
-    final IconData iconData;
-    if (entry.isSymlink) {
-      iconData = Icons.link;
-      iconColor = isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary;
-    } else if (entry.isDir) {
-      iconData = Icons.folder;
-      iconColor = isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary;
-    } else {
-      iconData = _getFileIcon(ext);
-      iconColor = _getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
-    }
 
     final name = entry.name;
     final q = highlight?.toLowerCase() ?? '';
@@ -1293,7 +1279,14 @@ class _FileEntryGrid extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(iconData, color: iconColor, size: 48),
+          _FileEntryVisual(
+            entry: entry,
+            ext: ext,
+            size: 56,
+            iconSize: 44,
+            getFileIcon: _getFileIcon,
+            getFileIconColor: _getFileIconColor,
+          ),
           const SizedBox(height: 4),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
         ],
@@ -1364,9 +1357,15 @@ class _FileEntryGrid extends StatelessWidget {
   }
 
   Color? _getFileIconColor(String ext, {required bool isDark}) {
-    if (_kVideoExts.contains(ext)) return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
-    if (_kAudioExts.contains(ext)) return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
-    if (_kTextExts.contains(ext)) return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
+    if (_kVideoExts.contains(ext)) {
+      return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
+    }
+    if (_kAudioExts.contains(ext)) {
+      return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
+    }
+    if (_kTextExts.contains(ext)) {
+      return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
+    }
     switch (ext) {
       case 'pdf':
         return isDark ? const Color(0xFFFCA5A5) : Colors.red.shade400;
@@ -1392,24 +1391,10 @@ class _FileEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveName = entry.isSymlink && entry.symlinkTarget != null
         ? entry.symlinkTarget!.split('/').last
         : entry.name;
     final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
-
-    final Widget leadingIcon;
-    if (entry.isSymlink) {
-      leadingIcon = Icon(Icons.link, color: isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary, size: 36);
-    } else {
-      leadingIcon = Icon(
-        entry.isDir ? Icons.folder : _getFileIcon(ext),
-        color: entry.isDir
-            ? (isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary)
-            : _getFileIconColor(ext, isDark: isDark),
-        size: 36,
-      );
-    }
 
     Widget? subtitle;
     if (entry.isSymlink && entry.symlinkTarget != null) {
@@ -1423,7 +1408,14 @@ class _FileEntryTile extends StatelessWidget {
     }
 
     return ListTile(
-      leading: SizedBox(width: 40, height: 40, child: leadingIcon),
+      leading: _FileEntryVisual(
+        entry: entry,
+        ext: ext,
+        size: 40,
+        iconSize: 34,
+        getFileIcon: _getFileIcon,
+        getFileIconColor: _getFileIconColor,
+      ),
       title: _buildTitle(context),
       subtitle: subtitle,
       onTap: onTap,
@@ -1507,6 +1499,87 @@ class _FileEntryTile extends StatelessWidget {
         return isDark ? const Color(0xFFFCD34D) : const Color(0xFF475569);
       default:
         return isDark ? const Color(0xFFCBD5E1) : null;
+    }
+  }
+}
+
+class _FileEntryVisual extends StatelessWidget {
+  final FileEntry entry;
+  final String ext;
+  final double size;
+  final double iconSize;
+  final IconData Function(String ext) getFileIcon;
+  final Color? Function(String ext, {required bool isDark}) getFileIconColor;
+
+  const _FileEntryVisual({
+    required this.entry,
+    required this.ext,
+    required this.size,
+    required this.iconSize,
+    required this.getFileIcon,
+    required this.getFileIconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final thumbnail = _decodeThumbnail(entry.thumbnail);
+    final isVideo = _kVideoExts.contains(ext);
+
+    if (thumbnail != null && !entry.isDir && !entry.isSymlink) {
+      return SizedBox.square(
+        dimension: size,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0)),
+              Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true),
+              if (isVideo)
+                const Align(
+                  alignment: Alignment.center,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: Color(0x99000000), shape: BoxShape.circle),
+                    child: Padding(
+                      padding: EdgeInsets.all(3),
+                      child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final IconData iconData;
+    final Color iconColor;
+    if (entry.isSymlink) {
+      iconData = Icons.link;
+      iconColor = isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary;
+    } else if (entry.isDir) {
+      iconData = Icons.folder;
+      iconColor = isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary;
+    } else {
+      iconData = getFileIcon(ext);
+      iconColor = getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
+    }
+
+    return SizedBox.square(
+      dimension: size,
+      child: Center(
+        child: Icon(iconData, color: iconColor, size: iconSize),
+      ),
+    );
+  }
+
+  Uint8List? _decodeThumbnail(String? value) {
+    if (value == null || value.isEmpty) return null;
+    try {
+      return base64Decode(value);
+    } catch (_) {
+      return null;
     }
   }
 }
