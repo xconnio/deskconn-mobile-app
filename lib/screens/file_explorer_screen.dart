@@ -457,16 +457,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           children: [
-            Icon(_clipboardIsCut ? Icons.content_cut : Icons.content_copy, size: 16),
+            Icon(_clipboardIsCut ? Icons.drive_file_move_outlined : Icons.content_copy, size: 16),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${_clipboardIsCut ? 'Cut' : 'Copied'}: ${_clipboardEntry!.name}',
+                '${_clipboardIsCut ? 'Move' : 'Copied'}: ${_clipboardEntry!.name}',
                 style: const TextStyle(fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            TextButton(onPressed: _pasteHere, child: const Text('Paste here')),
+            TextButton(onPressed: _pasteHere, child: Text(_clipboardIsCut ? 'Move here' : 'Paste here')),
             IconButton(
               icon: const Icon(Icons.close, size: 18),
               onPressed: () => setState(() {
@@ -600,8 +600,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.content_cut),
-              title: const Text('Cut'),
+              leading: const Icon(Icons.drive_file_move_outlined),
+              title: const Text('Move'),
               onTap: () {
                 Navigator.pop(context);
                 setState(() {
@@ -609,7 +609,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                   _clipboardIsCut = true;
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('"${entry.name}" cut — navigate to destination and tap Paste here')),
+                  SnackBar(content: Text('"${entry.name}" ready to move - navigate to destination and tap Move here')),
                 );
               },
             ),
