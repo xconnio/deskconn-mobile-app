@@ -6,6 +6,7 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
+import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -75,6 +76,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     title: "Files",
                     enabled: terminalEnabled,
                     onTap: () => _openFileExplorer(context),
+                  ),
+                  _LauncherTile(
+                    icon: Icons.settings_remote_outlined,
+                    title: "Remote Ctrl",
+                    enabled: terminalEnabled,
+                    onTap: () => _openRemoteControl(context),
                   ),
                 ],
               ),
@@ -151,6 +158,32 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       }
       if (e is TimeoutException) return false;
       return true;
+    }
+  }
+
+  Future<void> _openRemoteControl(BuildContext context) async {
+    final realm = _realm;
+    if (realm == null ||
+        (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
+      return;
+    }
+
+    try {
+      final authId = await DeviceIdentity.lastEmail();
+      final privateKey = await DeviceIdentity.privateKey();
+      if (authId == null || privateKey == null) {
+        throw Exception("Missing credentials.");
+      }
+
+      if (!context.mounted) return;
+
+      final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => RemoteControlScreen(config: config)));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Remote Control: $e")));
+      }
     }
   }
 
