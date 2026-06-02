@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:xconn/xconn.dart';
+// ignore: implementation_imports
+import 'package:xconn/src/types.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
+import 'package:deskconn_mobile_app/core/terminal/blocking_queue.dart';
 import 'models.dart';
 
 class FileExplorerController {
@@ -161,6 +165,85 @@ class FileExplorerController {
 
     if (streamError != null) throw streamError!;
     return builder.takeBytes();
+  }
+
+  Future<void> upload(String localFilePath, String remoteDir, {void Function(int sent, int total)? onProgress}) async {
+    final file = File(localFilePath);
+    if (!await file.exists()) throw Exception('File not found: $localFilePath');
+
+    await ensureKeyExchanged();
+    final enc = _encryption!;
+
+    final fileName = localFilePath.split('/').last;
+    final remoteFilePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
+
+    final stat = await file.stat();
+    onProgress?.call(0, stat.size);
+
+    var seq = 0;
+    final outgoing = BlockingQueue<Progress>();
+
+    Future<Progress> sender() => outgoing.take();
+    Future<void> receiver(Result _) async {}
+
+    final callFuture = session.callProgressiveProgress('io.xconn.deskconn.deskconnd.file.upload', sender, receiver);
+
+    try {
+      outgoing.put(
+        Progress(
+          args: [
+            'I',
+            seq,
+            enc.encrypt(
+              utf8.encode(
+                jsonEncode({'remote_path': remoteFilePath, 'source_is_dir': false, 'target_is_dir_hint': false}),
+              ),
+            ),
+          ],
+          options: {'progress': true},
+        ),
+      );
+      seq++;
+
+      outgoing.put(
+        Progress(
+          args: [
+            'H',
+            seq,
+            enc.encrypt(
+              utf8.encode(
+                jsonEncode({'name': fileName, 'rel_path': '', 'size': stat.size, 'mode': 420, 'is_dir': false}),
+              ),
+            ),
+          ],
+          options: {'progress': true},
+        ),
+      );
+      seq++;
+
+      const chunkSize = 1024 * 1024;
+      int sentBytes = 0;
+      final raf = await file.open();
+      try {
+        while (true) {
+          final chunk = await raf.read(chunkSize);
+          if (chunk.isEmpty) break;
+          outgoing.put(Progress(args: ['D', seq, enc.encrypt(chunk)], options: {'progress': true}));
+          seq++;
+          sentBytes += chunk.length;
+          onProgress?.call(sentBytes, stat.size);
+        }
+      } finally {
+        await raf.close();
+      }
+
+      outgoing.put(Progress(args: ['E', seq], options: {}));
+
+      await callFuture.timeout(const Duration(seconds: 10), onTimeout: () => Result());
+    } catch (e) {
+      outgoing.cancelPending(StateError('Upload aborted'));
+      rethrow;
+    }
   }
 
   Future<void> rename(String oldPath, String newPath) async =>
