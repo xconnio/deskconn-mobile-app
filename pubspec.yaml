@@ -58,6 +58,7 @@ dependencies:
   chewie: ^1.8.5
   audioplayers: ^6.1.0
   path_provider: ^2.1.5
+  file_picker: ^8.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

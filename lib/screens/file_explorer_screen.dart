@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -335,8 +336,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   AppBar _buildNormalAppBar() {
     return AppBar(
-      title: const Text('File Explorer'),
+      title: const Text('Files'),
       actions: [
+        if (_controller != null && _currentBrowse != null)
+          IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
         IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search',
@@ -557,6 +560,89 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (mounted) {
         Navigator.pop(context);
         _showErrorSnackBar('Download failed: $e');
+      }
+    }
+  }
+
+  Future<void> _uploadFile() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+    if (!mounted || result == null || result.files.isEmpty) return;
+
+    final picked = result.files.first;
+    final localPath = picked.path;
+    if (localPath == null) {
+      _showErrorSnackBar('Cannot get file path');
+      return;
+    }
+
+    final remotePath = _currentBrowse!.path;
+    if (!mounted) return;
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    int totalBytes = 0;
+    try {
+      totalBytes = (await File(localPath).stat()).size;
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final statusNotifier = ValueNotifier<String>(
+      totalBytes > 0 ? '0 B / ${formatSize(totalBytes)}  (0%)' : 'Preparing…',
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(picked.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ValueListenableBuilder<double>(
+                valueListenable: progressNotifier,
+                builder: (_, progress, _) => LinearProgressIndicator(value: progress),
+              ),
+              const SizedBox(height: 10),
+              ValueListenableBuilder<String>(
+                valueListenable: statusNotifier,
+                builder: (_, status, _) => Text(status, style: const TextStyle(fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await _controller!.upload(
+        localPath,
+        remotePath,
+        onProgress: (sent, total) {
+          if (total <= 0) return;
+          final fraction = (sent / total).clamp(0.0, 1.0);
+          progressNotifier.value = fraction;
+          final pct = (fraction * 100).toStringAsFixed(0);
+          statusNotifier.value = '${formatSize(sent)} / ${formatSize(total)}  ($pct%)';
+        },
+      );
+      progressNotifier.value = 1.0;
+      statusNotifier.value = 'Done';
+      if (mounted) {
+        nav.pop();
+        messenger.showSnackBar(SnackBar(content: Text('${picked.name} uploaded')));
+        _invalidateCacheFor(remotePath);
+        _loadPath(remotePath);
+      }
+    } catch (e) {
+      if (mounted) {
+        nav.pop();
+        _showErrorSnackBar('Upload failed: $e');
       }
     }
   }
