@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -12,64 +12,17 @@ import 'package:path_provider/path_provider.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
+import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 
-const _kImageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico'};
-const _kTextExts = {
-  'txt',
-  'md',
-  'json',
-  'yaml',
-  'yml',
-  'xml',
-  'log',
-  'sh',
-  'bash',
-  'zsh',
-  'fish',
-  'py',
-  'js',
-  'ts',
-  'jsx',
-  'tsx',
-  'c',
-  'cpp',
-  'h',
-  'hpp',
-  'cc',
-  'css',
-  'html',
-  'htm',
-  'dart',
-  'go',
-  'rs',
-  'rb',
-  'java',
-  'kt',
-  'swift',
-  'cs',
-  'php',
-  'sql',
-  'r',
-  'toml',
-  'ini',
-  'cfg',
-  'conf',
-  'env',
-  'properties',
-  'gradle',
-  'cmake',
-  'makefile',
-  'dockerfile',
-};
-const _kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3gp'};
-const _kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
-
 class FileExplorerScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
+  final String? initialPath;
+  final String? initialOpenFile;
+  final String? category;
 
-  const FileExplorerScreen({super.key, required this.config});
+  const FileExplorerScreen({super.key, required this.config, this.initialPath, this.initialOpenFile, this.category});
 
   @override
   State<FileExplorerScreen> createState() => _FileExplorerScreenState();
@@ -81,6 +34,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _isLoading = true;
   String? _error;
   bool _showHidden = false;
+  String? _currentCategory;
 
   bool _isGrid = true;
   bool _isSearching = false;
@@ -130,10 +84,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       }
     }
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final connection =
@@ -146,8 +102,20 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             turnCredentials: widget.config.turnCredentials,
           );
       _log('controller ready p2p=${connection.isP2P}');
-      _controller = FileExplorerController(connection.session, widget.config.realm);
-      await _loadPath('');
+      if (mounted) _controller = FileExplorerController(connection.session, widget.config.realm);
+
+      if (widget.category != null) {
+        await _loadPath('', category: widget.category);
+      } else {
+        await _loadPath(widget.initialPath ?? '');
+      }
+
+      if (widget.initialOpenFile != null && _currentBrowse != null) {
+        final entry = _currentBrowse!.entries.where((e) => _fullPath(e) == widget.initialOpenFile).firstOrNull;
+        if (entry != null && mounted) {
+          _onEntryTap(entry);
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -166,38 +134,75 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     await _initialize();
   }
 
-  Future<void> _loadPath(String path) async {
+  Future<void> _loadPath(String path, {String? category}) async {
     if (_controller == null) return;
 
-    final cacheKey = '${widget.config.realm}:$path';
+    final cacheKey = category != null ? '${widget.config.realm}:cat:$category' : '${widget.config.realm}:$path';
     if (_browseCache.containsKey(cacheKey)) {
-      _log('browse cache hit path=$path');
-      setState(() {
-        _currentBrowse = _browseCache[cacheKey];
-        _isLoading = false;
-      });
-      _refreshPath(path);
+      _log('browse cache hit path=$path category=$category');
+      if (mounted) {
+        setState(() {
+          _currentBrowse = _browseCache[cacheKey];
+          _currentCategory = category;
+          _isLoading = false;
+        });
+      }
+      _refreshPath(path, category: category);
       return;
     }
 
-    setState(() => _isLoading = true);
-    await _refreshPath(path);
+    if (mounted) setState(() => _isLoading = true);
+    await _refreshPath(path, category: category);
   }
 
-  Future<void> _refreshPath(String path) async {
+  Future<void> _refreshPath(String path, {String? category}) async {
     try {
-      _log('browse path=$path');
-      final result = await _controller!.browse(path);
-      final cacheKey = '${widget.config.realm}:$path';
+      _log('browse path=$path category=$category');
+      final FileBrowseResult result;
+      if (category == 'documents') {
+        // Web app merges these three categories for the 'Documents' view
+        final results = await Future.wait([
+          _controller!.index('pdfs'),
+          _controller!.index('texts'),
+          _controller!.index('documents'),
+        ]);
+
+        final allEntries = <FileEntry>[];
+        for (final res in results) {
+          allEntries.addAll(res.entries);
+          // Assuming FileBrowseResult might have a status field in the future,
+          // for now we just merge entries.
+        }
+
+        // Sort by mtime descending (newest first) to match web app
+        allEntries.sort((a, b) => b.mtime.compareTo(a.mtime));
+
+        result = FileBrowseResult(path: 'cat:documents', homePath: '/', entries: allEntries);
+      } else if (category != null) {
+        result = await _controller!.index(category);
+      } else {
+        result = await _controller!.browse(path);
+      }
+
+      final cacheKey = category != null ? '${widget.config.realm}:cat:$category' : '${widget.config.realm}:$path';
       _browseCache[cacheKey] = result;
       if (mounted) {
         setState(() {
           _currentBrowse = result;
+          _currentCategory = category;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (!mounted) return;
+      final errorStr = e.toString();
+      if (errorStr.contains('wamp.error.no_such_procedure') && category != null) {
+        setState(() {
+          _error = 'The remote desktop agent needs to be updated to support $category view.';
+          _isLoading = false;
+        });
+        return;
+      }
       final sessionAlive = _controller?.session.isConnected() ?? false;
       if (!sessionAlive) {
         _log('session lost during browse path=$path');
@@ -241,7 +246,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final browsePath = resolved ?? _fullPath(entry);
 
     final prevBrowse = _currentBrowse;
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     try {
       final result = await _controller!.browse(browsePath);
@@ -310,7 +315,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _currentBrowse!.path.isEmpty;
 
     return PopScope(
-      canPop: isAtRoot && !_isSearching,
+      canPop: _currentCategory != null || (isAtRoot && !_isSearching),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_isSearching) {
@@ -321,10 +326,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       },
       child: Scaffold(
         appBar: _isSearching ? _buildSearchAppBar() : _buildNormalAppBar(),
+        drawer: _buildDrawer(),
         body: Column(
           children: [
-            if (!_isSearching && _currentBrowse != null)
+            if (!_isSearching && _currentBrowse != null && _currentCategory == null)
               _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
+            if (!_isSearching && _currentCategory != null) _buildCategoryHeader(),
             if (_clipboardEntry != null) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
@@ -334,9 +341,22 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   AppBar _buildNormalAppBar() {
+    String title = 'File Explorer';
+    if (_currentCategory != null) {
+      title = switch (_currentCategory) {
+        'images' => 'Pictures',
+        'videos' => 'Videos',
+        'documents' => 'Documents',
+        'pdfs' => 'PDFs',
+        'texts' => 'Texts',
+        _ => _currentCategory![0].toUpperCase() + _currentCategory!.substring(1),
+      };
+    }
     return AppBar(
-      title: const Text('File Explorer'),
+      title: Text(title),
       actions: [
+        if (_controller != null && _currentBrowse != null && _currentCategory == null)
+          IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
         IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search',
@@ -347,12 +367,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: _isGrid ? 'List view' : 'Grid view',
           onPressed: () => setState(() => _isGrid = !_isGrid),
         ),
+        if (_currentCategory == null)
+          IconButton(
+            icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
+            onPressed: () => setState(() => _showHidden = !_showHidden),
+            tooltip: 'Show hidden files',
+          ),
         IconButton(
-          icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
-          onPressed: () => setState(() => _showHidden = !_showHidden),
-          tooltip: 'Show hidden files',
+          icon: const Icon(Icons.refresh),
+          onPressed: () => _loadPath(_currentBrowse?.path ?? '', category: _currentCategory),
         ),
-        IconButton(icon: const Icon(Icons.refresh), onPressed: () => _loadPath(_currentBrowse?.path ?? '')),
       ],
     );
   }
@@ -376,6 +400,107 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             }),
           ),
       ],
+    );
+  }
+
+  Widget _buildCategoryHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: Theme.of(context).cardColor,
+      child: Row(
+        children: [
+          const Icon(Icons.category_outlined, size: 20, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing all ${_currentCategory == 'images' ? 'pictures' : _currentCategory} on this desktop',
+              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: DeskconnColors.primary),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.folder_shared, size: 48, color: Colors.white),
+                    SizedBox(height: 12),
+                    Text(
+                      'File Explorer',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('All Files'),
+              selected: _currentCategory == null,
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('');
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Pictures'),
+              selected: _currentCategory == 'images',
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('', category: 'images');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('Videos'),
+              selected: _currentCategory == 'videos',
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('', category: 'videos');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Documents'),
+              selected: _currentCategory == 'documents',
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('', category: 'documents');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDFs'),
+              selected: _currentCategory == 'pdfs',
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('', category: 'pdfs');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.text_snippet_outlined),
+              title: const Text('Texts'),
+              selected: _currentCategory == 'texts',
+              onTap: () {
+                Navigator.pop(context);
+                _loadPath('', category: 'texts');
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -512,14 +637,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       } else {
         await _controller!.copy(srcPath, destPath);
       }
-      setState(() {
-        _clipboardEntry = null;
-        _clipboardIsCut = false;
-      });
+      if (mounted) {
+        setState(() {
+          _clipboardEntry = null;
+          _clipboardIsCut = false;
+        });
+      }
       _invalidateCacheFor(destDir);
       _loadPath(destDir);
     } catch (e) {
-      _showErrorSnackBar('Paste failed: $e');
+      if (mounted) _showErrorSnackBar('Paste failed: $e');
     }
   }
 
@@ -557,6 +684,89 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (mounted) {
         Navigator.pop(context);
         _showErrorSnackBar('Download failed: $e');
+      }
+    }
+  }
+
+  Future<void> _uploadFile() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+    if (!mounted || result == null || result.files.isEmpty) return;
+
+    final picked = result.files.first;
+    final localPath = picked.path;
+    if (localPath == null) {
+      _showErrorSnackBar('Cannot get file path');
+      return;
+    }
+
+    final remotePath = _currentBrowse!.path;
+    if (!mounted) return;
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    int totalBytes = 0;
+    try {
+      totalBytes = (await File(localPath).stat()).size;
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final statusNotifier = ValueNotifier<String>(
+      totalBytes > 0 ? '0 B / ${formatSize(totalBytes)}  (0%)' : 'Preparing…',
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(picked.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ValueListenableBuilder<double>(
+                valueListenable: progressNotifier,
+                builder: (_, progress, _) => LinearProgressIndicator(value: progress),
+              ),
+              const SizedBox(height: 10),
+              ValueListenableBuilder<String>(
+                valueListenable: statusNotifier,
+                builder: (_, status, _) => Text(status, style: const TextStyle(fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await _controller!.upload(
+        localPath,
+        remotePath,
+        onProgress: (sent, total) {
+          if (total <= 0) return;
+          final fraction = (sent / total).clamp(0.0, 1.0);
+          progressNotifier.value = fraction;
+          final pct = (fraction * 100).toStringAsFixed(0);
+          statusNotifier.value = '${formatSize(sent)} / ${formatSize(total)}  ($pct%)';
+        },
+      );
+      progressNotifier.value = 1.0;
+      statusNotifier.value = 'Done';
+      if (mounted) {
+        nav.pop();
+        messenger.showSnackBar(SnackBar(content: Text('${picked.name} uploaded')));
+        _invalidateCacheFor(remotePath);
+        _loadPath(remotePath);
+      }
+    } catch (e) {
+      if (mounted) {
+        nav.pop();
+        _showErrorSnackBar('Upload failed: $e');
       }
     }
   }
@@ -788,13 +998,6 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
   }
 }
 
-String formatSize(int bytes) {
-  if (bytes <= 0) return "0 B";
-  const suffixes = ["B", "KB", "MB", "GB", "TB"];
-  var i = (math.log(bytes) / math.log(1024)).floor();
-  return "${(bytes / math.pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}";
-}
-
 class _Breadcrumbs extends StatelessWidget {
   final String path;
   final Function(String) onPathTap;
@@ -902,8 +1105,8 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
 
   Color get _bgColor {
     if (_ext == 'pdf') return Colors.grey.shade200;
-    if (_kVideoExts.contains(_ext)) return Colors.black;
-    if (_kImageExts.contains(_ext) || _ext == 'svg') return Colors.black;
+    if (kVideoExts.contains(_ext)) return Colors.black;
+    if (kImageExts.contains(_ext) || _ext == 'svg') return Colors.black;
     return const Color(0xFF272822);
   }
 
@@ -963,22 +1166,22 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   }
 
   Widget _buildContent(Uint8List data, String ext) {
-    if (_kImageExts.contains(ext)) {
+    if (kImageExts.contains(ext)) {
       return InteractiveViewer(child: Center(child: Image.memory(data)));
     }
     if (ext == 'svg') {
       return InteractiveViewer(child: Center(child: SvgPicture.memory(data)));
     }
-    if (_kTextExts.contains(ext)) {
+    if (kTextExts.contains(ext)) {
       return _TextPreview(data: data);
     }
     if (ext == 'pdf') {
       return _PdfPreview(data: data);
     }
-    if (_kVideoExts.contains(ext)) {
+    if (kVideoExts.contains(ext)) {
       return _VideoPreview(data: data, name: widget.entry.name);
     }
-    if (_kAudioExts.contains(ext)) {
+    if (kAudioExts.contains(ext)) {
       return _AudioPreview(data: data, name: widget.entry.name);
     }
     return _UnknownPreview(entry: widget.entry, ext: ext);
@@ -1279,14 +1482,7 @@ class _FileEntryGrid extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _FileEntryVisual(
-            entry: entry,
-            ext: ext,
-            size: 56,
-            iconSize: 44,
-            getFileIcon: _getFileIcon,
-            getFileIconColor: _getFileIconColor,
-          ),
+          _FileEntryVisual(entry: entry, ext: ext, size: 56, iconSize: 44),
           const SizedBox(height: 4),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
         ],
@@ -1324,61 +1520,6 @@ class _FileEntryGrid extends StatelessWidget {
       ),
     );
   }
-
-  IconData _getFileIcon(String ext) {
-    if (_kImageExts.contains(ext) || ext == 'svg') return Icons.image;
-    if (_kVideoExts.contains(ext)) return Icons.movie;
-    if (_kAudioExts.contains(ext)) return Icons.audiotrack;
-    if (_kTextExts.contains(ext)) return Icons.description;
-    switch (ext) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'zip':
-      case 'rar':
-      case '7z':
-      case 'tar':
-      case 'gz':
-      case 'xz':
-      case 'bz2':
-        return Icons.archive;
-      case 'apk':
-        return Icons.android;
-      case 'exe':
-      case 'msi':
-      case 'dmg':
-        return Icons.computer;
-      case 'db':
-      case 'sqlite':
-      case 'sqlite3':
-        return Icons.storage;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
-  Color? _getFileIconColor(String ext, {required bool isDark}) {
-    if (_kVideoExts.contains(ext)) {
-      return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
-    }
-    if (_kAudioExts.contains(ext)) {
-      return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
-    }
-    if (_kTextExts.contains(ext)) {
-      return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
-    }
-    switch (ext) {
-      case 'pdf':
-        return isDark ? const Color(0xFFFCA5A5) : Colors.red.shade400;
-      case 'zip':
-      case 'rar':
-      case '7z':
-      case 'tar':
-      case 'gz':
-        return isDark ? const Color(0xFFFCD34D) : const Color(0xFF475569);
-      default:
-        return isDark ? const Color(0xFFCBD5E1) : null;
-    }
-  }
 }
 
 class _FileEntryTile extends StatelessWidget {
@@ -1408,14 +1549,7 @@ class _FileEntryTile extends StatelessWidget {
     }
 
     return ListTile(
-      leading: _FileEntryVisual(
-        entry: entry,
-        ext: ext,
-        size: 40,
-        iconSize: 34,
-        getFileIcon: _getFileIcon,
-        getFileIconColor: _getFileIconColor,
-      ),
+      leading: _FileEntryVisual(entry: entry, ext: ext, size: 40, iconSize: 34),
       title: _buildTitle(context),
       subtitle: subtitle,
       onTap: onTap,
@@ -1446,61 +1580,6 @@ class _FileEntryTile extends StatelessWidget {
       ),
     );
   }
-
-  IconData _getFileIcon(String ext) {
-    if (_kImageExts.contains(ext) || ext == 'svg') return Icons.image;
-    if (_kVideoExts.contains(ext)) return Icons.movie;
-    if (_kAudioExts.contains(ext)) return Icons.audiotrack;
-    if (_kTextExts.contains(ext)) return Icons.description;
-    switch (ext) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'zip':
-      case 'rar':
-      case '7z':
-      case 'tar':
-      case 'gz':
-      case 'xz':
-      case 'bz2':
-        return Icons.archive;
-      case 'apk':
-        return Icons.android;
-      case 'exe':
-      case 'msi':
-      case 'dmg':
-        return Icons.computer;
-      case 'db':
-      case 'sqlite':
-      case 'sqlite3':
-        return Icons.storage;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
-  Color? _getFileIconColor(String ext, {required bool isDark}) {
-    if (_kVideoExts.contains(ext)) {
-      return isDark ? const Color(0xFF93C5FD) : const Color(0xFF64748B);
-    }
-    if (_kAudioExts.contains(ext)) {
-      return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF475569);
-    }
-    if (_kTextExts.contains(ext)) {
-      return isDark ? const Color(0xFF86EFAC) : const Color(0xFF334155);
-    }
-    switch (ext) {
-      case 'pdf':
-        return isDark ? const Color(0xFFFCA5A5) : Colors.red.shade400;
-      case 'zip':
-      case 'rar':
-      case '7z':
-      case 'tar':
-      case 'gz':
-        return isDark ? const Color(0xFFFCD34D) : const Color(0xFF475569);
-      default:
-        return isDark ? const Color(0xFFCBD5E1) : null;
-    }
-  }
 }
 
 class _FileEntryVisual extends StatelessWidget {
@@ -1508,23 +1587,14 @@ class _FileEntryVisual extends StatelessWidget {
   final String ext;
   final double size;
   final double iconSize;
-  final IconData Function(String ext) getFileIcon;
-  final Color? Function(String ext, {required bool isDark}) getFileIconColor;
 
-  const _FileEntryVisual({
-    required this.entry,
-    required this.ext,
-    required this.size,
-    required this.iconSize,
-    required this.getFileIcon,
-    required this.getFileIconColor,
-  });
+  const _FileEntryVisual({required this.entry, required this.ext, required this.size, required this.iconSize});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final thumbnail = _decodeThumbnail(entry.thumbnail);
-    final isVideo = _kVideoExts.contains(ext);
+    final isVideo = kVideoExts.contains(ext);
 
     if (thumbnail != null && !entry.isDir && !entry.isSymlink) {
       return SizedBox.square(
