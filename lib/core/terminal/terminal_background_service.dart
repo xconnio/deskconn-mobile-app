@@ -32,8 +32,6 @@ Future<void> initializeDesktopSessionBackgroundService() async {
       autoStart: false,
       autoStartOnBoot: false,
       isForegroundMode: false,
-      // Use the same ID and channel as our custom notification so the plugin's
-      // startForeground() and our nm.notify() both target the same slot → one notification.
       notificationChannelId: _kNotifChannelId,
       initialNotificationTitle: 'Deskconn',
       initialNotificationContent: 'Deskconn is running',
@@ -44,21 +42,13 @@ Future<void> initializeDesktopSessionBackgroundService() async {
   );
 }
 
-/// Show the persistent notification with Close button.
-/// Promotes the service to foreground first so Android keeps the process alive,
-/// then updates the notification slot with our custom content + Close button.
 Future<void> showAppNotification() async {
-  // 1. Promote service → plugin calls startForeground(1107, ...) on the same slot
-  FlutterBackgroundService().invoke('promote');
-  // 2. Wait for startForeground to complete before updating the notification
-  await Future.delayed(const Duration(milliseconds: 300));
-  // 3. Update slot 1107 to add the Close button
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('show');
   } catch (_) {}
+  FlutterBackgroundService().invoke('promote');
 }
 
-/// Remove the notification and demote the service. Call on logout.
 Future<void> hideAppNotification() async {
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('hide');
