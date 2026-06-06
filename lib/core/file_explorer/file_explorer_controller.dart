@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:xconn/xconn.dart';
+// ignore: implementation_imports
+import 'package:xconn/src/types.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
+import 'package:deskconn_mobile_app/core/terminal/blocking_queue.dart';
 import 'models.dart';
 
 class FileExplorerController {
@@ -11,6 +15,7 @@ class FileExplorerController {
   final String realm;
   Encryption? _encryption;
   bool _keyExchanged = false;
+  Future<void>? _keyExchangeFuture;
 
   static final Map<String, Uint8List> _thumbnailCache = {};
   static final Map<String, Future<Uint8List>> _thumbnailFutures = {};
@@ -23,9 +28,12 @@ class FileExplorerController {
 
   bool get isKeyExchanged => _keyExchanged;
 
-  Future<void> ensureKeyExchanged() async {
-    if (_keyExchanged) return;
+  Future<void> ensureKeyExchanged() {
+    if (_keyExchanged) return Future.value();
+    return _keyExchangeFuture ??= _doKeyExchange();
+  }
 
+  Future<void> _doKeyExchange() async {
     _encryption = await Encryption.create();
     final res = await session.call('io.xconn.deskconn.deskconnd.key.exchange', args: [_encryption!.clientPublicKey]);
 
@@ -45,6 +53,16 @@ class FileExplorerController {
     final encryptedPath = _encryption!.encrypt(utf8.encode(path));
     final res = await session.call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPath]);
     if (res.args.isEmpty) throw Exception('Browse failed: empty response');
+    final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
+    return FileBrowseResult.fromJson(jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>);
+  }
+
+  Future<FileBrowseResult> index(String category) async {
+    await ensureKeyExchanged();
+    final payload = {'category': category};
+    final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
+    final res = await session.call('io.xconn.deskconn.deskconnd.index.query', args: [encrypted]);
+    if (res.args.isEmpty) throw Exception('Index query failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
     return FileBrowseResult.fromJson(jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>);
   }
@@ -161,6 +179,85 @@ class FileExplorerController {
 
     if (streamError != null) throw streamError!;
     return builder.takeBytes();
+  }
+
+  Future<void> upload(String localFilePath, String remoteDir, {void Function(int sent, int total)? onProgress}) async {
+    final file = File(localFilePath);
+    if (!await file.exists()) throw Exception('File not found: $localFilePath');
+
+    await ensureKeyExchanged();
+    final enc = _encryption!;
+
+    final fileName = localFilePath.split('/').last;
+    final remoteFilePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
+
+    final stat = await file.stat();
+    onProgress?.call(0, stat.size);
+
+    var seq = 0;
+    final outgoing = BlockingQueue<Progress>();
+
+    Future<Progress> sender() => outgoing.take();
+    Future<void> receiver(Result _) async {}
+
+    final callFuture = session.callProgressiveProgress('io.xconn.deskconn.deskconnd.file.upload', sender, receiver);
+
+    try {
+      outgoing.put(
+        Progress(
+          args: [
+            'I',
+            seq,
+            enc.encrypt(
+              utf8.encode(
+                jsonEncode({'remote_path': remoteFilePath, 'source_is_dir': false, 'target_is_dir_hint': false}),
+              ),
+            ),
+          ],
+          options: {'progress': true},
+        ),
+      );
+      seq++;
+
+      outgoing.put(
+        Progress(
+          args: [
+            'H',
+            seq,
+            enc.encrypt(
+              utf8.encode(
+                jsonEncode({'name': fileName, 'rel_path': '', 'size': stat.size, 'mode': 420, 'is_dir': false}),
+              ),
+            ),
+          ],
+          options: {'progress': true},
+        ),
+      );
+      seq++;
+
+      const chunkSize = 1024 * 1024;
+      int sentBytes = 0;
+      final raf = await file.open();
+      try {
+        while (true) {
+          final chunk = await raf.read(chunkSize);
+          if (chunk.isEmpty) break;
+          outgoing.put(Progress(args: ['D', seq, enc.encrypt(chunk)], options: {'progress': true}));
+          seq++;
+          sentBytes += chunk.length;
+          onProgress?.call(sentBytes, stat.size);
+        }
+      } finally {
+        await raf.close();
+      }
+
+      outgoing.put(Progress(args: ['E', seq], options: {}));
+
+      await callFuture.timeout(const Duration(seconds: 10), onTimeout: () => Result());
+    } catch (e) {
+      outgoing.cancelPending(StateError('Upload aborted'));
+      rethrow;
+    }
   }
 
   Future<void> rename(String oldPath, String newPath) async =>

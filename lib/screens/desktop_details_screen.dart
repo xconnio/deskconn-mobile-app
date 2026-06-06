@@ -78,6 +78,24 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     onTap: () => _openFileExplorer(context),
                   ),
                   _LauncherTile(
+                    icon: Icons.image_outlined,
+                    title: "Pictures",
+                    enabled: terminalEnabled,
+                    onTap: () => _openFileExplorer(context, category: 'images'),
+                  ),
+                  _LauncherTile(
+                    icon: Icons.video_library_outlined,
+                    title: "Videos",
+                    enabled: terminalEnabled,
+                    onTap: () => _openFileExplorer(context, category: 'videos'),
+                  ),
+                  _LauncherTile(
+                    icon: Icons.description_outlined,
+                    title: "Documents",
+                    enabled: terminalEnabled,
+                    onTap: () => _openFileExplorer(context, category: 'documents'),
+                  ),
+                  _LauncherTile(
                     icon: Icons.settings_remote_outlined,
                     title: "Remote Ctrl",
                     enabled: terminalEnabled,
@@ -187,7 +205,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  Future<void> _openFileExplorer(BuildContext context) async {
+  Future<void> _openFileExplorer(BuildContext context, {String? category}) async {
     final realm = _realm;
     if (realm == null ||
         (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
@@ -205,7 +223,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
       final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => FileExplorerScreen(config: config)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FileExplorerScreen(config: config, category: category),
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open File Explorer: $e")));
