@@ -157,7 +157,12 @@ class MainActivity : FlutterActivity() {
             if (nm.getNotificationChannel(channelId) == null) {
                 nm.createNotificationChannel(
                     NotificationChannel(channelId, "Deskconn", NotificationManager.IMPORTANCE_LOW)
-                        .apply { setShowBadge(false) }
+                        .apply {
+                            setShowBadge(false)
+                            setSound(null, null)
+                            enableVibration(false)
+                            enableLights(false)
+                        }
                 )
             }
         }
