@@ -28,31 +28,24 @@ jobs:
       - name: Install dependencies
         run: make install
 
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/deskconn-release-key.jks
+
+      - name: Create key.properties
+        run: |
+          cat <<EOF > android/key.properties
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=deskconn-release-key.jks
+          EOF
+
       - name: Build APK
         run: make build-apk
 
-      - name: Decode Keystore
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > deskconn-release-key.jks
-
-      - name: Install Android SDK Build Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zipalign apksigner
-
-      - name: Align and Sign APK (v2+)
-        run: |
-          zipalign -v 4 build/app/outputs/flutter-apk/app-release.apk aligned.apk
-
-          apksigner sign \
-            --ks deskconn-release-key.jks \
-            --ks-key-alias ${{ secrets.KEY_ALIAS }} \
-            --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
-            --key-pass pass:${{ secrets.KEY_PASSWORD }} \
-            --out deskconn-mobile-app.apk \
-            aligned.apk
-
-          apksigner verify --verbose deskconn-mobile-app.apk
+      - name: Prepare APK for Release
+        run: cp build/app/outputs/flutter-apk/app-release.apk deskconn-mobile-app.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

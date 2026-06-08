@@ -1,8 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val isReleaseSigningConfigured = if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    keystoreProperties.containsKey("storeFile") &&
+            keystoreProperties.containsKey("storePassword") &&
+            keystoreProperties.containsKey("keyAlias") &&
+            keystoreProperties.containsKey("keyPassword")
+} else {
+    false
 }
 
 android {
@@ -28,14 +43,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (isReleaseSigningConfigured) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
             // TEMP: disable R8/shrinker to avoid XMLStreamException
             isMinifyEnabled = false
             isShrinkResources = false
 
-            // Use debug signing so release APK can be built locally
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseConfig = signingConfigs.findByName("release")
+            if (releaseConfig != null) {
+                signingConfig = releaseConfig
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }
