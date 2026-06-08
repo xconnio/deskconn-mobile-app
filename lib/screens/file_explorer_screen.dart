@@ -795,6 +795,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                   _downloadFile(entry);
                 },
               ),
+            if (!entry.isDir)
+              ListTile(
+                leading: const Icon(Icons.open_in_new_outlined),
+                title: const Text('Open with...'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showOpenWithDialog(entry);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.content_copy),
               title: const Text('Copy'),
@@ -841,6 +850,81 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showOpenWithDialog(FileEntry entry) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Text(
+                'Open "${entry.name}" as:',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Text'),
+              onTap: () {
+                Navigator.pop(context);
+                _openFileAs(entry, 'text');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Image'),
+              onTap: () {
+                Navigator.pop(context);
+                _openFileAs(entry, 'image');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.movie_outlined),
+              title: const Text('Video'),
+              onTap: () {
+                Navigator.pop(context);
+                _openFileAs(entry, 'video');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.audiotrack_outlined),
+              title: const Text('Audio'),
+              onTap: () {
+                Navigator.pop(context);
+                _openFileAs(entry, 'audio');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDF'),
+              onTap: () {
+                Navigator.pop(context);
+                _openFileAs(entry, 'pdf');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openFileAs(FileEntry entry, String type) {
+    final path = entry.isSymlink ? (_resolveSymlinkTarget(entry) ?? _fullPath(entry)) : _fullPath(entry);
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            FilePreviewScreen(controller: _controller!, entry: entry, path: path, openAs: type),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
       ),
     );
   }
@@ -1057,8 +1141,9 @@ class FilePreviewScreen extends StatefulWidget {
   final FileExplorerController controller;
   final FileEntry entry;
   final String path;
+  final String? openAs;
 
-  const FilePreviewScreen({super.key, required this.controller, required this.entry, required this.path});
+  const FilePreviewScreen({super.key, required this.controller, required this.entry, required this.path, this.openAs});
 
   @override
   State<FilePreviewScreen> createState() => _FilePreviewScreenState();
@@ -1104,9 +1189,10 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   }
 
   Color get _bgColor {
-    if (_ext == 'pdf') return Colors.grey.shade200;
-    if (kVideoExts.contains(_ext)) return Colors.black;
-    if (kImageExts.contains(_ext) || _ext == 'svg') return Colors.black;
+    final effectiveExt = widget.openAs ?? _ext;
+    if (effectiveExt == 'pdf') return Colors.grey.shade200;
+    if (effectiveExt == 'video' || kVideoExts.contains(effectiveExt)) return Colors.black;
+    if (effectiveExt == 'image' || effectiveExt == 'svg' || kImageExts.contains(effectiveExt)) return Colors.black;
     return const Color(0xFF272822);
   }
 
@@ -1166,6 +1252,25 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   }
 
   Widget _buildContent(Uint8List data, String ext) {
+    final mode = widget.openAs;
+    if (mode != null) {
+      if (mode == 'text') {
+        return _TextPreview(data: data);
+      }
+      if (mode == 'image') {
+        return InteractiveViewer(child: Center(child: Image.memory(data)));
+      }
+      if (mode == 'pdf') {
+        return _PdfPreview(data: data);
+      }
+      if (mode == 'video') {
+        return _VideoPreview(data: data, name: widget.entry.name);
+      }
+      if (mode == 'audio') {
+        return _AudioPreview(data: data, name: widget.entry.name);
+      }
+    }
+
     if (kImageExts.contains(ext)) {
       return InteractiveViewer(child: Center(child: Image.memory(data)));
     }
