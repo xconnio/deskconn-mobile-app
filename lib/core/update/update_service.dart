@@ -17,21 +17,14 @@ class UpdateService {
       final latestTagName = data['tag_name'] as String;
       // Extract version digits (e.g. "v25" -> "25", "1.2.0" -> "1.2.0")
       final latestVersion = latestTagName.replaceAll(RegExp(r'^v'), '');
-      
+
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
 
       if (_isNewerVersion(currentVersion, latestVersion)) {
-        return {
-          'version': latestTagName,
-          'notes': data['body'] ?? '',
-          'apkUrl': _getApkUrl(data),
-        };
+        return {'version': latestTagName, 'notes': data['body'] ?? '', 'apkUrl': _getApkUrl(data)};
       }
-    } catch (e) {
-      // Avoid printing in production or log gracefully
-      print("Check update failed: $e");
-    }
+    } catch (_) {}
     return null;
   }
 
@@ -70,10 +63,7 @@ class UpdateService {
 
   String? _getApkUrl(Map<String, dynamic> releaseData) {
     final List assets = releaseData['assets'] ?? [];
-    final apkAsset = assets.firstWhere(
-      (asset) => (asset['name'] as String).endsWith('.apk'),
-      orElse: () => null,
-    );
+    final apkAsset = assets.firstWhere((asset) => (asset['name'] as String).endsWith('.apk'), orElse: () => null);
     return apkAsset?['browser_download_url'];
   }
 
