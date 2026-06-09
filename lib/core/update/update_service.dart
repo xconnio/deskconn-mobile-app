@@ -15,50 +15,17 @@ class UpdateService {
 
       final data = json.decode(response.body);
       final latestTagName = data['tag_name'] as String;
-      // Extract version digits (e.g. "v25" -> "25", "1.2.0" -> "1.2.0")
-      final latestVersion = latestTagName.replaceAll(RegExp(r'^v'), '');
+      final latestBuild = int.tryParse(latestTagName.replaceAll(RegExp(r'^v'), ''));
+      if (latestBuild == null) return null;
 
       final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version;
+      final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
 
-      if (_isNewerVersion(currentVersion, latestVersion)) {
+      if (latestBuild > currentBuild) {
         return {'version': latestTagName, 'notes': data['body'] ?? '', 'apkUrl': _getApkUrl(data)};
       }
     } catch (_) {}
     return null;
-  }
-
-  bool _isNewerVersion(String current, String latest) {
-    // Standardize: remove non-numeric parts at the start if any
-    final cleanCurrent = current.replaceAll(RegExp(r'^v'), '');
-    final cleanLatest = latest.replaceAll(RegExp(r'^v'), '');
-
-    // Try parsing as simple integers (e.g., build numbers/version tags like "25" vs "24")
-    final currInt = int.tryParse(cleanCurrent);
-    final lateInt = int.tryParse(cleanLatest);
-
-    if (currInt != null && lateInt != null) {
-      return lateInt > currInt;
-    }
-
-    // Fall back to semantic version splitting (e.g. "1.2.0" vs "1.3.0")
-    try {
-      List<int> currParts = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-      List<int> lateParts = cleanLatest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-
-      int maxLength = currParts.length > lateParts.length ? currParts.length : lateParts.length;
-      for (int i = 0; i < maxLength; i++) {
-        int currPart = i < currParts.length ? currParts[i] : 0;
-        int latePart = i < lateParts.length ? lateParts[i] : 0;
-
-        if (latePart > currPart) return true;
-        if (currPart > latePart) return false;
-      }
-    } catch (_) {
-      // If parsing fails, do a simple string comparison
-      return cleanLatest != cleanCurrent;
-    }
-    return false;
   }
 
   String? _getApkUrl(Map<String, dynamic> releaseData) {
