@@ -13,6 +13,8 @@ import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:deskconn_mobile_app/core/update/update_service.dart';
+import 'package:deskconn_mobile_app/widgets/update_dialog.dart';
 import 'package:provider/provider.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -105,7 +107,19 @@ class _AppBootstrapState extends State<AppBootstrap> {
       } catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
       }
+      unawaited(_checkForUpdate());
     });
+  }
+
+  Future<void> _checkForUpdate() async {
+    final release = await UpdateService().checkForUpdate();
+    if (release != null && mounted) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => UpdateDialog(release: release),
+      );
+    }
   }
 
   void _syncNotification(bool loggedIn) {
