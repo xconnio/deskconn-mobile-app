@@ -10,6 +10,8 @@ const _procMprisPlayers = 'io.xconn.deskconn.deskconnd.mpris.players';
 const _procMprisPlayPause = 'io.xconn.deskconn.deskconnd.mpris.playpause';
 const _procMprisPrev = 'io.xconn.deskconn.deskconnd.mpris.previous';
 const _procMprisNext = 'io.xconn.deskconn.deskconnd.mpris.next';
+const _procAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
+const _procAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
 
 class RemoteControlScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
@@ -26,6 +28,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   bool _locking = false;
   bool _isPlaying = false;
   List<String> _playerNames = [];
+  bool? _isMuted;
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
@@ -34,6 +37,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     super.initState();
     _loadBrightness();
     _loadPlayers();
+    _loadMuteState();
   }
 
   Future<void> _loadBrightness() async {
@@ -58,6 +62,26 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       if (mounted && result.args.isNotEmpty) {
         final map = result.args[0] as Map;
         setState(() => _playerNames = map.values.map((v) => v.toString()).toList());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadMuteState() async {
+    final session = _session;
+    if (session == null) return;
+    try {
+      final result = await session.call(_procAudioIsMuted);
+      if (mounted && result.args.isNotEmpty) {
+        setState(() => _isMuted = result.args[0] as bool);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleMute() async {
+    try {
+      final result = await _session?.call(_procAudioToggleMute);
+      if (mounted && result != null && result.args.isNotEmpty) {
+        setState(() => _isMuted = result.args[0] as bool);
       }
     } catch (_) {}
   }
@@ -122,6 +146,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 icon: Icons.brightness_6_outlined,
                 label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
                 onTap: _showBrightnessSheet,
+              ),
+              _IconTile(
+                icon: _isMuted == null
+                    ? Icons.volume_up_outlined
+                    : (_isMuted! ? Icons.volume_off_outlined : Icons.volume_up_outlined),
+                label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Muted' : 'Unmuted'),
+                onTap: _toggleMute,
               ),
             ],
           ),
