@@ -3,7 +3,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 
 const _kAppNotificationChannel = 'deskconn/notification';
 const _kNotifId = 1107;
-const _kNotifChannelId = 'deskconn_session';
+const _kNotifChannelId = 'deskconn_session_v2';
 
 class DesktopSessionLaunchConfig {
   final String sessionKey;

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
@@ -133,6 +135,24 @@ class DesktopConnectionManager {
     bool isP2P = false;
 
     if (webRtcEnabled) {
+      if (!kIsWeb) {
+        try {
+          if (Platform.isAndroid) {
+            await Helper.setAndroidAudioConfiguration(
+              AndroidAudioConfiguration(manageAudioFocus: false, androidAudioMode: AndroidAudioMode.normal),
+            );
+          } else if (Platform.isIOS) {
+            await Helper.setAppleAudioConfiguration(
+              AppleAudioConfiguration(
+                appleAudioCategory: AppleAudioCategory.playback,
+                appleAudioCategoryOptions: {AppleAudioCategoryOption.mixWithOthers},
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint('Failed to configure WebRTC audio: $e');
+        }
+      }
       try {
         Map<String, dynamic> credentials;
         if (turnCredentials != null) {
