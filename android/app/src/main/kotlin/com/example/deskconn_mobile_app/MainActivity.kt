@@ -22,7 +22,7 @@ class MainActivity : FlutterActivity() {
     private val shellChannel = "deskconn/shell_notification"
     private val notifChannel = "deskconn/notification"
     private val fileChannel = "deskconn/file"
-    private val channelId = "deskconn_session"
+    private val channelId = "deskconn_session_v2"
     private val notifId = 1107
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,6 +154,11 @@ class MainActivity : FlutterActivity() {
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            try {
+                nm.deleteNotificationChannel("deskconn_session")
+            } catch (e: Exception) {
+                // Ignore
+            }
             if (nm.getNotificationChannel(channelId) == null) {
                 nm.createNotificationChannel(
                     NotificationChannel(channelId, "Deskconn", NotificationManager.IMPORTANCE_LOW)
