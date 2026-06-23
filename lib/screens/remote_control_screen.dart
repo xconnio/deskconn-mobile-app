@@ -1,6 +1,11 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
+
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:xconn/xconn.dart';
 
 const _procLock = 'io.xconn.deskconn.deskconnd.screen.lock';
@@ -12,6 +17,7 @@ const _procMprisPrev = 'io.xconn.deskconn.deskconnd.mpris.previous';
 const _procMprisNext = 'io.xconn.deskconn.deskconnd.mpris.next';
 const _procAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
 const _procAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
+const _procScreenshot = 'io.xconn.deskconn.deskconnd.screenshot';
 
 class RemoteControlScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
@@ -29,6 +35,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   bool _isPlaying = false;
   List<String> _playerNames = [];
   bool? _isMuted;
+  bool _screenshotLoading = false;
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
@@ -109,6 +116,55 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     await _mprisCall(_procMprisPlayPause);
   }
 
+  Future<void> _takeScreenshot() async {
+    if (_screenshotLoading) return;
+
+    final session = _session;
+    if (session == null) return;
+
+    setState(() => _screenshotLoading = true);
+
+    try {
+      final result = await session.call(_procScreenshot);
+
+      if (!mounted) return;
+
+      final arg = result.args[0];
+
+      final Uint8List bytes;
+
+      if (arg is Uint8List) {
+        bytes = arg;
+      } else if (arg is List<int>) {
+        bytes = Uint8List.fromList(arg);
+      } else if (arg is List) {
+        bytes = Uint8List.fromList(List<int>.from(arg));
+      } else {
+        throw Exception('Unexpected screenshot payload type: ${arg.runtimeType}');
+      }
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => _ScreenshotViewerScreen(imageBytes: bytes)));
+    } catch (e) {
+      if (!mounted) return;
+
+      final msg = e.toString();
+      final bool isDisabled = msg.contains('screenshot not enabled');
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isDisabled ? 'Screenshots Disabled' : 'Screenshot Failed'),
+          content: isDisabled ? _ScreenshotDisabledContent(command: 'desk screenshot enable') : Text(msg),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _screenshotLoading = false);
+      }
+    }
+  }
+
   void _showBrightnessSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -154,6 +210,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Muted' : 'Unmuted'),
                 onTap: _toggleMute,
               ),
+              _IconTile(
+                icon: _screenshotLoading ? null : Icons.screenshot_monitor_outlined,
+                label: 'Screenshot',
+                loading: _screenshotLoading,
+                onTap: _takeScreenshot,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -165,6 +227,114 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             onNext: () => _mprisCall(_procMprisNext),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScreenshotDisabledContent extends StatefulWidget {
+  final String command;
+  const _ScreenshotDisabledContent({required this.command});
+
+  @override
+  State<_ScreenshotDisabledContent> createState() => _ScreenshotDisabledContentState();
+}
+
+class _ScreenshotDisabledContentState extends State<_ScreenshotDisabledContent> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.command));
+    setState(() => _copied = true);
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Screenshots are disabled on this machine.'),
+        const SizedBox(height: 12),
+        const Text('Run on the machine to enable:'),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.command,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 18),
+                color: _copied ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+                tooltip: _copied ? 'Copied!' : 'Copy',
+                onPressed: _copy,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScreenshotViewerScreen extends StatelessWidget {
+  final Uint8List imageBytes;
+
+  const _ScreenshotViewerScreen({required this.imageBytes});
+
+  Future<void> _save(BuildContext context) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+      final file = File('${dir.path}/screenshot-$timestamp.png');
+      await file.writeAsBytes(imageBytes);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved to ${file.path}'),
+          action: SnackBarAction(label: 'Open', onPressed: () => OpenFilex.open(file.path)),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Screenshot'),
+        actions: [
+          IconButton(icon: const Icon(Icons.download_outlined), tooltip: 'Save', onPressed: () => _save(context)),
+        ],
+      ),
+      body: InteractiveViewer(
+        minScale: 0.25,
+        maxScale: 12,
+        child: Center(child: Image.memory(imageBytes, fit: BoxFit.contain)),
       ),
     );
   }
