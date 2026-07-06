@@ -32,6 +32,7 @@ class DesktopConnectionManager {
 
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
+  Future<Map<String, dynamic>>? _pendingTurnCredentials;
 
   void _log(String message) {
     debugPrint('[DesktopSession ${DateTime.now().toIso8601String()}] $message');
@@ -219,13 +220,30 @@ class DesktopConnectionManager {
     }
   }
 
-  Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) async {
+  Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) {
     final cached = _turnCredentials;
     final expiry = _turnCredentialsExpiry;
     if (cached != null && expiry != null && DateTime.now().isBefore(expiry)) {
       _log('turn cache hit');
-      return cached;
+      return Future.value(cached);
     }
+
+    final pending = _pendingTurnCredentials;
+    if (pending != null) {
+      _log('turn join pending fetch');
+      return pending;
+    }
+
+    final future = _fetchTurnCredentials(authId, privateKey);
+    _pendingTurnCredentials = future;
+    return future.whenComplete(() {
+      if (_pendingTurnCredentials == future) {
+        _pendingTurnCredentials = null;
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> _fetchTurnCredentials(String authId, String privateKey) async {
     _log('turn fetch start');
     final turnClient = WampClient();
     try {
