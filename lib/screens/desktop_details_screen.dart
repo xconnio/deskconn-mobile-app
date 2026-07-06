@@ -128,6 +128,33 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       return;
     }
 
+    final status = await _attemptConnection(realm, authId, privateKey, webRtcEnabled);
+    if (mounted) {
+      setState(() => _connectionStatus = status ?? _DesktopConnectionStatus.offline);
+    }
+
+    // Show the failure immediately rather than leaving the user staring at
+    // "Checking" — then quietly retry once in the background. Only flips the
+    // status if this retry succeeds; the user already sees "Offline" either way.
+    if (status == null) {
+      unawaited(_retryInBackground(realm, authId, privateKey, webRtcEnabled));
+    }
+  }
+
+  Future<void> _retryInBackground(String realm, String authId, String privateKey, bool webRtcEnabled) async {
+    final status = await _attemptConnection(realm, authId, privateKey, webRtcEnabled);
+    if (status != null && mounted) {
+      setState(() => _connectionStatus = status);
+    }
+  }
+
+  // Returns the resolved status on a working connection, or null on failure.
+  Future<_DesktopConnectionStatus?> _attemptConnection(
+    String realm,
+    String authId,
+    String privateKey,
+    bool webRtcEnabled,
+  ) async {
     try {
       final connection = await DesktopConnectionManager().acquire(
         realm: realm,
@@ -135,32 +162,41 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         privateKey: privateKey,
         webRtcEnabled: webRtcEnabled,
       );
+      // Otherwise a session that dies while this screen is already open (no
+      // user action to trigger a re-probe) leaves the status stuck on
+      // whatever it last was, even after the connection is long gone.
+      connection.onDisconnected = _handleConnectionDisconnected;
 
       if (connection.isAgentOnline) {
-        if (mounted) {
-          setState(
-            () => _connectionStatus = connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed,
-          );
-        }
-        return;
+        return connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed;
       }
 
       final desktopOnline = await _isDesktopAgentOnline(connection.session);
-      if (desktopOnline) connection.isAgentOnline = true;
-
-      if (mounted) {
-        setState(
-          () => _connectionStatus = desktopOnline
-              ? (connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed)
-              : _DesktopConnectionStatus.offline,
-        );
+      if (desktopOnline) {
+        connection.isAgentOnline = true;
+        return connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed;
       }
+
+      // The cached session reported isConnected()==true but didn't actually
+      // respond — a stale/dead P2P transport that isConnected() can't detect.
+      // Evict it so the next attempt is forced to reconnect from scratch
+      // instead of reusing the same broken session forever. Clear the
+      // disconnect callback first: release() closes the session, which fires
+      // onDisconnect — without this it would loop back into
+      // _handleConnectionDisconnected and spawn overlapping retries.
+      connection.onDisconnected = null;
+      await DesktopConnectionManager().release(realm);
+      return null;
     } catch (e) {
       _appendTerminalLog("Desktop connection failed: ${e.toString().split('\n').first}");
-      if (mounted) {
-        setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
-      }
+      return null;
     }
+  }
+
+  void _handleConnectionDisconnected() {
+    if (!mounted) return;
+    setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+    unawaited(_probeDesktopConnection());
   }
 
   Future<bool> _isDesktopAgentOnline(Session session) async {

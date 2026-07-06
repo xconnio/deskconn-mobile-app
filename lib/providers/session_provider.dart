@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
@@ -59,6 +60,12 @@ class SessionProvider extends ChangeNotifier {
 
       await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations(), _registerDevice(email)]);
 
+      // Device's cryptosign key only exists once _registerDevice above completes.
+      final privateKey = await DeviceIdentity.privateKey();
+      if (privateKey != null) {
+        unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
+      }
+
       loggedIn = true;
       notifyListeners();
     } catch (e) {
@@ -95,6 +102,7 @@ class SessionProvider extends ChangeNotifier {
 
           account = Map<String, dynamic>.from(res.args[0]);
 
+          unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
           await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations()]);
 
           loggedIn = true;
