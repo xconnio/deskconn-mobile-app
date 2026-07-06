@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -36,30 +38,37 @@ Future<void> initializeDesktopSessionBackgroundService() async {
       initialNotificationTitle: 'Deskconn',
       initialNotificationContent: 'Deskconn is running',
       foregroundServiceNotificationId: _kNotifId,
-      foregroundServiceTypes: [AndroidForegroundType.remoteMessaging],
+      foregroundServiceTypes: [AndroidForegroundType.dataSync],
     ),
     iosConfiguration: IosConfiguration(autoStart: false, onForeground: _onStart, onBackground: (instance) => true),
   );
 }
 
 Future<void> showAppNotification() async {
+  final service = FlutterBackgroundService();
+  final promoted = service.on('promoted').first.timeout(const Duration(seconds: 3), onTimeout: () => {});
+  service.invoke('promote');
+  await promoted;
+
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('show');
   } catch (_) {}
-  FlutterBackgroundService().invoke('promote');
 }
 
 Future<void> hideAppNotification() async {
+  FlutterBackgroundService().invoke('demote');
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('hide');
   } catch (_) {}
-  FlutterBackgroundService().invoke('demote');
 }
 
 @pragma('vm:entry-point')
 void _onStart(ServiceInstance service) {
   if (service is AndroidServiceInstance) {
-    service.on('promote').listen((_) => service.setAsForegroundService());
+    service.on('promote').listen((_) async {
+      await service.setAsForegroundService();
+      service.invoke('promoted');
+    });
     service.on('demote').listen((_) => service.setAsBackgroundService());
   }
   service.on('stopService').listen((_) => service.stopSelf());

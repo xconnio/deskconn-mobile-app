@@ -26,11 +26,26 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final desktops = context.read<SessionProvider>().desktops;
+    final toPrewarm = <Map<String, dynamic>>[];
     for (final d in desktops) {
       final realm = d['realm']?.toString();
       if (realm != null && realm.isNotEmpty && _prewarmedRealms.add(realm)) {
-        unawaited(_prewarm(d));
+        toPrewarm.add(d);
       }
+    }
+    if (toPrewarm.isNotEmpty) {
+      unawaited(_prewarmSequentially(toPrewarm));
+    }
+  }
+
+  // Every prewarm now negotiates a full WebRTC connection (no cheap routed
+  // path), so firing them all at once makes N desktops fight over the same
+  // radio/CPU and each one gets slower. Doing them one at a time keeps each
+  // negotiation fast; only the desktop the user actually opens is on the
+  // critical path anyway — the rest is best-effort background warm-up.
+  Future<void> _prewarmSequentially(List<Map<String, dynamic>> desktops) async {
+    for (final d in desktops) {
+      await _prewarm(d);
     }
   }
 

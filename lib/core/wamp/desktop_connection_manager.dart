@@ -8,10 +8,21 @@ import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
+/// TEMPORARY: force every connection through WebRTC and disable the silent
+/// routed fallback so P2P failures surface instead of being hidden.
+/// Remove once WebRTC is reliable enough to let routed act as a real fallback again.
+const bool kForceWebRtcOnly = true;
+
 class DesktopConnection {
   final Session session;
   final bool isP2P;
   bool isAgentOnline = false;
+
+  // Session.onDisconnect is a single-callback setter, already claimed by the
+  // manager for its own cache cleanup. UI code that wants to react to this
+  // connection dying (e.g. to flip a status badge without waiting for the
+  // user to pull-to-refresh) should set this instead of touching the session.
+  void Function()? onDisconnected;
 
   DesktopConnection({required this.session, required this.isP2P});
 
@@ -29,6 +40,10 @@ class DesktopConnectionManager {
 
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
+  // Realms whose agent doesn't expose the WebRTC offer procedure at all
+  // (wamp.error.no_such_procedure). Since routed fallback is disabled, retrying
+  // these is pure cost with no chance of success until the desktop agent updates.
+  final Set<String> _noWebRtcSupportRealms = {};
 
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
@@ -51,6 +66,16 @@ class DesktopConnectionManager {
     }
     _connections.remove(key);
     return null;
+  }
+
+  // Call as early as possible (login/session-restore) so the TURN round-trip
+  // is already paid for by the time the user reaches a desktop and triggers a
+  // real connect. Safe to call repeatedly; errors are swallowed since this is
+  // purely a warm-up — a real connect attempt will retry and surface failures.
+  Future<void> prefetchTurnCredentials(String authId, String privateKey) async {
+    try {
+      await _getTurnCredentials(authId, privateKey);
+    } catch (_) {}
   }
 
   Future<DesktopConnection> acquire({
@@ -122,20 +147,35 @@ class DesktopConnectionManager {
       await release(realm);
     }
 
+    final willUseWebRtc = webRtcEnabled || kForceWebRtcOnly;
+
+    if (willUseWebRtc && kForceWebRtcOnly && _noWebRtcSupportRealms.contains(realm)) {
+      _log('connect skipped realm=$realm reason=known_no_webrtc_support');
+      throw Exception('wamp.error.no_such_procedure (cached: desktop agent does not support WebRTC)');
+    }
+
     _log('connect start realm=$realm webrtcPreferred=$webRtcEnabled');
 
     final client = WampClient();
-    final signalingSession = await client.connectCryptoSignWithSerializer(
+    final signalingFuture = client.connectCryptoSignWithSerializer(
       authId: authId,
       privateKey: privateKey,
       realm: realm,
       serializer: CBORSerializer(),
     );
+    // Fetch TURN credentials concurrently with the signaling connect instead of
+    // after it — they're independent, so this takes it off the critical path.
+    final turnFuture = (willUseWebRtc && turnCredentials == null) ? _getTurnCredentials(authId, privateKey) : null;
+    // If signaling fails before we get to `await turnFuture!` below, don't let
+    // this become an unhandled Future error.
+    turnFuture?.ignore();
+
+    final signalingSession = await signalingFuture;
 
     Session finalSession = signalingSession;
     bool isP2P = false;
 
-    if (webRtcEnabled) {
+    if (willUseWebRtc) {
       if (!kIsWeb) {
         try {
           if (Platform.isAndroid) {
@@ -154,34 +194,71 @@ class DesktopConnectionManager {
           debugPrint('Failed to configure WebRTC audio: $e');
         }
       }
-      try {
-        Map<String, dynamic> credentials;
-        if (turnCredentials != null) {
-          credentials = turnCredentials;
-        } else {
-          credentials = await _getTurnCredentials(authId, privateKey);
+      // A timed-out WAMP join over an already-open data channel is transient
+      // transport flakiness (SCTP/ICE-timing), not a capability gap — retry
+      // with a fresh offer/answer before giving up. no_such_procedure is a
+      // permanent gap and is never worth retrying.
+      //
+      // Measured successful joins complete in well under 1.5s, so the first
+      // few attempts use a short timeout to fail fast and retry quickly; the
+      // final attempt uses a longer timeout in case it's just a one-off slow
+      // network, then the whole cycle stops — no unbounded retries.
+      const maxAttempts = 4;
+      const shortTimeout = Duration(seconds: 4);
+      const finalTimeout = Duration(seconds: 10);
+      Object? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        final timeout = attempt < maxAttempts ? shortTimeout : finalTimeout;
+        try {
+          final credentials = turnCredentials ?? await turnFuture!;
+
+          final config = web_rtc.ClientConfig(
+            realm: realm,
+            procedureWebRTCOffer: 'io.xconn.webrtc.offer',
+            topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
+            topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
+            iceServers: [
+              {'urls': 'stun:stun.l.google.com:19302'},
+              {
+                'urls': credentials['urls'],
+                'username': credentials['username'],
+                'credential': credentials['credential'],
+              },
+            ],
+            serializer: CBORSerializer(),
+            session: signalingSession,
+            authenticator: CryptoSignAuthenticator(authId, privateKey),
+          );
+
+          finalSession = await web_rtc.connectWAMP(config).timeout(timeout);
+          isP2P = true;
+          lastError = null;
+          _log('connect success realm=$realm transport=webrtc attempt=$attempt');
+          break;
+        } catch (e) {
+          lastError = e;
+          if (e.toString().contains('wamp.error.no_such_procedure')) {
+            _noWebRtcSupportRealms.add(realm);
+            break;
+          }
+          if (e is TimeoutException && attempt < maxAttempts) {
+            _log('connect retry realm=$realm attempt=$attempt timeout=$timeout reason=$e');
+            continue;
+          }
+          break;
         }
+      }
 
-        final config = web_rtc.ClientConfig(
-          realm: realm,
-          procedureWebRTCOffer: 'io.xconn.webrtc.offer',
-          topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
-          topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
-          iceServers: [
-            {'urls': 'stun:stun.l.google.com:19302'},
-            {'urls': credentials['urls'], 'username': credentials['username'], 'credential': credentials['credential']},
-          ],
-          serializer: CBORSerializer(),
-          session: signalingSession,
-          authenticator: CryptoSignAuthenticator(authId, privateKey),
-        );
-
-        finalSession = await web_rtc.connectWAMP(config).timeout(const Duration(seconds: 12));
-        isP2P = true;
-        _log('connect success realm=$realm transport=webrtc');
-      } catch (e) {
+      if (lastError != null) {
+        if (kForceWebRtcOnly) {
+          _log('connect failed realm=$realm webrtc_failed=$lastError (routed fallback disabled)');
+          try {
+            await signalingSession.close();
+          } catch (_) {}
+          throw lastError;
+        }
         isP2P = false;
-        _log('connect fallback realm=$realm webrtc_failed=$e');
+        _log('connect fallback realm=$realm webrtc_failed=$lastError');
       }
     }
 
@@ -195,6 +272,7 @@ class DesktopConnectionManager {
         connection.isAgentOnline = false;
         _log('session disconnected realm=$realm active=${_connections.length}');
       }
+      connection.onDisconnected?.call();
     });
 
     return connection;
@@ -218,6 +296,7 @@ class DesktopConnectionManager {
     for (final realm in realms) {
       await release(realm);
     }
+    _noWebRtcSupportRealms.clear();
   }
 
   Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) {
