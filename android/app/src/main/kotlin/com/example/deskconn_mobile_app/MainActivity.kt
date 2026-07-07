@@ -28,11 +28,6 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notifId)
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -175,6 +170,11 @@ class MainActivity : FlutterActivity() {
 
     private fun showNotification() {
         ensureNotificationChannel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notifId)
+        }
         val closePi = PendingIntent.getBroadcast(
             this, 0,
             Intent(this, TerminalNotificationActionReceiver::class.java),
