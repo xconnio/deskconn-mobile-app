@@ -9,7 +9,7 @@ import 'package:xconn/src/types.dart';
 import 'blocking_queue.dart';
 import 'terminal_background_service.dart';
 import 'terminal_encryption.dart';
-import '../wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 
 class TerminalController {
   final Terminal terminal = Terminal();
@@ -27,9 +27,9 @@ class TerminalController {
   bool _clientKeySent = false;
   bool _disposed = false;
   Timer? _resizeTimer;
-  String _inputBuffer = '';
   Encryption? _encryption;
   bool _closeFrameSent = false;
+  bool _exitFired = false;
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
@@ -40,6 +40,14 @@ class TerminalController {
 
   void _log(String message) {
     debugPrint('[Terminal ${config.realm} ${DateTime.now().toIso8601String()}] $message');
+  }
+
+  void _fireExit() {
+    if (_exitFired) return;
+    _exitFired = true;
+    final exit = onExit;
+    onExit = null;
+    exit?.call();
   }
 
   Future<void> start() async {
@@ -77,9 +85,7 @@ class TerminalController {
       _cleanup();
       _log('shell stream finished disposed=$_disposed');
       onClosed?.call();
-      final exit = onExit;
-      onExit = null;
-      exit?.call();
+      _fireExit();
     }
   }
 
@@ -110,22 +116,6 @@ class TerminalController {
       if (_keyReceived) {
         _outgoingQueue.put(Progress(args: [_encodeOutboundText(output)], options: {'progress': true}));
       }
-
-      for (final rune in output.runes) {
-        final char = String.fromCharCode(rune);
-        if (char == '\r' || char == '\n') {
-          final cmd = _inputBuffer.trim();
-          if (cmd == 'exit' || cmd == 'logout') onExit?.call();
-          _inputBuffer = '';
-        } else if (rune == 4) {
-          if (_inputBuffer.isEmpty) onExit?.call();
-          _inputBuffer = '';
-        } else if (rune >= 32) {
-          _inputBuffer += char;
-        } else {
-          _inputBuffer = '';
-        }
-      }
     };
   }
 
@@ -146,7 +136,11 @@ class TerminalController {
   }
 
   Future<void> _receiver(Result result) async {
-    if (result.args.isEmpty) return;
+    if (result.args.isEmpty) {
+      _log('shell process exited (empty frame)');
+      _fireExit();
+      return;
+    }
     final raw = result.args.first;
     String text;
     try {
@@ -236,8 +230,6 @@ class TerminalController {
     _disposed = true;
     _running = false;
     _cleanup();
-    final exit = onExit;
-    onExit = null;
-    exit?.call();
+    _fireExit();
   }
 }
