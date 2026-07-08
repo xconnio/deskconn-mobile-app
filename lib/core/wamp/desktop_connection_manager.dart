@@ -8,10 +8,10 @@ import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
-/// TEMPORARY: force every connection through WebRTC and disable the silent
-/// routed fallback so P2P failures surface instead of being hidden.
-/// Remove once WebRTC is reliable enough to let routed act as a real fallback again.
-const bool kForceWebRtcOnly = true;
+/// Forces every connection attempt through WebRTC even when the user has P2P
+/// disabled in settings, and skips the routed fallback on failure. Useful to
+/// flip back on temporarily when diagnosing WebRTC regressions in isolation.
+const bool kForceWebRtcOnly = false;
 
 class DesktopConnection {
   final Session session;
