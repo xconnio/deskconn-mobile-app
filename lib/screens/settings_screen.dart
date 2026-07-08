@@ -23,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
     });
@@ -31,8 +32,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setWebRtc(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(prefKeyWebRtcEnabled, value);
+    if (!mounted) return;
     setState(() => _webRtcEnabled = value);
-    // Invalidate cached sessions so the next connection uses the new mode
     await DesktopConnectionManager().invalidateAll();
   }
 

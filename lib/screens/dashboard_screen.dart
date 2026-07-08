@@ -1,6 +1,7 @@
 import 'package:deskconn_mobile_app/core/wamp/ui.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
+import 'package:deskconn_mobile_app/screens/devices_screen.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

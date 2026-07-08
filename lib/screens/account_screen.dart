@@ -21,6 +21,13 @@ class _AccountScreenState extends State<AccountScreen> {
   String? error;
 
   @override
+  void dispose() {
+    nameCtrl.dispose();
+    passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final session = context.read<SessionProvider>();
