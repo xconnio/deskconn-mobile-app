@@ -32,6 +32,27 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
+  // User-initiated actions were previously calling _session?.call(...) and
+  // silently doing nothing when the connection was gone — no feedback at
+  // all. This routes them through one place that reports the failure.
+  Future<void> _run(Future<void> Function(Session session) action) async {
+    final session = _session;
+    if (session == null) {
+      _showOffline();
+      return;
+    }
+    try {
+      await action(session);
+    } catch (_) {
+      if (mounted) _showOffline();
+    }
+  }
+
+  void _showOffline() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Desktop is offline. Action not sent.')));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,30 +99,30 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Future<void> _toggleMute() async {
-    try {
-      final result = await _session?.call(_procAudioToggleMute);
-      if (mounted && result != null && result.args.isNotEmpty) {
+    await _run((session) async {
+      final result = await session.call(_procAudioToggleMute);
+      if (mounted && result.args.isNotEmpty) {
         setState(() => _isMuted = result.args[0] as bool);
       }
-    } catch (_) {}
+    });
   }
 
   Future<void> _lockScreen() async {
     if (_locking) return;
     setState(() => _locking = true);
     try {
-      await _session?.call(_procLock);
+      await _run((session) => session.call(_procLock));
     } finally {
       if (mounted) setState(() => _locking = false);
     }
   }
 
   Future<void> _setBrightness(int percent) async {
-    await _session?.call(_procBrightnessSet, args: [percent]);
+    await _run((session) => session.call(_procBrightnessSet, args: [percent]));
   }
 
   Future<void> _mprisCall(String proc) async {
-    await _session?.call(proc);
+    await _run((session) => session.call(proc));
   }
 
   Future<void> _togglePlayPause() async {
