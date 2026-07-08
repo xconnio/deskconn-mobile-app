@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/widgets/app_shell.dart';
@@ -30,7 +31,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      final res = await session.session!.call('io.xconn.deskconn.device.key.list');
+      final res = await session.session!.call('io.xconn.deskconn.device.key.list').timeout(DeskconnConfig.callTimeout);
       setState(() {
         devices = List<Map<String, dynamic>>.from(res.args);
         loading = false;
@@ -50,7 +51,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      await session.session!.call('io.xconn.deskconn.device.delete', args: [deviceId]);
+      await session.session!
+          .call('io.xconn.deskconn.device.delete', args: [deviceId])
+          .timeout(DeskconnConfig.callTimeout);
     } catch (e) {
       if (mounted) {
         setState(() => revoking = false);

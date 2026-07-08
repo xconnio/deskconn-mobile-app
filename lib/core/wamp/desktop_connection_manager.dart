@@ -331,7 +331,9 @@ class DesktopConnectionManager {
         privateKey: privateKey,
         realm: DeskconnConfig.realm,
       );
-      final result = await session.call('io.xconn.deskconn.coturn.credentials.create');
+      final result = await session
+          .call('io.xconn.deskconn.coturn.credentials.create')
+          .timeout(DeskconnConfig.callTimeout);
       final c = result.args[0] as Map<String, dynamic>;
       _log('turn fetch success');
       final creds = {

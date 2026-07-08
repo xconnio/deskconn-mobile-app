@@ -79,7 +79,7 @@ class SessionProvider extends ChangeNotifier {
     try {
       session = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
 
-      final res = await session!.call("io.xconn.deskconn.account.get");
+      final res = await session!.call("io.xconn.deskconn.account.get").timeout(DeskconnConfig.callTimeout);
 
       if (res.args.isEmpty) {
         throw Exception("Empty account response");
@@ -126,7 +126,7 @@ class SessionProvider extends ChangeNotifier {
         if (privateKey != null && email != null) {
           session = await _client.connectCryptoSign(authId: email, privateKey: privateKey, realm: DeskconnConfig.realm);
 
-          final res = await session!.call("io.xconn.deskconn.account.get");
+          final res = await session!.call("io.xconn.deskconn.account.get").timeout(DeskconnConfig.callTimeout);
           if (res.args.isEmpty) throw Exception("Empty account");
 
           account = Map<String, dynamic>.from(res.args[0]);
@@ -158,7 +158,7 @@ class SessionProvider extends ChangeNotifier {
 
     try {
       final s = await _ensureSession();
-      final res = await s.call("io.xconn.deskconn.desktop.list");
+      final res = await s.call("io.xconn.deskconn.desktop.list").timeout(DeskconnConfig.callTimeout);
       desktops = List<Map<String, dynamic>>.from(res.args);
     } catch (e) {
       error = "Failed to load desktops";
@@ -175,7 +175,7 @@ class SessionProvider extends ChangeNotifier {
       final identity = await DeviceIdentity.deviceId();
       if (identity != null) {
         try {
-          await session?.call('io.xconn.deskconn.device.delete', args: [identity]);
+          await session?.call('io.xconn.deskconn.device.delete', args: [identity]).timeout(DeskconnConfig.callTimeout);
         } catch (_) {}
       }
       await session?.close();
@@ -221,7 +221,9 @@ class SessionProvider extends ChangeNotifier {
       final deviceName = 'android-$timestamp-$randomSuffix';
       final deviceModel = await _getDeviceModel();
 
-      final res = await session!.call('io.xconn.deskconn.device.create', args: [deviceName, publicKeyHex]);
+      final res = await session!
+          .call('io.xconn.deskconn.device.create', args: [deviceName, publicKeyHex])
+          .timeout(DeskconnConfig.callTimeout);
 
       if (res.args.isEmpty) {
         throw Exception('Device registration failed: empty response');
@@ -275,7 +277,7 @@ class SessionProvider extends ChangeNotifier {
 
     try {
       final s = await _ensureSession();
-      final res = await s.call("io.xconn.deskconn.organization.list");
+      final res = await s.call("io.xconn.deskconn.organization.list").timeout(DeskconnConfig.callTimeout);
 
       organizations = List<Map<String, dynamic>>.from(res.args);
     } catch (_) {
@@ -294,9 +296,13 @@ class SessionProvider extends ChangeNotifier {
 
     try {
       final s = await _ensureSession();
-      final inboxRes = await s.call("io.xconn.deskconn.organization.invitation.inbox.list");
+      final inboxRes = await s
+          .call("io.xconn.deskconn.organization.invitation.inbox.list")
+          .timeout(DeskconnConfig.callTimeout);
 
-      final outboxRes = await s.call("io.xconn.deskconn.organization.invitation.outbox.list");
+      final outboxRes = await s
+          .call("io.xconn.deskconn.organization.invitation.outbox.list")
+          .timeout(DeskconnConfig.callTimeout);
 
       invitationsInbox = List<Map<String, dynamic>>.from(inboxRes.args);
 
@@ -312,7 +318,9 @@ class SessionProvider extends ChangeNotifier {
   Future<void> respondInvitation(String invitationId, String action) async {
     try {
       final s = await _ensureSession();
-      await s.call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action]);
+      await s
+          .call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action])
+          .timeout(DeskconnConfig.callTimeout);
 
       await loadInvitations();
       await loadOrganizations();
@@ -325,7 +333,9 @@ class SessionProvider extends ChangeNotifier {
   Future<void> createInvitation(String orgId, String email, String role) async {
     try {
       final s = await _ensureSession();
-      await s.call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role]);
+      await s
+          .call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role])
+          .timeout(DeskconnConfig.callTimeout);
 
       await loadInvitations();
     } catch (_) {

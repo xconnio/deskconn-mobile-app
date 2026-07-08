@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:flutter/material.dart';
@@ -65,7 +66,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final session = _session;
     if (session == null) return;
     try {
-      final result = await session.call(_procBrightnessGet);
+      final result = await session.call(_procBrightnessGet).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         setState(() {
           _brightness = (result.args[0] as num).toDouble().clamp(1, 100);
@@ -79,7 +80,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final session = _session;
     if (session == null) return;
     try {
-      final result = await session.call(_procMprisPlayers);
+      final result = await session.call(_procMprisPlayers).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         final map = result.args[0] as Map;
         setState(() => _playerNames = map.values.map((v) => v.toString()).toList());
@@ -91,7 +92,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final session = _session;
     if (session == null) return;
     try {
-      final result = await session.call(_procAudioIsMuted);
+      final result = await session.call(_procAudioIsMuted).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         setState(() => _isMuted = result.args[0] as bool);
       }
@@ -100,7 +101,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   Future<void> _toggleMute() async {
     await _run((session) async {
-      final result = await session.call(_procAudioToggleMute);
+      final result = await session.call(_procAudioToggleMute).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         setState(() => _isMuted = result.args[0] as bool);
       }
@@ -111,18 +112,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     if (_locking) return;
     setState(() => _locking = true);
     try {
-      await _run((session) => session.call(_procLock));
+      await _run((session) => session.call(_procLock).timeout(DeskconnConfig.callTimeout));
     } finally {
       if (mounted) setState(() => _locking = false);
     }
   }
 
   Future<void> _setBrightness(int percent) async {
-    await _run((session) => session.call(_procBrightnessSet, args: [percent]));
+    await _run((session) => session.call(_procBrightnessSet, args: [percent]).timeout(DeskconnConfig.callTimeout));
   }
 
   Future<void> _mprisCall(String proc) async {
-    await _run((session) => session.call(proc));
+    await _run((session) => session.call(proc).timeout(DeskconnConfig.callTimeout));
   }
 
   Future<void> _togglePlayPause() async {

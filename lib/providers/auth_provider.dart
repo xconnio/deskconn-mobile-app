@@ -34,7 +34,9 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session.call("io.xconn.deskconn.account.create", args: [email, name, password]);
+      await session
+          .call("io.xconn.deskconn.account.create", args: [email, name, password])
+          .timeout(DeskconnConfig.callTimeout);
 
       pendingEmail = email;
       _pendingPassword = password;
@@ -60,7 +62,9 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session.call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp]);
+      await session
+          .call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp])
+          .timeout(DeskconnConfig.callTimeout);
 
       notifyListeners();
       return true;
@@ -76,7 +80,9 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session.call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail]);
+      await session
+          .call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail])
+          .timeout(DeskconnConfig.callTimeout);
     } catch (e) {
       error = e.toString();
       notifyListeners();
@@ -89,7 +95,9 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session.call("io.xconn.deskconn.account.password.forget", args: [email]);
+      await session
+          .call("io.xconn.deskconn.account.password.forget", args: [email])
+          .timeout(DeskconnConfig.callTimeout);
 
       pendingEmail = email;
       notifyListeners();
@@ -113,7 +121,9 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session.call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp]);
+      await session
+          .call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp])
+          .timeout(DeskconnConfig.callTimeout);
 
       notifyListeners();
       return true;
