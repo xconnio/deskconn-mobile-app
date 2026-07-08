@@ -163,7 +163,11 @@ class FileExplorerController {
       if (queue.isEmpty) {
         if (done) break;
         wakeUp = Completer<void>();
-        await wakeUp!.future;
+        // Idle timeout, not a total-transfer timeout — resets every time data
+        // arrives, so a large-but-progressing download isn't cut off, but a
+        // stalled stream (connection half-open, no more data or completion
+        // ever coming) doesn't hang here forever.
+        await wakeUp!.future.timeout(DeskconnConfig.callTimeout);
         continue;
       }
 
@@ -208,6 +212,12 @@ class FileExplorerController {
     Future<void> receiver(Result _) async {}
 
     final callFuture = session.callProgressiveProgress('io.xconn.deskconn.deskconnd.file.upload', sender, receiver);
+    // A dead connection mid-transfer previously wasn't noticed until after
+    // the entire local file had already been read and encrypted — wasted
+    // work on a call that's already failed. This lets the chunk loop below
+    // bail out as soon as the call errors, instead of only checking at the end.
+    Object? uploadError;
+    callFuture.then((_) {}, onError: (Object e) => uploadError = e);
 
     try {
       outgoing.put(
@@ -247,6 +257,7 @@ class FileExplorerController {
       final raf = await file.open();
       try {
         while (true) {
+          if (uploadError != null) throw uploadError!;
           final chunk = await raf.read(chunkSize);
           if (chunk.isEmpty) break;
           outgoing.put(Progress(args: ['D', seq, enc.encrypt(chunk)], options: {'progress': true}));
