@@ -1,6 +1,7 @@
 import 'package:deskconn_mobile_app/core/wamp/ui.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
+import 'package:deskconn_mobile_app/screens/devices_screen.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -38,7 +39,14 @@ class DashboardScreen extends StatelessWidget {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
               },
             ),
-            _DashboardTile(icon: Icons.devices, title: "Devices", subtitle: "Manage trusted devices", onTap: () {}),
+            _DashboardTile(
+              icon: Icons.devices,
+              title: "Devices",
+              subtitle: "Manage trusted devices",
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const DevicesScreen()));
+              },
+            ),
             _DashboardTile(
               icon: Icons.person,
               title: "Account",

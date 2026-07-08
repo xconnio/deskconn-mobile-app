@@ -1,5 +1,8 @@
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
+import 'package:deskconn_mobile_app/screens/devices_screen.dart';
+import 'package:deskconn_mobile_app/screens/invitations_screen.dart';
+import 'package:deskconn_mobile_app/screens/organizations_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
@@ -103,6 +106,36 @@ class AppShell extends StatelessWidget {
                         context,
                         section: AppShellSection.desktops,
                         builder: (_) => const DesktopListScreen(),
+                      ),
+                    ),
+                    _NavTile(
+                      icon: Icons.devices_outlined,
+                      label: 'Devices',
+                      selected: currentSection == AppShellSection.devices,
+                      onTap: () => _openSection(
+                        context,
+                        section: AppShellSection.devices,
+                        builder: (_) => const DevicesScreen(),
+                      ),
+                    ),
+                    _NavTile(
+                      icon: Icons.business_outlined,
+                      label: 'Organizations',
+                      selected: currentSection == AppShellSection.organizations,
+                      onTap: () => _openSection(
+                        context,
+                        section: AppShellSection.organizations,
+                        builder: (_) => const OrganizationsScreen(),
+                      ),
+                    ),
+                    _NavTile(
+                      icon: Icons.mail_outline,
+                      label: 'Invitations',
+                      selected: currentSection == AppShellSection.invitations,
+                      onTap: () => _openSection(
+                        context,
+                        section: AppShellSection.invitations,
+                        builder: (_) => const InvitationsScreen(),
                       ),
                     ),
                     _NavTile(
