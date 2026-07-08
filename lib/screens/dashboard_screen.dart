@@ -38,7 +38,6 @@ class DashboardScreen extends StatelessWidget {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()));
               },
             ),
-            _DashboardTile(icon: Icons.devices, title: "Devices", subtitle: "Manage trusted devices", onTap: () {}),
             _DashboardTile(
               icon: Icons.person,
               title: "Account",

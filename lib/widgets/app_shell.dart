@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'theme_toggle.dart';
 
-enum AppShellSection { account, desktops, devices, organizations, invitations, settings }
+enum AppShellSection { account, desktops, settings }
 
 class AppShell extends StatelessWidget {
   final String title;

@@ -1,0 +1,175 @@
+diff --git a/lib/screens/remote_control_screen.dart b/lib/screens/remote_control_screen.dart
+index 20ec7f0..c51111d 100644
+--- a/lib/screens/remote_control_screen.dart
++++ b/lib/screens/remote_control_screen.dart
+@@ -1,5 +1,5 @@
+ import 'dart:io';
+-import 'package:flutter/services.dart';
++import 'dart:typed_data';
+ 
+ import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
+ import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+@@ -17,7 +17,8 @@ const _procMprisPrev = 'io.xconn.deskconn.deskconnd.mpris.previous';
+ const _procMprisNext = 'io.xconn.deskconn.deskconnd.mpris.next';
+ const _procAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
+ const _procAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
+-const _procScreenshot = 'io.xconn.deskconn.deskconnd.screenshot';
++const _procScreenshot       = 'io.xconn.deskconn.deskconnd.screenshot';
++const _procScreenshotEnable = 'io.xconn.deskconn.deskconnd.screenshot.enable';
+ 
+ class RemoteControlScreen extends StatefulWidget {
+   final DesktopSessionLaunchConfig config;
+@@ -148,14 +149,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
+       if (!mounted) return;
+ 
+       final msg = e.toString();
+-      final bool isDisabled = msg.contains('screenshot not enabled');
++      final bool needsEnable = msg.contains('screenshot not enabled') || msg.contains('portal response code 2');
+ 
+       showDialog<void>(
+         context: context,
+         builder: (ctx) => AlertDialog(
+-          title: Text(isDisabled ? 'Screenshots Disabled' : 'Screenshot Failed'),
+-          content: isDisabled ? _ScreenshotDisabledContent(command: 'desk screenshot enable') : Text(msg),
+-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
++          title: Text(needsEnable ? 'Permission Required' : 'Screenshot Failed'),
++          content: needsEnable
++              ? _ScreenshotEnableContent(onEnable: _enableScreenshot)
++              : Text(msg),
++          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+         ),
+       );
+     } finally {
+@@ -165,6 +168,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
+     }
+   }
+ 
++  Future<String> _enableScreenshot() async {
++    final session = _session;
++    if (session == null) throw Exception('Not connected');
++    final result = await session.call(_procScreenshotEnable);
++    return result.args.isNotEmpty ? result.args[0] as String : 'enabled';
++  }
++
+   void _showBrightnessSheet() {
+     showModalBottomSheet<void>(
+       context: context,
+@@ -232,63 +242,76 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
+   }
+ }
+ 
+-class _ScreenshotDisabledContent extends StatefulWidget {
+-  final String command;
+-  const _ScreenshotDisabledContent({required this.command});
++class _ScreenshotEnableContent extends StatefulWidget {
++  final Future<String> Function() onEnable;
++  const _ScreenshotEnableContent({required this.onEnable});
+ 
+   @override
+-  State<_ScreenshotDisabledContent> createState() => _ScreenshotDisabledContentState();
++  State<_ScreenshotEnableContent> createState() => _ScreenshotEnableContentState();
+ }
+ 
+-class _ScreenshotDisabledContentState extends State<_ScreenshotDisabledContent> {
+-  bool _copied = false;
++class _ScreenshotEnableContentState extends State<_ScreenshotEnableContent> {
++  bool _enabling = false;
++  String? _result;
++  String? _error;
+ 
+-  Future<void> _copy() async {
+-    await Clipboard.setData(ClipboardData(text: widget.command));
+-    setState(() => _copied = true);
+-    await Future.delayed(const Duration(seconds: 2));
+-    if (mounted) setState(() => _copied = false);
++  Future<void> _enable() async {
++    setState(() {
++      _enabling = true;
++      _error = null;
++    });
++    try {
++      final result = await widget.onEnable();
++      if (mounted) setState(() => _result = result);
++    } catch (e) {
++      if (mounted) setState(() => _error = e.toString());
++    } finally {
++      if (mounted) setState(() => _enabling = false);
++    }
+   }
+ 
+   @override
+   Widget build(BuildContext context) {
++    if (_result != null) {
++      final alreadyEnabled = _result == 'already_enabled';
++      return Text(
++        alreadyEnabled
++            ? 'Screenshots are already enabled on this machine.'
++            : 'Screenshots enabled successfully.',
++      );
++    }
++
+     return Column(
+       mainAxisSize: MainAxisSize.min,
+       crossAxisAlignment: CrossAxisAlignment.start,
+       children: [
+-        const Text('Screenshots are disabled on this machine.'),
+-        const SizedBox(height: 12),
+-        const Text('Run on the machine to enable:'),
+-        const SizedBox(height: 8),
+-        Container(
+-          decoration: BoxDecoration(
+-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+-            borderRadius: BorderRadius.circular(8),
++        const Text('Screenshot permission is not granted on this machine.'),
++        if (_error != null) ...[
++          const SizedBox(height: 8),
++          Text(
++            'Permission denied. Try again and click Allow.',
++            style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13),
+           ),
+-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+-          child: Row(
+-            children: [
+-              Expanded(
+-                child: Text(
+-                  widget.command,
+-                  style: TextStyle(
+-                    fontFamily: 'monospace',
+-                    fontSize: 13,
+-                    color: Theme.of(context).colorScheme.primary,
+-                    fontWeight: FontWeight.w600,
+-                  ),
++        ],
++        const SizedBox(height: 16),
++        Center(
++          child: _enabling
++              ? Column(
++                  mainAxisSize: MainAxisSize.min,
++                  children: [
++                    const CircularProgressIndicator(),
++                    const SizedBox(height: 12),
++                    Text(
++                      'Click Allow in the dialog on your desktop…',
++                      style: Theme.of(context).textTheme.bodySmall,
++                      textAlign: TextAlign.center,
++                    ),
++                  ],
++                )
++              : FilledButton(
++                  onPressed: _enable,
++                  child: const Text('Enable Screenshots'),
+                 ),
+-              ),
+-              IconButton(
+-                icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 18),
+-                color: _copied ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+-                tooltip: _copied ? 'Copied!' : 'Copy',
+-                onPressed: _copy,
+-                padding: EdgeInsets.zero,
+-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+-              ),
+-            ],
+-          ),
+         ),
+       ],
+     );
