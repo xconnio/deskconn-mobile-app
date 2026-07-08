@@ -78,7 +78,10 @@ class TerminalController {
     try {
       await connection.session.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
     } catch (e) {
-      if (!_disposed) terminal.write('\r\nTerminal error: $e\r\n');
+      // Mirrors what a real ssh client prints on a dropped connection —
+      // a clean disconnect notice, not a raw exception dump — then exits
+      // the session the same way a normal shell exit does.
+      if (!_disposed) terminal.write('\r\nConnection to ${config.desktopName} closed.\r\n');
       _log('shell stream error=$e');
     } finally {
       _running = false;
