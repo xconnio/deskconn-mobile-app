@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:app_settings/app_settings.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
@@ -80,6 +82,52 @@ class DeskconnApp extends StatelessWidget {
   }
 }
 
+// Auto-dismisses itself the moment connectivity comes back, so there's no
+// separate reconnect-tracking logic needed at the call site.
+class _OfflineDialog extends StatefulWidget {
+  const _OfflineDialog();
+
+  @override
+  State<_OfflineDialog> createState() => _OfflineDialogState();
+}
+
+class _OfflineDialogState extends State<_OfflineDialog> {
+  @override
+  void initState() {
+    super.initState();
+    ConnectivityService().addListener(_maybeClose);
+  }
+
+  @override
+  void dispose() {
+    ConnectivityService().removeListener(_maybeClose);
+    super.dispose();
+  }
+
+  void _maybeClose() {
+    if (mounted && ConnectivityService().hasConnection) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('No internet connection'),
+      content: const Text(
+        'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Dismiss')),
+        FilledButton(
+          onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
+          child: const Text('Open Settings'),
+        ),
+      ],
+    );
+  }
+}
+
 class AppBootstrap extends StatefulWidget {
   const AppBootstrap({super.key});
 
@@ -90,10 +138,14 @@ class AppBootstrap extends StatefulWidget {
 class _AppBootstrapState extends State<AppBootstrap> {
   late final Future<void> _initialization;
   bool _notificationActive = false;
+  bool _wasOffline = false;
 
   @override
   void initState() {
     super.initState();
+    _wasOffline = !ConnectivityService().hasConnection;
+    ConnectivityService().addListener(_handleConnectivityChange);
+
     final completer = Completer<void>();
     _initialization = completer.future;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -109,6 +161,35 @@ class _AppBootstrapState extends State<AppBootstrap> {
       }
       unawaited(_checkForUpdate());
     });
+  }
+
+  @override
+  void dispose() {
+    ConnectivityService().removeListener(_handleConnectivityChange);
+    super.dispose();
+  }
+
+  // Nothing previously told the user the device had no connectivity at all,
+  // let alone offered a way to fix it, and nothing refreshed after a drop —
+  // the user had to manually pull-to-refresh or reopen a screen. This shows
+  // a dialog (with a shortcut to Wi-Fi settings) on loss, and on restore
+  // re-triggers desktop list loading, which itself reconnects the account
+  // session (see SessionProvider._ensureSession).
+  void _handleConnectivityChange() {
+    final online = ConnectivityService().hasConnection;
+    if (!online && !_wasOffline) {
+      _showOfflineDialog();
+    } else if (online && _wasOffline && mounted) {
+      final session = context.read<SessionProvider>();
+      if (session.loggedIn) unawaited(session.loadDesktops());
+    }
+    _wasOffline = !online;
+  }
+
+  void _showOfflineDialog() {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return;
+    unawaited(showDialog<void>(context: ctx, barrierDismissible: true, builder: (_) => const _OfflineDialog()));
   }
 
   Future<void> _checkForUpdate() async {
