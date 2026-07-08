@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -41,9 +42,11 @@ class DesktopConnectionManager {
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
   // Realms whose agent doesn't expose the WebRTC offer procedure at all
-  // (wamp.error.no_such_procedure). Since routed fallback is disabled, retrying
-  // these is pure cost with no chance of success until the desktop agent updates.
+  // (wamp.error.no_such_procedure). Only consulted when kForceWebRtcOnly is
+  // on — with routed fallback restored, retrying these just costs one quick
+  // failed attempt before falling back, not a hard failure.
   final Set<String> _noWebRtcSupportRealms = {};
+  final Random _retryJitter = Random();
 
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
@@ -242,7 +245,12 @@ class DesktopConnectionManager {
             break;
           }
           if (e is TimeoutException && attempt < maxAttempts) {
-            _log('connect retry realm=$realm attempt=$attempt timeout=$timeout reason=$e');
+            // Linear backoff plus jitter so repeated failures (e.g. a TURN
+            // server that's down for everyone) don't hammer signaling/TURN
+            // back-to-back across many devices retrying in lockstep.
+            final backoff = Duration(milliseconds: 300 * attempt + _retryJitter.nextInt(300));
+            _log('connect retry realm=$realm attempt=$attempt timeout=$timeout backoff=$backoff reason=$e');
+            await Future.delayed(backoff);
             continue;
           }
           break;
