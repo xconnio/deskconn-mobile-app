@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:xconn/xconn.dart';
 // ignore: implementation_imports
 import 'package:xconn/src/types.dart';
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/blocking_queue.dart';
 import 'models.dart';
@@ -35,7 +36,9 @@ class FileExplorerController {
 
   Future<void> _doKeyExchange() async {
     _encryption = await Encryption.create();
-    final res = await session.call('io.xconn.deskconn.deskconnd.key.exchange', args: [_encryption!.clientPublicKey]);
+    final res = await session
+        .call('io.xconn.deskconn.deskconnd.key.exchange', args: [_encryption!.clientPublicKey])
+        .timeout(DeskconnConfig.callTimeout);
 
     if (res.args.isEmpty) {
       throw Exception('Key exchange failed: empty response');
@@ -51,7 +54,9 @@ class FileExplorerController {
   Future<FileBrowseResult> browse(String path) async {
     await ensureKeyExchanged();
     final encryptedPath = _encryption!.encrypt(utf8.encode(path));
-    final res = await session.call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPath]);
+    final res = await session
+        .call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPath])
+        .timeout(DeskconnConfig.callTimeout);
     if (res.args.isEmpty) throw Exception('Browse failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
     return FileBrowseResult.fromJson(jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>);
@@ -61,7 +66,9 @@ class FileExplorerController {
     await ensureKeyExchanged();
     final payload = {'category': category};
     final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
-    final res = await session.call('io.xconn.deskconn.deskconnd.index.query', args: [encrypted]);
+    final res = await session
+        .call('io.xconn.deskconn.deskconnd.index.query', args: [encrypted])
+        .timeout(DeskconnConfig.callTimeout);
     if (res.args.isEmpty) throw Exception('Index query failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
     return FileBrowseResult.fromJson(jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>);
@@ -271,7 +278,7 @@ class FileExplorerController {
   Future<void> _callEncrypted(String procedure, Map<String, dynamic> payload) async {
     await ensureKeyExchanged();
     final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
-    await session.call(procedure, args: [encrypted]);
+    await session.call(procedure, args: [encrypted]).timeout(DeskconnConfig.callTimeout);
   }
 
   Uint8List _coerceBytes(dynamic raw) {

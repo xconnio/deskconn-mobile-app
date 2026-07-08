@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -52,10 +53,9 @@ class _AccountScreenState extends State<AccountScreen> {
     });
 
     try {
-      final res = await session.session!.call(
-        'io.xconn.deskconn.account.update',
-        kwargs: {'name': nameCtrl.text.trim()},
-      );
+      final res = await session.session!
+          .call('io.xconn.deskconn.account.update', kwargs: {'name': nameCtrl.text.trim()})
+          .timeout(DeskconnConfig.callTimeout);
 
       if (!mounted) return;
 
@@ -84,7 +84,9 @@ class _AccountScreenState extends State<AccountScreen> {
 
     try {
       final session = context.read<SessionProvider>();
-      await session.session!.call('io.xconn.deskconn.account.update', kwargs: {'password': passCtrl.text});
+      await session.session!
+          .call('io.xconn.deskconn.account.update', kwargs: {'password': passCtrl.text})
+          .timeout(DeskconnConfig.callTimeout);
       passCtrl.clear();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
@@ -123,7 +125,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      await session.session!.call('io.xconn.deskconn.account.delete');
+      await session.session!.call('io.xconn.deskconn.account.delete').timeout(DeskconnConfig.callTimeout);
     } catch (_) {}
 
     await session.logout();

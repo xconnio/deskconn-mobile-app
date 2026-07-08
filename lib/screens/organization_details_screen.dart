@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/constants.dart';
 import '../providers/session_provider.dart';
 
 class OrganizationDetailsScreen extends StatefulWidget {
@@ -31,7 +32,9 @@ class _OrganizationDetailsScreenState extends State<OrganizationDetailsScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      final res = await session.session!.call("io.xconn.deskconn.organization.get", args: [widget.id]);
+      final res = await session.session!
+          .call("io.xconn.deskconn.organization.get", args: [widget.id])
+          .timeout(DeskconnConfig.callTimeout);
       if (res.args.isEmpty) throw Exception('Empty response');
       members = List<Map<String, dynamic>>.from(res.args[0]['members'] ?? []);
     } catch (e) {
