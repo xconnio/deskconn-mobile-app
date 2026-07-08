@@ -18,6 +18,35 @@ class SessionProvider extends ChangeNotifier {
   Map<String, dynamic>? account;
   String? error;
 
+  Future<Session>? _reconnecting;
+
+  // Lazily reconnects the account session using the stored device identity —
+  // mirrors AuthProvider._getSession()'s pattern. Without this, a dropped
+  // connection (network blip, server restart) left every account-level call
+  // failing silently until the user logged out and back in.
+  Future<Session> _ensureSession() {
+    final current = session;
+    if (current != null && current.isConnected()) return Future.value(current);
+    return _reconnecting ??= _reconnect().whenComplete(() => _reconnecting = null);
+  }
+
+  Future<Session> _reconnect() async {
+    final privateKey = await DeviceIdentity.privateKey();
+    final email = await DeviceIdentity.lastEmail();
+    if (privateKey == null || email == null) {
+      throw Exception('No stored credentials to reconnect with');
+    }
+
+    final newSession = await _client.connectCryptoSign(
+      authId: email,
+      privateKey: privateKey,
+      realm: DeskconnConfig.realm,
+    );
+    session = newSession;
+    notifyListeners();
+    return newSession;
+  }
+
   List<Map<String, dynamic>> organizations = [];
   List<Map<String, dynamic>> invitationsInbox = [];
   List<Map<String, dynamic>> invitationsOutbox = [];
@@ -128,7 +157,8 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await session!.call("io.xconn.deskconn.desktop.list");
+      final s = await _ensureSession();
+      final res = await s.call("io.xconn.deskconn.desktop.list");
       desktops = List<Map<String, dynamic>>.from(res.args);
     } catch (e) {
       error = "Failed to load desktops";
@@ -244,7 +274,8 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await session!.call("io.xconn.deskconn.organization.list");
+      final s = await _ensureSession();
+      final res = await s.call("io.xconn.deskconn.organization.list");
 
       organizations = List<Map<String, dynamic>>.from(res.args);
     } catch (_) {
@@ -262,9 +293,10 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final inboxRes = await session!.call("io.xconn.deskconn.organization.invitation.inbox.list");
+      final s = await _ensureSession();
+      final inboxRes = await s.call("io.xconn.deskconn.organization.invitation.inbox.list");
 
-      final outboxRes = await session!.call("io.xconn.deskconn.organization.invitation.outbox.list");
+      final outboxRes = await s.call("io.xconn.deskconn.organization.invitation.outbox.list");
 
       invitationsInbox = List<Map<String, dynamic>>.from(inboxRes.args);
 
@@ -278,15 +310,27 @@ class SessionProvider extends ChangeNotifier {
   }
 
   Future<void> respondInvitation(String invitationId, String action) async {
-    await session!.call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action]);
+    try {
+      final s = await _ensureSession();
+      await s.call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action]);
 
-    await loadInvitations();
-    await loadOrganizations();
+      await loadInvitations();
+      await loadOrganizations();
+    } catch (_) {
+      error = "Failed to respond to invitation";
+      notifyListeners();
+    }
   }
 
   Future<void> createInvitation(String orgId, String email, String role) async {
-    await session!.call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role]);
+    try {
+      final s = await _ensureSession();
+      await s.call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role]);
 
-    await loadInvitations();
+      await loadInvitations();
+    } catch (_) {
+      error = "Failed to create invitation";
+      notifyListeners();
+    }
   }
 }
