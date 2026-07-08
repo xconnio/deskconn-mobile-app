@@ -36,7 +36,11 @@ class AppShell extends StatelessWidget {
   }) async {
     Navigator.pop(context);
     if (section == currentSection) return;
-    await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: builder));
+    if (section == AppShellSection.desktops) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(builder: builder));
   }
 
   @override
