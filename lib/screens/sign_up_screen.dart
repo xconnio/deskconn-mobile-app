@@ -26,6 +26,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? passwordError;
 
   @override
+  void dispose() {
+    emailCtrl.dispose();
+    nameCtrl.dispose();
+    passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 

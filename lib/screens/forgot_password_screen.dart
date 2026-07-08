@@ -24,6 +24,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _loading = false;
 
   @override
+  void dispose() {
+    emailCtrl.dispose();
+    otpCtrl.dispose();
+    passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
@@ -76,6 +84,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               }
                               setState(() => _loading = true);
                               final ok = await auth.requestPasswordReset(emailCtrl.text.trim());
+                              if (!mounted) return;
                               setState(() => _loading = false);
 
                               if (ok) {
@@ -108,6 +117,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           : () async {
                               setState(() => _loading = true);
                               final ok = await auth.resetPassword(otp: otpCtrl.text.trim(), newPassword: passCtrl.text);
+                              if (!mounted) return;
                               setState(() => _loading = false);
 
                               if (ok && context.mounted) {
