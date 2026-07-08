@@ -5,10 +5,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 
+const bool kUpdateCheckEnabled = false;
+
 class UpdateService {
   static const String repoUrl = 'https://api.github.com/repos/xconnio/deskconn-mobile-app/releases/latest';
 
   Future<Map<String, dynamic>?> checkForUpdate() async {
+    if (!kUpdateCheckEnabled) return null;
     try {
       final response = await http.get(Uri.parse(repoUrl));
       if (response.statusCode != 200) return null;
