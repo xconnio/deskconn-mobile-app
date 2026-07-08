@@ -22,6 +22,12 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   String? requiredError;
 
   @override
+  void dispose() {
+    otpCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
@@ -98,7 +104,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                 setState(() => _loading = false);
                               }
                             } catch (_) {
-                              setState(() => _loading = false);
+                              if (mounted) setState(() => _loading = false);
                             }
                           },
                     child: _loading
