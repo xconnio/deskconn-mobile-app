@@ -20,10 +20,6 @@ class SessionProvider extends ChangeNotifier {
 
   Future<Session>? _reconnecting;
 
-  // Lazily reconnects the account session using the stored device identity —
-  // mirrors AuthProvider._getSession()'s pattern. Without this, a dropped
-  // connection (network blip, server restart) left every account-level call
-  // failing silently until the user logged out and back in.
   Future<Session> _ensureSession() {
     final current = session;
     if (current != null && current.isConnected()) return Future.value(current);
@@ -47,17 +43,10 @@ class SessionProvider extends ChangeNotifier {
     return newSession;
   }
 
-  List<Map<String, dynamic>> organizations = [];
-  List<Map<String, dynamic>> invitationsInbox = [];
-  List<Map<String, dynamic>> invitationsOutbox = [];
-
   bool _isLoading = false;
   bool loggedIn = false;
 
   bool get isLoading => _isLoading;
-
-  bool orgLoading = false;
-  bool invitationLoading = false;
 
   void _setLoading(bool v) {
     _isLoading = v;
@@ -87,7 +76,7 @@ class SessionProvider extends ChangeNotifier {
 
       account = Map<String, dynamic>.from(res.args[0]);
 
-      await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations(), _registerDevice(email)]);
+      await Future.wait([loadDesktops(), _registerDevice(email)]);
 
       // Device's cryptosign key only exists once _registerDevice above completes.
       final privateKey = await DeviceIdentity.privateKey();
@@ -132,7 +121,7 @@ class SessionProvider extends ChangeNotifier {
           account = Map<String, dynamic>.from(res.args[0]);
 
           unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
-          await Future.wait([loadDesktops(), loadOrganizations(), loadInvitations()]);
+          await loadDesktops();
 
           loggedIn = true;
         } else {
@@ -189,9 +178,6 @@ class SessionProvider extends ChangeNotifier {
     session = null;
     account = null;
     desktops.clear();
-    organizations.clear();
-    invitationsInbox.clear();
-    invitationsOutbox.clear();
 
     loggedIn = false;
     _setLoading(false);
@@ -267,80 +253,5 @@ class SessionProvider extends ChangeNotifier {
     }
 
     return Platform.operatingSystem;
-  }
-
-  Future<void> loadOrganizations() async {
-    if (session == null) return;
-
-    orgLoading = true;
-    notifyListeners();
-
-    try {
-      final s = await _ensureSession();
-      final res = await s.call("io.xconn.deskconn.organization.list").timeout(DeskconnConfig.callTimeout);
-
-      organizations = List<Map<String, dynamic>>.from(res.args);
-    } catch (_) {
-      error = "Failed to load organizations";
-    }
-
-    orgLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> loadInvitations() async {
-    if (session == null) return;
-
-    invitationLoading = true;
-    notifyListeners();
-
-    try {
-      final s = await _ensureSession();
-      final inboxRes = await s
-          .call("io.xconn.deskconn.organization.invitation.inbox.list")
-          .timeout(DeskconnConfig.callTimeout);
-
-      final outboxRes = await s
-          .call("io.xconn.deskconn.organization.invitation.outbox.list")
-          .timeout(DeskconnConfig.callTimeout);
-
-      invitationsInbox = List<Map<String, dynamic>>.from(inboxRes.args);
-
-      invitationsOutbox = List<Map<String, dynamic>>.from(outboxRes.args);
-    } catch (_) {
-      error = "Failed to load invitations";
-    }
-
-    invitationLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> respondInvitation(String invitationId, String action) async {
-    try {
-      final s = await _ensureSession();
-      await s
-          .call("io.xconn.deskconn.organization.invitation.respond", args: [invitationId, action])
-          .timeout(DeskconnConfig.callTimeout);
-
-      await loadInvitations();
-      await loadOrganizations();
-    } catch (_) {
-      error = "Failed to respond to invitation";
-      notifyListeners();
-    }
-  }
-
-  Future<void> createInvitation(String orgId, String email, String role) async {
-    try {
-      final s = await _ensureSession();
-      await s
-          .call("io.xconn.deskconn.organization.invitation.create", args: [orgId, email, role])
-          .timeout(DeskconnConfig.callTimeout);
-
-      await loadInvitations();
-    } catch (_) {
-      error = "Failed to create invitation";
-      notifyListeners();
-    }
   }
 }
