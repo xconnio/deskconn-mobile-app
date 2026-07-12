@@ -1150,20 +1150,32 @@ class FilePreviewScreen extends StatefulWidget {
 }
 
 class _FilePreviewScreenState extends State<FilePreviewScreen> {
-  late Future<Uint8List> _contentFuture;
+  Future<Uint8List>? _contentFuture;
   bool _isSaving = false;
+  late final bool _streamMedia;
 
   @override
   void initState() {
     super.initState();
-    _contentFuture = widget.controller.read(widget.path);
+    final ext = _ext;
+    final mode = widget.openAs;
+    _streamMedia =
+        mode == 'video' || mode == 'audio' || (mode == null && (kVideoExts.contains(ext) || kAudioExts.contains(ext)));
+    if (!_streamMedia) {
+      _contentFuture = widget.controller.read(widget.path);
+    }
+  }
+
+  Future<Uint8List> _getContent() {
+    _contentFuture ??= widget.controller.read(widget.path);
+    return _contentFuture!;
   }
 
   Future<void> _download() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
-      final bytes = await _contentFuture;
+      final bytes = await _getContent();
       final savedPath = await saveToDevice(widget.entry.name, bytes);
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1220,55 +1232,61 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
               : IconButton(icon: const Icon(Icons.download_outlined), tooltip: 'Save to device', onPressed: _download),
         ],
       ),
-      body: FutureBuilder<Uint8List>(
-        future: _contentFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 16),
-                  Text('Loading ${formatSize(widget.entry.size)}…', style: const TextStyle(color: Colors.white54)),
-                ],
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
-            );
-          }
-          if (!snapshot.hasData) {
-            return const Center(
-              child: Text('No data', style: TextStyle(color: Colors.white)),
-            );
-          }
-          return _buildContent(snapshot.data!, _ext);
-        },
-      ),
+      body: _streamMedia
+          ? _buildMediaContent(_ext)
+          : FutureBuilder<Uint8List>(
+              future: _contentFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.white),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Loading ${formatSize(widget.entry.size)}…',
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: Text('No data', style: TextStyle(color: Colors.white)),
+                  );
+                }
+                return _buildContent(snapshot.data!, _ext);
+              },
+            ),
     );
+  }
+
+  Widget _buildMediaContent(String ext) {
+    final mode = widget.openAs;
+    if (mode == 'video' || (mode == null && kVideoExts.contains(ext))) {
+      return _VideoPreview(
+        controller: widget.controller,
+        path: widget.path,
+        name: widget.entry.name,
+        size: widget.entry.size,
+      );
+    }
+    return _AudioPreview(controller: widget.controller, path: widget.path, name: widget.entry.name);
   }
 
   Widget _buildContent(Uint8List data, String ext) {
     final mode = widget.openAs;
     if (mode != null) {
-      if (mode == 'text') {
-        return _TextPreview(data: data);
-      }
-      if (mode == 'image') {
-        return InteractiveViewer(child: Center(child: Image.memory(data)));
-      }
-      if (mode == 'pdf') {
-        return _PdfPreview(data: data);
-      }
-      if (mode == 'video') {
-        return _VideoPreview(data: data, name: widget.entry.name);
-      }
-      if (mode == 'audio') {
-        return _AudioPreview(data: data, name: widget.entry.name);
-      }
+      if (mode == 'text') return _TextPreview(data: data);
+      if (mode == 'image') return InteractiveViewer(child: Center(child: Image.memory(data)));
+      if (mode == 'pdf') return _PdfPreview(data: data);
     }
 
     if (kImageExts.contains(ext)) {
@@ -1282,12 +1300,6 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     }
     if (ext == 'pdf') {
       return _PdfPreview(data: data);
-    }
-    if (kVideoExts.contains(ext)) {
-      return _VideoPreview(data: data, name: widget.entry.name);
-    }
-    if (kAudioExts.contains(ext)) {
-      return _AudioPreview(data: data, name: widget.entry.name);
     }
     return _UnknownPreview(entry: widget.entry, ext: ext);
   }
@@ -1346,15 +1358,17 @@ class _PdfPreviewState extends State<_PdfPreview> {
 }
 
 class _VideoPreview extends StatefulWidget {
-  final Uint8List data;
+  final FileExplorerController controller;
+  final String path;
   final String name;
-  const _VideoPreview({required this.data, required this.name});
+  final int size;
+  const _VideoPreview({required this.controller, required this.path, required this.name, this.size = 0});
 
   @override
   State<_VideoPreview> createState() => _VideoPreviewState();
 }
 
-class _VideoPreviewState extends State<_VideoPreview> {
+class _VideoPreviewState extends State<_VideoPreview> with WidgetsBindingObserver {
   VideoPlayerController? _vc;
   ChewieController? _cc;
   File? _tempFile;
@@ -1364,17 +1378,25 @@ class _VideoPreviewState extends State<_VideoPreview> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _init();
   }
 
   Future<void> _init() async {
     try {
+      final bytes = await widget.controller.read(widget.path);
+      if (!mounted) return;
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/${widget.name}');
-      await file.writeAsBytes(widget.data);
+      await file.writeAsBytes(bytes);
       _tempFile = file;
       _vc = VideoPlayerController.file(file);
       await _vc!.initialize();
+      if (!mounted) {
+        _vc!.dispose();
+        file.delete().catchError((Object _) => file);
+        return;
+      }
       _cc = ChewieController(
         videoPlayerController: _vc!,
         autoPlay: true,
@@ -1382,14 +1404,22 @@ class _VideoPreviewState extends State<_VideoPreview> {
         allowFullScreen: true,
         allowMuting: true,
       );
-      if (mounted) setState(() => _ready = true);
+      setState(() => _ready = true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _vc?.pause();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cc?.dispose();
     _vc?.dispose();
     _tempFile?.delete().catchError((Object _) => _tempFile!);
@@ -1404,30 +1434,44 @@ class _VideoPreviewState extends State<_VideoPreview> {
       );
     }
     if (!_ready) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 16),
+            if (widget.size > 0)
+              Text('Loading ${formatSize(widget.size)}…', style: const TextStyle(color: Colors.white54)),
+          ],
+        ),
+      );
     }
     return Chewie(controller: _cc!);
   }
 }
 
 class _AudioPreview extends StatefulWidget {
-  final Uint8List data;
+  final FileExplorerController controller;
+  final String path;
   final String name;
-  const _AudioPreview({required this.data, required this.name});
+  const _AudioPreview({required this.controller, required this.path, required this.name});
 
   @override
   State<_AudioPreview> createState() => _AudioPreviewState();
 }
 
-class _AudioPreviewState extends State<_AudioPreview> {
+class _AudioPreviewState extends State<_AudioPreview> with WidgetsBindingObserver {
   final _player = AudioPlayer();
   PlayerState _state = PlayerState.stopped;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  String? _error;
+  bool _loaded = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _player.onPlayerStateChanged.listen((s) {
       if (mounted) setState(() => _state = s);
     });
@@ -1437,11 +1481,30 @@ class _AudioPreviewState extends State<_AudioPreview> {
     _player.onDurationChanged.listen((d) {
       if (mounted) setState(() => _duration = d);
     });
-    _player.play(BytesSource(widget.data));
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final bytes = await widget.controller.read(widget.path);
+      if (!mounted) return;
+      await _player.play(BytesSource(bytes));
+      if (mounted) setState(() => _loaded = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _player.pause();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _player.dispose();
     super.dispose();
   }
@@ -1454,6 +1517,14 @@ class _AudioPreviewState extends State<_AudioPreview> {
 
   @override
   Widget build(BuildContext context) {
+    if (_error != null) {
+      return Center(
+        child: Text('Error: $_error', style: const TextStyle(color: Colors.red)),
+      );
+    }
+    if (!_loaded) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
     final isPlaying = _state == PlayerState.playing;
     final progress = _duration.inMilliseconds > 0
         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
