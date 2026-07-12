@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:xconn/xconn.dart';
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
+import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
@@ -15,6 +19,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
 
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
+
+Uint8List _coerceBytes(dynamic raw) {
+  if (raw is Uint8List) return raw;
+  if (raw is List<int>) return Uint8List.fromList(raw);
+  if (raw is String) return Uint8List.fromList(base64.decode(raw));
+  throw FormatException('Unsupported payload type: ${raw.runtimeType}');
+}
 
 enum _DesktopConnectionStatus { checking, routed, p2p, offline }
 
@@ -30,6 +41,7 @@ class DesktopDetailsScreen extends StatefulWidget {
 class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   bool _openingTerminal = false;
   _DesktopConnectionStatus _connectionStatus = _DesktopConnectionStatus.checking;
+  Uint8List? _wallpaperBytes;
 
   String? get _realm => widget.desktop['realm']?.toString();
 
@@ -37,6 +49,40 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   void initState() {
     super.initState();
     unawaited(_probeDesktopConnection());
+    unawaited(_loadCachedWallpaper());
+  }
+
+  Future<void> _loadCachedWallpaper() async {
+    final realm = _realm;
+    if (realm == null) return;
+    final cached = await WallpaperCache.load(realm);
+    if (cached != null && mounted) {
+      setState(() => _wallpaperBytes = cached);
+    }
+  }
+
+  Future<void> _refreshWallpaper(Session session) async {
+    final realm = _realm;
+    if (realm == null) return;
+    try {
+      final checksumResult = await session
+          .call('io.xconn.deskconn.deskconnd.wallpaper.checksum')
+          .timeout(DeskconnConfig.callTimeout);
+      if (checksumResult.args.isEmpty) return;
+      final checksum = checksumResult.args[0].toString();
+
+      final cachedChecksum = await WallpaperCache.cachedChecksum(realm);
+      if (cachedChecksum == checksum && _wallpaperBytes != null) return;
+
+      final getResult = await session
+          .call('io.xconn.deskconn.deskconnd.wallpaper.get')
+          .timeout(const Duration(seconds: 120));
+      if (getResult.args.length < 2) return;
+
+      final bytes = _coerceBytes(getResult.args[1]);
+      await WallpaperCache.store(realm, bytes, checksum);
+      if (mounted) setState(() => _wallpaperBytes = bytes);
+    } catch (_) {}
   }
 
   @override
@@ -48,61 +94,87 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final name = widget.desktop['name'] as String?;
     final authId = widget.desktop['authid']?.toString() ?? '';
     final shortId = authId.length > 4 ? authId.substring(authId.length - 4) : authId;
+    final displayName = name ?? 'Desktop #$shortId';
+
+    final wallpaper = _wallpaperBytes;
 
     return Scaffold(
-      appBar: AppBar(title: Text(name ?? 'Desktop #$shortId')),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          _StatusBar(status: _connectionStatus),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _probeDesktopConnection,
-              child: GridView.count(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                crossAxisCount: 3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                children: [
-                  _LauncherTile(
-                    icon: Icons.terminal,
-                    title: "Terminal",
-                    enabled: terminalEnabled,
-                    onTap: () => _openTerminal(context),
+          wallpaper != null
+              ? Image.memory(wallpaper, fit: BoxFit.cover)
+              : Container(color: Theme.of(context).scaffoldBackgroundColor),
+          if (wallpaper != null) Container(color: Colors.black.withValues(alpha: 0.25)),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _probeDesktopConnection,
+                    child: GridView.count(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 4,
+                      mainAxisSpacing: 4,
+                      childAspectRatio: 0.85,
+                      children: [
+                        _LauncherTile(
+                          icon: Icons.description_outlined,
+                          badgeColor: const Color(0xFF2C82C9),
+                          title: "Documents",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openFileExplorer(context, category: 'documents'),
+                        ),
+                        _LauncherTile(
+                          icon: Icons.folder_open,
+                          badgeColor: const Color(0xFFE95420),
+                          title: "Files",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openFileExplorer(context),
+                        ),
+                        _LauncherTile(
+                          icon: Icons.image_outlined,
+                          badgeColor: const Color(0xFF77216F),
+                          title: "Pictures",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openFileExplorer(context, category: 'images'),
+                        ),
+                        _LauncherTile(
+                          icon: Icons.settings_remote_outlined,
+                          badgeColor: const Color(0xFF0E8420),
+                          title: "Remote Ctrl",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openRemoteControl(context),
+                        ),
+                        _LauncherTile(
+                          icon: Icons.terminal,
+                          badgeColor: const Color(0xFF2C2C2C),
+                          title: "Terminal",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openTerminal(context),
+                        ),
+                        _LauncherTile(
+                          icon: Icons.video_library_outlined,
+                          badgeColor: const Color(0xFFC7162B),
+                          title: "Videos",
+                          enabled: terminalEnabled,
+                          onWallpaper: wallpaper != null,
+                          onTap: () => _openFileExplorer(context, category: 'videos'),
+                        ),
+                      ],
+                    ),
                   ),
-                  _LauncherTile(
-                    icon: Icons.folder_open,
-                    title: "Files",
-                    enabled: terminalEnabled,
-                    onTap: () => _openFileExplorer(context),
-                  ),
-                  _LauncherTile(
-                    icon: Icons.image_outlined,
-                    title: "Pictures",
-                    enabled: terminalEnabled,
-                    onTap: () => _openFileExplorer(context, category: 'images'),
-                  ),
-                  _LauncherTile(
-                    icon: Icons.video_library_outlined,
-                    title: "Videos",
-                    enabled: terminalEnabled,
-                    onTap: () => _openFileExplorer(context, category: 'videos'),
-                  ),
-                  _LauncherTile(
-                    icon: Icons.description_outlined,
-                    title: "Documents",
-                    enabled: terminalEnabled,
-                    onTap: () => _openFileExplorer(context, category: 'documents'),
-                  ),
-                  _LauncherTile(
-                    icon: Icons.settings_remote_outlined,
-                    title: "Remote Ctrl",
-                    enabled: terminalEnabled,
-                    onTap: () => _openRemoteControl(context),
-                  ),
-                ],
-              ),
+                ),
+                _DesktopLabel(name: displayName, status: _connectionStatus, onWallpaper: wallpaper != null),
+              ],
             ),
           ),
         ],
@@ -132,6 +204,10 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     if (mounted) {
       setState(() => _connectionStatus = status ?? _DesktopConnectionStatus.offline);
     }
+    if (status != null) {
+      final session = DesktopConnectionManager().get(realm)?.session;
+      if (session != null) unawaited(_refreshWallpaper(session));
+    }
 
     // Show the failure immediately rather than leaving the user staring at
     // "Checking" — then quietly retry once in the background. Only flips the
@@ -145,6 +221,8 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final status = await _attemptConnection(realm, authId, privateKey, webRtcEnabled);
     if (status != null && mounted) {
       setState(() => _connectionStatus = status);
+      final session = DesktopConnectionManager().get(realm)?.session;
+      if (session != null) unawaited(_refreshWallpaper(session));
     }
   }
 
@@ -378,68 +456,105 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
 class _LauncherTile extends StatelessWidget {
   final IconData icon;
+  final Color badgeColor;
   final String title;
   final VoidCallback onTap;
   final bool enabled;
+  final bool onWallpaper;
 
-  const _LauncherTile({required this.icon, required this.title, required this.onTap, this.enabled = true});
+  const _LauncherTile({
+    required this.icon,
+    required this.badgeColor,
+    required this.title,
+    required this.onTap,
+    this.enabled = true,
+    this.onWallpaper = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = enabled ? Theme.of(context).colorScheme.primary : Theme.of(context).disabledColor;
-    final textColor = enabled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).disabledColor;
+    final textColor = onWallpaper
+        ? (enabled ? Colors.white : Colors.white54)
+        : (enabled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).disabledColor);
+    final textShadows = onWallpaper ? [Shadow(color: Colors.black.withValues(alpha: 0.7), blurRadius: 6)] : null;
+    final effectiveBadgeColor = enabled ? badgeColor : badgeColor.withValues(alpha: 0.4);
 
-    return Card(
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 36, color: iconColor),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 13),
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: effectiveBadgeColor,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: onWallpaper
+                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))]
+                  : null,
             ),
-          ],
-        ),
+            child: Icon(icon, size: 26, color: Colors.white),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 13, shadows: textShadows),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _StatusBar extends StatelessWidget {
+class _DesktopLabel extends StatelessWidget {
+  final String name;
   final _DesktopConnectionStatus status;
+  final bool onWallpaper;
 
-  const _StatusBar({required this.status});
+  const _DesktopLabel({required this.name, required this.status, this.onWallpaper = false});
 
   @override
   Widget build(BuildContext context) {
-    final (color, label) = switch (status) {
-      _DesktopConnectionStatus.checking => (Theme.of(context).colorScheme.secondary, 'Connecting'),
-      _DesktopConnectionStatus.routed => (Colors.green, 'Online (routed)'),
-      _DesktopConnectionStatus.p2p => (Colors.green, 'Online (p2p)'),
-      _DesktopConnectionStatus.offline => (Colors.red, 'Offline'),
+    final dotColor = switch (status) {
+      _DesktopConnectionStatus.checking => Theme.of(context).colorScheme.secondary,
+      _DesktopConnectionStatus.routed => Colors.green,
+      _DesktopConnectionStatus.p2p => Colors.green,
+      _DesktopConnectionStatus.offline => Colors.red,
     };
+    final textColor = onWallpaper ? Colors.white : Theme.of(context).colorScheme.onSurface;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: color.withValues(alpha: 0.08),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ],
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          name,
+          style: TextStyle(color: textColor, fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16, top: 4),
+      child: Center(
+        child: onWallpaper
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: content,
+              )
+            : content,
       ),
     );
   }
