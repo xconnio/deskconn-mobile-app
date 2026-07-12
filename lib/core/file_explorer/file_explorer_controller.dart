@@ -64,7 +64,9 @@ class FileExplorerController {
 
   Future<FileBrowseResult> index(String category) async {
     await ensureKeyExchanged();
-    final payload = {'category': category};
+    final payload = {
+      'categories': [category],
+    };
     final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
     final res = await session
         .call('io.xconn.deskconn.deskconnd.index.query', args: [encrypted])

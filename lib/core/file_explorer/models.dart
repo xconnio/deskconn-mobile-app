@@ -27,7 +27,7 @@ class FileEntry {
       path: (json['path'] as String?) ?? '',
       isDir: _toBool(json['is_dir']),
       size: _toInt(json['size']),
-      mtime: _toInt(json['mtime']),
+      mtime: _toMtime(json['mtime'] ?? json['mod_time']),
       mode: _toInt(json['mode']),
       isSymlink: _toBool(json['is_symlink']),
       symlinkTarget: (json['symlink_target'] ?? json['link_target']) as String?,
@@ -46,6 +46,19 @@ class FileEntry {
     'symlink_target': symlinkTarget,
     'thumbnail': thumbnail,
   };
+}
+
+int _toMtime(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) {
+    final asInt = int.tryParse(value);
+    if (asInt != null) return asInt;
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) return parsed.millisecondsSinceEpoch ~/ 1000;
+  }
+  return 0;
 }
 
 int _toInt(dynamic value) {
