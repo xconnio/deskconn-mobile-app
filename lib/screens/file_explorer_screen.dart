@@ -36,7 +36,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _showHidden = false;
   String? _currentCategory;
 
-  bool _isGrid = true;
+  bool _isGrid = false;
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();

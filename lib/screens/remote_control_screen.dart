@@ -223,7 +223,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 icon: _isMuted == null
                     ? Icons.volume_up_outlined
                     : (_isMuted! ? Icons.volume_off_outlined : Icons.volume_up_outlined),
-                label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Muted' : 'Unmuted'),
+                label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Mute' : 'Unmute'),
                 onTap: _toggleMute,
               ),
               _IconTile(
