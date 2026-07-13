@@ -9,9 +9,6 @@ import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
-/// Forces every connection attempt through WebRTC even when the user has P2P
-/// disabled in settings, and skips the routed fallback on failure. Useful to
-/// flip back on temporarily when diagnosing WebRTC regressions in isolation.
 const bool kForceWebRtcOnly = false;
 
 class DesktopConnection {
@@ -19,10 +16,6 @@ class DesktopConnection {
   final bool isP2P;
   bool isAgentOnline = false;
 
-  // Session.onDisconnect is a single-callback setter, already claimed by the
-  // manager for its own cache cleanup. UI code that wants to react to this
-  // connection dying (e.g. to flip a status badge without waiting for the
-  // user to pull-to-refresh) should set this instead of touching the session.
   void Function()? onDisconnected;
 
   DesktopConnection({required this.session, required this.isP2P});
@@ -41,10 +34,6 @@ class DesktopConnectionManager {
 
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
-  // Realms whose agent doesn't expose the WebRTC offer procedure at all
-  // (wamp.error.no_such_procedure). Only consulted when kForceWebRtcOnly is
-  // on — with routed fallback restored, retrying these just costs one quick
-  // failed attempt before falling back, not a hard failure.
   final Set<String> _noWebRtcSupportRealms = {};
   final Random _retryJitter = Random();
 
@@ -56,7 +45,6 @@ class DesktopConnectionManager {
     debugPrint('[DesktopSession ${DateTime.now().toIso8601String()}] $message');
   }
 
-  // Synchronous cache lookup — returns null if not connected (mirrors web app sessionCache)
   DesktopConnection? get(String realm) {
     final key = 'session:$realm';
     final connection = _connections[key];
@@ -71,10 +59,6 @@ class DesktopConnectionManager {
     return null;
   }
 
-  // Call as early as possible (login/session-restore) so the TURN round-trip
-  // is already paid for by the time the user reaches a desktop and triggers a
-  // real connect. Safe to call repeatedly; errors are swallowed since this is
-  // purely a warm-up — a real connect attempt will retry and surface failures.
   Future<void> prefetchTurnCredentials(String authId, String privateKey) async {
     try {
       await _getTurnCredentials(authId, privateKey);
@@ -166,11 +150,7 @@ class DesktopConnectionManager {
       realm: realm,
       serializer: CBORSerializer(),
     );
-    // Fetch TURN credentials concurrently with the signaling connect instead of
-    // after it — they're independent, so this takes it off the critical path.
     final turnFuture = (willUseWebRtc && turnCredentials == null) ? _getTurnCredentials(authId, privateKey) : null;
-    // If signaling fails before we get to `await turnFuture!` below, don't let
-    // this become an unhandled Future error.
     turnFuture?.ignore();
 
     final signalingSession = await signalingFuture;
@@ -197,15 +177,6 @@ class DesktopConnectionManager {
           debugPrint('Failed to configure WebRTC audio: $e');
         }
       }
-      // A timed-out WAMP join over an already-open data channel is transient
-      // transport flakiness (SCTP/ICE-timing), not a capability gap — retry
-      // with a fresh offer/answer before giving up. no_such_procedure is a
-      // permanent gap and is never worth retrying.
-      //
-      // Measured successful joins complete in well under 1.5s, so the first
-      // few attempts use a short timeout to fail fast and retry quickly; the
-      // final attempt uses a longer timeout in case it's just a one-off slow
-      // network, then the whole cycle stops — no unbounded retries.
       const maxAttempts = 4;
       const shortTimeout = Duration(seconds: 4);
       const finalTimeout = Duration(seconds: 10);
@@ -245,9 +216,6 @@ class DesktopConnectionManager {
             break;
           }
           if (e is TimeoutException && attempt < maxAttempts) {
-            // Linear backoff plus jitter so repeated failures (e.g. a TURN
-            // server that's down for everyone) don't hammer signaling/TURN
-            // back-to-back across many devices retrying in lockstep.
             final backoff = Duration(milliseconds: 300 * attempt + _retryJitter.nextInt(300));
             _log('connect retry realm=$realm attempt=$attempt timeout=$timeout backoff=$backoff reason=$e');
             await Future.delayed(backoff);
@@ -258,15 +226,11 @@ class DesktopConnectionManager {
       }
 
       if (lastError != null) {
-        if (kForceWebRtcOnly) {
-          _log('connect failed realm=$realm webrtc_failed=$lastError (routed fallback disabled)');
-          try {
-            await signalingSession.close();
-          } catch (_) {}
-          throw lastError;
-        }
-        isP2P = false;
-        _log('connect fallback realm=$realm webrtc_failed=$lastError');
+        _log('connect failed realm=$realm webrtc_failed=$lastError (routed fallback requires explicit retry)');
+        try {
+          await signalingSession.close();
+        } catch (_) {}
+        throw lastError;
       }
     }
 
