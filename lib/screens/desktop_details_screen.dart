@@ -506,7 +506,7 @@ class _DesktopLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final (dotColor, statusLabel) = switch (status) {
       _DesktopConnectionStatus.checking => (Theme.of(context).colorScheme.secondary, 'connecting'),
-      _DesktopConnectionStatus.routed => (Colors.green, 'routed'),
+      _DesktopConnectionStatus.routed => (Colors.amber.shade700, 'routed'),
       _DesktopConnectionStatus.p2p => (Colors.green, 'p2p'),
       _DesktopConnectionStatus.offline => (Colors.red, 'offline'),
     };
