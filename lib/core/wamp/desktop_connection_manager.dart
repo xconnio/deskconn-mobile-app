@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -35,7 +34,6 @@ class DesktopConnectionManager {
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
   final Set<String> _noWebRtcSupportRealms = {};
-  final Random _retryJitter = Random();
 
   Map<String, dynamic>? _turnCredentials;
   DateTime? _turnCredentialsExpiry;
@@ -177,51 +175,32 @@ class DesktopConnectionManager {
           debugPrint('Failed to configure WebRTC audio: $e');
         }
       }
-      const maxAttempts = 4;
-      const shortTimeout = Duration(seconds: 4);
-      const finalTimeout = Duration(seconds: 10);
+      const connectTimeout = Duration(seconds: 20);
       Object? lastError;
-      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-        final timeout = attempt < maxAttempts ? shortTimeout : finalTimeout;
-        try {
-          final credentials = turnCredentials ?? await turnFuture!;
+      try {
+        final credentials = turnCredentials ?? await turnFuture!;
 
-          final config = web_rtc.ClientConfig(
-            realm: realm,
-            procedureWebRTCOffer: 'io.xconn.webrtc.offer',
-            topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
-            topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
-            iceServers: [
-              {'urls': 'stun:stun.l.google.com:19302'},
-              {
-                'urls': credentials['urls'],
-                'username': credentials['username'],
-                'credential': credentials['credential'],
-              },
-            ],
-            serializer: CBORSerializer(),
-            session: signalingSession,
-            authenticator: CryptoSignAuthenticator(authId, privateKey),
-          );
+        final config = web_rtc.ClientConfig(
+          realm: realm,
+          procedureWebRTCOffer: 'io.xconn.webrtc.offer',
+          topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
+          topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
+          iceServers: [
+            {'urls': 'stun:stun.l.google.com:19302'},
+            {'urls': credentials['urls'], 'username': credentials['username'], 'credential': credentials['credential']},
+          ],
+          serializer: CBORSerializer(),
+          session: signalingSession,
+          authenticator: CryptoSignAuthenticator(authId, privateKey),
+        );
 
-          finalSession = await web_rtc.connectWAMP(config).timeout(timeout);
-          isP2P = true;
-          lastError = null;
-          _log('connect success realm=$realm transport=webrtc attempt=$attempt');
-          break;
-        } catch (e) {
-          lastError = e;
-          if (e.toString().contains('wamp.error.no_such_procedure')) {
-            _noWebRtcSupportRealms.add(realm);
-            break;
-          }
-          if (e is TimeoutException && attempt < maxAttempts) {
-            final backoff = Duration(milliseconds: 300 * attempt + _retryJitter.nextInt(300));
-            _log('connect retry realm=$realm attempt=$attempt timeout=$timeout backoff=$backoff reason=$e');
-            await Future.delayed(backoff);
-            continue;
-          }
-          break;
+        finalSession = await web_rtc.connectWAMP(config).timeout(connectTimeout);
+        isP2P = true;
+        _log('connect success realm=$realm transport=webrtc');
+      } catch (e) {
+        lastError = e;
+        if (e.toString().contains('wamp.error.no_such_procedure')) {
+          _noWebRtcSupportRealms.add(realm);
         }
       }
 
