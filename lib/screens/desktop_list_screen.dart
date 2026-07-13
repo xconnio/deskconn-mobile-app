@@ -58,7 +58,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
       }
     }
     if (toPrewarm.isNotEmpty) {
-      unawaited(_prewarmSequentially(toPrewarm));
+      unawaited(_prewarmAll(toPrewarm));
     }
   }
 
@@ -90,10 +90,8 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     }
   }
 
-  Future<void> _prewarmSequentially(List<Map<String, dynamic>> desktops) async {
-    for (final d in desktops) {
-      await _prewarm(d);
-    }
+  Future<void> _prewarmAll(List<Map<String, dynamic>> desktops) async {
+    await Future.wait(desktops.map(_prewarm));
   }
 
   Future<bool> _connect(String realm, bool webRtcEnabled) async {
