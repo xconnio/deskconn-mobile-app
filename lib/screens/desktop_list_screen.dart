@@ -12,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 
+enum _RowStatus { connecting, p2p, routed, offline }
+
 class DesktopListScreen extends StatefulWidget {
   const DesktopListScreen({super.key});
 
@@ -21,6 +23,28 @@ class DesktopListScreen extends StatefulWidget {
 
 class _DesktopListScreenState extends State<DesktopListScreen> {
   final Set<String> _prewarmedRealms = {};
+  final Set<String> _connectingRealms = {};
+  Timer? _livenessTimer;
+
+  _RowStatus _statusFor(String realm) {
+    final connection = DesktopConnectionManager().get(realm);
+    if (connection != null) {
+      return connection.isP2P ? _RowStatus.p2p : _RowStatus.routed;
+    }
+    return _connectingRealms.contains(realm) ? _RowStatus.connecting : _RowStatus.offline;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _livenessTimer = Timer.periodic(const Duration(seconds: 15), (_) => _verifyAllLiveness());
+  }
+
+  @override
+  void dispose() {
+    _livenessTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -38,23 +62,44 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     }
   }
 
+  Future<void> _verifyAllLiveness() async {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+
+    final desktops = context.read<SessionProvider>().desktops;
+    await Future.wait(
+      desktops.map((d) async {
+        final realm = d['realm']?.toString();
+        if (realm == null) return;
+        await _verifyLiveness(realm);
+      }),
+    );
+  }
+
+  Future<void> _verifyLiveness(String realm) async {
+    final connection = DesktopConnectionManager().get(realm);
+    if (connection == null) return;
+
+    try {
+      final enc = await Encryption.create();
+      await connection.session
+          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {
+      await DesktopConnectionManager().release(realm);
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _prewarmSequentially(List<Map<String, dynamic>> desktops) async {
     for (final d in desktops) {
       await _prewarm(d);
     }
   }
 
-  Future<void> _prewarm(Map<String, dynamic> desktop) async {
-    final realm = desktop['realm']?.toString();
-    if (realm == null || realm.isEmpty) return;
-    if (DesktopConnectionManager().get(realm) != null) return;
-
+  Future<bool> _connect(String realm, bool webRtcEnabled) async {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
-    final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
-
-    if (authId == null || privateKey == null) return;
+    if (authId == null || privateKey == null) return false;
 
     try {
       final connection = await DesktopConnectionManager().acquire(
@@ -63,12 +108,109 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
         privateKey: privateKey,
         webRtcEnabled: webRtcEnabled,
       );
-      final enc = Encryption.create();
+      final enc = await Encryption.create();
       await connection.session
-          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [(await enc).clientPublicKey])
+          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
           .timeout(const Duration(seconds: 5));
       connection.isAgentOnline = true;
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _prewarm(Map<String, dynamic> desktop) async {
+    final realm = desktop['realm']?.toString();
+    if (realm == null || realm.isEmpty) return;
+    if (DesktopConnectionManager().get(realm) != null) return;
+
+    if (mounted) setState(() => _connectingRealms.add(realm));
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    await _connect(realm, webRtcEnabled);
+    if (mounted) setState(() => _connectingRealms.remove(realm));
+  }
+
+  Future<bool> _ensureConnected(String realm) async {
+    final cached = DesktopConnectionManager().get(realm);
+    if (cached != null && cached.isAgentOnline) return true;
+
+    if (mounted) setState(() => _connectingRealms.add(realm));
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final success = await _connect(realm, webRtcEnabled);
+    if (mounted) setState(() => _connectingRealms.remove(realm));
+    return success;
+  }
+
+  Future<void> _openDesktop(BuildContext context, Map<String, dynamic> desktop) async {
+    final realm = desktop['realm']?.toString();
+    if (realm == null) return;
+
+    final connected = await _ensureConnected(realm);
+    if (!context.mounted) return;
+
+    if (connected) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => DesktopDetailsScreen(desktop: desktop)));
+      return;
+    }
+
+    final retried = await _showConnectionDialog(context, desktop);
+    if (retried && context.mounted) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => DesktopDetailsScreen(desktop: desktop)));
+    }
+  }
+
+  Future<bool> _showConnectionDialog(BuildContext context, Map<String, dynamic> desktop) async {
+    final realm = desktop['realm']?.toString();
+    if (realm == null) return false;
+
+    final status = _statusFor(realm);
+    if (status == _RowStatus.connecting) return false;
+
+    final (title, description) = switch (status) {
+      _RowStatus.p2p => ('Connected (P2P)', 'Using a direct peer-to-peer connection.'),
+      _RowStatus.routed => ('Connected (Routed)', 'Using a routed connection through the server.'),
+      _RowStatus.offline => ('Offline', 'Could not reach this desktop.'),
+      _RowStatus.connecting => ('Connecting', ''),
+    };
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(description),
+          actions: [
+            if (status != _RowStatus.p2p)
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop('p2p'), child: const Text('Retry P2P')),
+            if (status != _RowStatus.routed)
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop('routed'), child: const Text('Use Routed')),
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close')),
+          ],
+        );
+      },
+    );
+
+    if (action == null || !mounted) return false;
+    return _forceReconnect(realm, action == 'p2p');
+  }
+
+  Future<bool> _forceReconnect(String realm, bool webRtcEnabled) async {
+    if (mounted) setState(() => _connectingRealms.add(realm));
+    await DesktopConnectionManager().release(realm);
+    final success = await _connect(realm, webRtcEnabled);
+    if (mounted) setState(() => _connectingRealms.remove(realm));
+
+    if (!mounted) return success;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not connect to desktop.')));
+    } else if (webRtcEnabled && _statusFor(realm) == _RowStatus.routed) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('P2P unavailable, connected via routed instead.')));
+    }
+    return success;
   }
 
   @override
@@ -80,7 +222,10 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
       title: 'Desktops',
       currentSection: AppShellSection.desktops,
       body: RefreshIndicator(
-        onRefresh: () => context.read<SessionProvider>().loadDesktops(),
+        onRefresh: () async {
+          await context.read<SessionProvider>().loadDesktops();
+          await _verifyAllLiveness();
+        },
         child: session.desktopsLoading || session.desktops.isEmpty
             ? CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -131,6 +276,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
                   final name = d['name'] as String?;
                   final authId = d['authid']?.toString() ?? '';
                   final shortId = authId.length > 4 ? authId.substring(authId.length - 4) : authId;
+                  final realm = d['realm']?.toString() ?? '';
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -156,14 +302,59 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
                       ),
                       title: Text(name ?? 'Unnamed Desktop', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('• $shortId', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
-                      trailing: const Icon(Icons.chevron_right, size: 20),
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => DesktopDetailsScreen(desktop: d)));
-                      },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _ConnectionChip(status: _statusFor(realm), onTap: () => _showConnectionDialog(context, d)),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right, size: 20),
+                        ],
+                      ),
+                      onTap: () => _openDesktop(context, d),
                     ),
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+class _ConnectionChip extends StatelessWidget {
+  final _RowStatus status;
+  final VoidCallback onTap;
+
+  const _ConnectionChip({required this.status, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final (dotColor, label) = switch (status) {
+      _RowStatus.connecting => (Theme.of(context).colorScheme.secondary, 'connecting'),
+      _RowStatus.p2p => (Colors.green, 'p2p'),
+      _RowStatus.routed => (Colors.amber.shade700, 'routed'),
+      _RowStatus.offline => (Colors.red, 'offline'),
+    };
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '($label)',
+              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
       ),
     );
   }
