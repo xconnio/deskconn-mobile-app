@@ -38,11 +38,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     }
   }
 
-  // Every prewarm now negotiates a full WebRTC connection (no cheap routed
-  // path), so firing them all at once makes N desktops fight over the same
-  // radio/CPU and each one gets slower. Doing them one at a time keeps each
-  // negotiation fast; only the desktop the user actually opens is on the
-  // critical path anyway — the rest is best-effort background warm-up.
   Future<void> _prewarmSequentially(List<Map<String, dynamic>> desktops) async {
     for (final d in desktops) {
       await _prewarm(d);
@@ -57,7 +52,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
 
     if (authId == null || privateKey == null) return;
 
@@ -68,7 +63,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
         privateKey: privateKey,
         webRtcEnabled: webRtcEnabled,
       );
-      // Mark agent online so DesktopDetailsScreen skips the probe round-trip
       final enc = Encryption.create();
       await connection.session
           .call('io.xconn.deskconn.deskconnd.key.exchange', args: [(await enc).clientPublicKey])

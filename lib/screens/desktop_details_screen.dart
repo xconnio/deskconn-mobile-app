@@ -191,7 +191,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
 
     if (authId == null || privateKey == null || realm == null) {
       if (mounted) {
@@ -209,9 +209,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       if (session != null) unawaited(_refreshWallpaper(session));
     }
 
-    // Show the failure immediately rather than leaving the user staring at
-    // "Checking" — then quietly retry once in the background. Only flips the
-    // status if this retry succeeds; the user already sees "Offline" either way.
     if (status == null) {
       unawaited(_retryInBackground(realm, authId, privateKey, webRtcEnabled));
     }
@@ -226,7 +223,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     }
   }
 
-  // Returns the resolved status on a working connection, or null on failure.
   Future<_DesktopConnectionStatus?> _attemptConnection(
     String realm,
     String authId,
@@ -240,9 +236,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         privateKey: privateKey,
         webRtcEnabled: webRtcEnabled,
       );
-      // Otherwise a session that dies while this screen is already open (no
-      // user action to trigger a re-probe) leaves the status stuck on
-      // whatever it last was, even after the connection is long gone.
       connection.onDisconnected = _handleConnectionDisconnected;
 
       if (connection.isAgentOnline) {
@@ -255,13 +248,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         return connection.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed;
       }
 
-      // The cached session reported isConnected()==true but didn't actually
-      // respond — a stale/dead P2P transport that isConnected() can't detect.
-      // Evict it so the next attempt is forced to reconnect from scratch
-      // instead of reusing the same broken session forever. Clear the
-      // disconnect callback first: release() closes the session, which fires
-      // onDisconnect — without this it would loop back into
-      // _handleConnectionDisconnected and spawn overlapping retries.
       connection.onDisconnected = null;
       await DesktopConnectionManager().release(realm);
       return null;
