@@ -13,7 +13,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _webRtcEnabled = false;
+  bool _webRtcEnabled = true;
 
   @override
   void initState() {
@@ -25,7 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+      _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
     });
   }
 

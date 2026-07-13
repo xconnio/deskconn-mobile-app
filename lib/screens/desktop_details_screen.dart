@@ -191,7 +191,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? false;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
 
     if (authId == null || privateKey == null || realm == null) {
       if (mounted) {
