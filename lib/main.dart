@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:app_settings/app_settings.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
@@ -10,6 +11,7 @@ import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
+import 'package:deskconn_mobile_app/screens/share_upload_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +52,7 @@ Future<void> main() async {
   });
 
   await initializeDesktopSessionBackgroundService();
+  await ShareService.instance.initialize();
   unawaited(FlutterBackgroundService().startService());
 
   runApp(const DeskconnApp());
@@ -139,12 +142,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
   late final Future<void> _initialization;
   bool _notificationActive = false;
   bool _wasOffline = false;
+  bool _handlingSharedFiles = false;
 
   @override
   void initState() {
     super.initState();
     _wasOffline = !ConnectivityService().hasConnection;
     ConnectivityService().addListener(_handleConnectivityChange);
+    ShareService.instance.pendingFiles.addListener(_handlePendingSharedFiles);
 
     final completer = Completer<void>();
     _initialization = completer.future;
@@ -166,6 +171,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   void dispose() {
     ConnectivityService().removeListener(_handleConnectivityChange);
+    ShareService.instance.pendingFiles.removeListener(_handlePendingSharedFiles);
     super.dispose();
   }
 
@@ -213,6 +219,27 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
   }
 
+  void _handlePendingSharedFiles() {
+    if (!mounted || _handlingSharedFiles) return;
+    final session = context.read<SessionProvider>();
+    if (!session.loggedIn || ShareService.instance.pendingFiles.value.isEmpty) {
+      return;
+    }
+    _handlingSharedFiles = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final files = ShareService.instance.takePendingFiles();
+      if (files.isEmpty || !mounted) {
+        _handlingSharedFiles = false;
+        return;
+      }
+      await navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ShareUploadScreen(files: files)));
+      _handlingSharedFiles = false;
+      if (ShareService.instance.pendingFiles.value.isNotEmpty) {
+        _handlePendingSharedFiles();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -226,6 +253,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
         final session = context.watch<SessionProvider>();
         _syncNotification(session.loggedIn);
+        if (session.loggedIn) _handlePendingSharedFiles();
         return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
       },
     );
