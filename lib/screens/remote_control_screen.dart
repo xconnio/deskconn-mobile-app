@@ -31,6 +31,7 @@ class RemoteControlScreen extends StatefulWidget {
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
   double _brightness = 50;
   bool _brightnessLoaded = false;
+  bool _brightnessAvailable = false;
   bool _locking = false;
   bool _capturingScreenshot = false;
   bool _isPlaying = false;
@@ -77,9 +78,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         setState(() {
           _brightness = (result.args[0] as num).toDouble().clamp(1, 100);
           _brightnessLoaded = true;
+          _brightnessAvailable = true;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted && e.toString().toLowerCase().contains('brightness device not available')) {
+        setState(() => _brightnessAvailable = false);
+      }
+    }
   }
 
   Future<void> _loadPlayers() async {
@@ -214,11 +220,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 loading: _locking,
                 onTap: _lockScreen,
               ),
-              _IconTile(
-                icon: Icons.brightness_6_outlined,
-                label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
-                onTap: _showBrightnessSheet,
-              ),
+              if (_brightnessAvailable)
+                _IconTile(
+                  icon: Icons.brightness_6_outlined,
+                  label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
+                  onTap: _showBrightnessSheet,
+                ),
               _IconTile(
                 icon: _isMuted == null
                     ? Icons.volume_up_outlined
