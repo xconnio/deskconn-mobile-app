@@ -8,9 +8,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.OpenableColumns
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -22,12 +24,15 @@ class MainActivity : FlutterActivity() {
     private val shellChannel = "deskconn/shell_notification"
     private val notifChannel = "deskconn/notification"
     private val fileChannel = "deskconn/file"
+    private val shareChannel = "deskconn/share"
     private val channelId = "deskconn_session_v2"
     private val notifId = 1107
+    private var pendingSharedFiles: List<Map<String, Any?>> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel()
+        pendingSharedFiles = extractSharedFiles(intent)
     }
 
     // Flutter's default behavior for back-with-nothing-left-to-pop is to
@@ -41,6 +46,14 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        val sharedFiles = extractSharedFiles(intent)
+        if (sharedFiles.isNotEmpty()) {
+            flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                MethodChannel(it, shareChannel).invokeMethod("sharedFiles", sharedFiles)
+            }
+            return
+        }
+
         val realm = intent.getStringExtra("realm") ?: return
         val method = when (intent.action) {
             "deskconn.OPEN_Terminal" -> "openTerminal"
@@ -92,6 +105,104 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "consumeInitialSharedFiles" -> {
+                        val files = pendingSharedFiles
+                        pendingSharedFiles = emptyList()
+                        result.success(files)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun extractSharedFiles(intent: Intent?): List<Map<String, Any?>> {
+        if (intent == null) return emptyList()
+        val uris = mutableListOf<Uri>()
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                readStreamUri(intent)?.let { uris.add(it) }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                @Suppress("DEPRECATION")
+                val streams = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                if (streams != null) uris.addAll(streams)
+            }
+            else -> return emptyList()
+        }
+
+        if (uris.isEmpty()) {
+            intent.clipData?.let { clip ->
+                for (i in 0 until clip.itemCount) {
+                    clip.getItemAt(i).uri?.let { uris.add(it) }
+                }
+            }
+        }
+
+        return uris.mapNotNull { copySharedUriToCache(it, intent.type) }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readStreamUri(intent: Intent): Uri? = intent.getParcelableExtra(Intent.EXTRA_STREAM)
+
+    private fun copySharedUriToCache(uri: Uri, mimeType: String?): Map<String, Any?>? {
+        return try {
+            val (displayName, declaredSize) = querySharedFileInfo(uri)
+            val safeName = sanitizeFilename(displayName ?: "shared-file")
+            val dir = File(cacheDir, "shared")
+            dir.mkdirs()
+            var target = File(dir, safeName)
+            if (target.exists()) {
+                val dot = safeName.lastIndexOf('.')
+                val stem = if (dot > 0) safeName.substring(0, dot) else safeName
+                val ext = if (dot > 0) safeName.substring(dot) else ""
+                var n = 1
+                while (target.exists()) {
+                    target = File(dir, "$stem ($n)$ext")
+                    n++
+                }
+            }
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+
+            mapOf(
+                "path" to target.absolutePath,
+                "name" to target.name,
+                "mimeType" to mimeType,
+                "size" to if (declaredSize >= 0) declaredSize else target.length()
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun querySharedFileInfo(uri: Uri): Pair<String?, Long> {
+        if (uri.scheme == "file") {
+            val file = File(uri.path ?: return Pair(null, -1))
+            return Pair(file.name, file.length())
+        }
+
+        var name: String? = null
+        var size = -1L
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) name = cursor.getString(nameIndex)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+            }
+        }
+        return Pair(name, size)
+    }
+
+    private fun sanitizeFilename(name: String): String {
+        val cleaned = name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
+        return cleaned.ifEmpty { "shared-file" }
     }
 
     private fun saveToDownloads(filename: String, bytes: ByteArray): String {
