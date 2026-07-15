@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -103,7 +104,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             turnCredentials: widget.config.turnCredentials,
           );
       _log('controller ready p2p=${connection.isP2P}');
-      if (mounted) _controller = FileExplorerController(connection.session, widget.config.realm);
+      if (mounted) {
+        _controller = FileExplorerController(connection.session, widget.config.realm);
+      }
 
       if (widget.category != null) {
         await _loadPath('', category: widget.category);
@@ -314,6 +317,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _currentBrowse!.path == _currentBrowse!.homePath ||
         _currentBrowse!.path == '/' ||
         _currentBrowse!.path.isEmpty;
+    final showSidebar = _isDesktopLayout(context);
 
     return PopScope(
       canPop: _currentCategory != null || (isAtRoot && !_isSearching),
@@ -327,12 +331,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       },
       child: Scaffold(
         appBar: _isSearching ? _buildSearchAppBar() : _buildNormalAppBar(),
-        drawer: _buildDrawer(),
+        drawer: showSidebar ? _buildDrawer() : null,
         body: Column(
           children: [
             if (!_isSearching && _currentBrowse != null && _currentCategory == null)
               _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
-            if (!_isSearching && _currentCategory != null) _buildCategoryHeader(),
             if (_clipboardEntry != null) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
@@ -402,25 +405,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             }),
           ),
       ],
-    );
-  }
-
-  Widget _buildCategoryHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: Theme.of(context).cardColor,
-      child: Row(
-        children: [
-          const Icon(Icons.category_outlined, size: 20, color: Colors.grey),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Showing all ${_currentCategory == 'images' ? 'pictures' : _currentCategory} on this desktop',
-              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1070,6 +1054,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 }
 
+bool _isDesktopLayout(BuildContext context) {
+  if (MediaQuery.sizeOf(context).width >= 900) return true;
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => true,
+    _ => false,
+  };
+}
+
 /// Save [bytes] to the public Downloads folder via the native MediaStore API
 /// (Android 10+) or direct file write (Android 9). Falls back to app-specific
 /// external storage if the native channel fails.
@@ -1226,8 +1218,12 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   Color get _bgColor {
     final effectiveExt = widget.openAs ?? _ext;
     if (effectiveExt == 'pdf') return Colors.grey.shade200;
-    if (effectiveExt == 'video' || kVideoExts.contains(effectiveExt)) return Colors.black;
-    if (effectiveExt == 'image' || effectiveExt == 'svg' || kImageExts.contains(effectiveExt)) return Colors.black;
+    if (effectiveExt == 'video' || kVideoExts.contains(effectiveExt)) {
+      return Colors.black;
+    }
+    if (effectiveExt == 'image' || effectiveExt == 'svg' || kImageExts.contains(effectiveExt)) {
+      return Colors.black;
+    }
     return const Color(0xFF272822);
   }
 
@@ -1308,7 +1304,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     final mode = widget.openAs;
     if (mode != null) {
       if (mode == 'text') return _TextPreview(data: data);
-      if (mode == 'image') return InteractiveViewer(child: Center(child: Image.memory(data)));
+      if (mode == 'image') {
+        return InteractiveViewer(child: Center(child: Image.memory(data)));
+      }
       if (mode == 'pdf') return _PdfPreview(data: data);
     }
 

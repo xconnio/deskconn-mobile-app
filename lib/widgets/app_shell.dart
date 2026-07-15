@@ -3,6 +3,7 @@ import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -30,8 +31,9 @@ class AppShell extends StatelessWidget {
     BuildContext context, {
     required AppShellSection section,
     required WidgetBuilder builder,
+    bool closeDrawer = false,
   }) async {
-    Navigator.pop(context);
+    if (closeDrawer) Navigator.pop(context);
     if (section == currentSection) return;
     if (section == AppShellSection.desktops) {
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -54,99 +56,160 @@ class AppShell extends StatelessWidget {
         : email.isNotEmpty
         ? email[0].toUpperCase()
         : '?';
+    final showSidebar = _isDesktopLayout(context);
+    final sidebar = _AppSidebar(
+      currentSection: currentSection,
+      name: name,
+      email: email,
+      initial: initial,
+      isDark: isDark,
+      colorScheme: colorScheme,
+      session: session,
+      openSection: _openSection,
+      closeDrawerOnTap: !showSidebar,
+    );
 
     return Scaffold(
       appBar: AppBar(title: Text(title), bottom: bottom, actions: [...?actions, const ThemeToggleButton()]),
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              InkWell(
-                onTap: () =>
-                    _openSection(context, section: AppShellSection.account, builder: (_) => const AccountScreen()),
-                child: Container(
-                  color: isDark ? DeskconnColors.darkSurfaceTint : colorScheme.primary,
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: colorScheme.onPrimary.withValues(alpha: 0.15),
-                        child: Text(
-                          initial,
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onPrimary),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      if (name.isNotEmpty)
-                        Text(
-                          name,
-                          style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600, fontSize: 15),
-                        ),
-                      if (email.isNotEmpty)
-                        Text(
-                          email,
-                          style: TextStyle(color: colorScheme.onPrimary.withValues(alpha: 0.8), fontSize: 13),
-                        ),
-                    ],
+      body: showSidebar
+          ? Row(
+              children: [
+                SizedBox(width: 280, child: sidebar),
+                const VerticalDivider(width: 1),
+                Expanded(child: body),
+              ],
+            )
+          : body,
+    );
+  }
+}
+
+bool _isDesktopLayout(BuildContext context) {
+  if (MediaQuery.sizeOf(context).width >= 900) return true;
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => true,
+    _ => false,
+  };
+}
+
+class _AppSidebar extends StatelessWidget {
+  final AppShellSection currentSection;
+  final String name;
+  final String email;
+  final String initial;
+  final bool isDark;
+  final ColorScheme colorScheme;
+  final SessionProvider session;
+  final Future<void> Function(
+    BuildContext context, {
+    required AppShellSection section,
+    required WidgetBuilder builder,
+    bool closeDrawer,
+  })
+  openSection;
+  final bool closeDrawerOnTap;
+
+  const _AppSidebar({
+    required this.currentSection,
+    required this.name,
+    required this.email,
+    required this.initial,
+    required this.isDark,
+    required this.colorScheme,
+    required this.session,
+    required this.openSection,
+    required this.closeDrawerOnTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => openSection(
+              context,
+              section: AppShellSection.account,
+              builder: (_) => const AccountScreen(),
+              closeDrawer: closeDrawerOnTap,
+            ),
+            child: Container(
+              color: isDark ? DeskconnColors.darkSurfaceTint : colorScheme.primary,
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: colorScheme.onPrimary.withValues(alpha: 0.15),
+                    child: Text(
+                      initial,
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onPrimary),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (name.isNotEmpty)
+                    Text(
+                      name,
+                      style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600, fontSize: 15),
+                    ),
+                  if (email.isNotEmpty)
+                    Text(email, style: TextStyle(color: colorScheme.onPrimary.withValues(alpha: 0.8), fontSize: 13)),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                _NavTile(
+                  icon: Icons.desktop_windows_outlined,
+                  label: 'Desktops',
+                  selected: currentSection == AppShellSection.desktops,
+                  onTap: () => openSection(
+                    context,
+                    section: AppShellSection.desktops,
+                    builder: (_) => const DesktopListScreen(),
+                    closeDrawer: closeDrawerOnTap,
                   ),
                 ),
-              ),
-
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    _NavTile(
-                      icon: Icons.desktop_windows_outlined,
-                      label: 'Desktops',
-                      selected: currentSection == AppShellSection.desktops,
-                      onTap: () => _openSection(
-                        context,
-                        section: AppShellSection.desktops,
-                        builder: (_) => const DesktopListScreen(),
-                      ),
-                    ),
-                    _NavTile(
-                      icon: Icons.settings_outlined,
-                      label: 'Settings',
-                      selected: currentSection == AppShellSection.settings,
-                      onTap: () => _openSection(
-                        context,
-                        section: AppShellSection.settings,
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    ),
-                  ],
+                _NavTile(
+                  icon: Icons.settings_outlined,
+                  label: 'Settings',
+                  selected: currentSection == AppShellSection.settings,
+                  onTap: () => openSection(
+                    context,
+                    section: AppShellSection.settings,
+                    builder: (_) => const SettingsScreen(),
+                    closeDrawer: closeDrawerOnTap,
+                  ),
                 ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-                child: ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text('Logout', style: TextStyle(color: Colors.red)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await session.logout();
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SignInScreen()),
-                        (_) => false,
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            child: ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              onTap: () async {
+                if (closeDrawerOnTap) Navigator.pop(context);
+                await session.logout();
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SignInScreen()),
+                    (_) => false,
+                  );
+                }
+              },
+            ),
+          ),
+        ],
       ),
-      body: body,
     );
   }
 }
