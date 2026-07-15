@@ -14,6 +14,8 @@ import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/share_upload_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/app_theme.dart';
+import 'package:deskconn_mobile_app/theme/typography.dart';
+import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
@@ -127,6 +129,30 @@ class _OfflineDialogState extends State<_OfflineDialog> {
           child: const Text('Open Settings'),
         ),
       ],
+    );
+  }
+}
+
+class _SplashContent extends StatelessWidget {
+  const _SplashContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOut,
+      builder: (context, opacity, child) => Opacity(opacity: opacity, child: child),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const DeskconnLogo(size: 88),
+          const SizedBox(height: 16),
+          Text('Deskconn', style: DeskconnTypography.title(context)),
+          const SizedBox(height: 40),
+          const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
+        ],
+      ),
     );
   }
 }
@@ -246,9 +272,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
       future: _initialization,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-          );
+          return const Scaffold(body: Center(child: _SplashContent()));
         }
 
         final session = context.watch<SessionProvider>();

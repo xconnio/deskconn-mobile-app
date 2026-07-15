@@ -69,8 +69,11 @@ class AppShell extends StatelessWidget {
       closeDrawerOnTap: !showSidebar,
     );
 
+    final showMobileDrawer = !showSidebar && currentSection == AppShellSection.desktops;
+
     return Scaffold(
       appBar: AppBar(title: Text(title), bottom: bottom, actions: [...?actions, const ThemeToggleButton()]),
+      drawer: showMobileDrawer ? Drawer(child: sidebar) : null,
       body: showSidebar
           ? Row(
               children: [
