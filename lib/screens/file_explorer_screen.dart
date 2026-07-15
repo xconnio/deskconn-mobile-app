@@ -335,7 +335,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         body: Column(
           children: [
             if (!_isSearching && _currentBrowse != null && _currentCategory == null)
-              _Breadcrumbs(path: _currentBrowse!.path, onPathTap: _loadPath, onUpTap: _goUp),
+              _Breadcrumbs(
+                path: _currentBrowse!.path,
+                homePath: _currentBrowse!.homePath,
+                onPathTap: _loadPath,
+                onUpTap: _goUp,
+              ),
             if (_clipboardEntry != null) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
@@ -356,34 +361,80 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _ => _currentCategory![0].toUpperCase() + _currentCategory!.substring(1),
       };
     }
+    final isCompact = MediaQuery.sizeOf(context).width < 480;
+    final canUpload = _controller != null && _currentBrowse != null && _currentCategory == null;
+    final secondaryActions = <PopupMenuEntry<String>>[
+      if (!_isMediaGallery)
+        PopupMenuItem(
+          value: 'toggleView',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
+            title: Text(_isGrid ? 'List view' : 'Grid view'),
+          ),
+        ),
+      if (_currentCategory == null)
+        PopupMenuItem(
+          value: 'toggleHidden',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
+            title: Text(_showHidden ? 'Hide hidden files' : 'Show hidden files'),
+          ),
+        ),
+      const PopupMenuItem(
+        value: 'refresh',
+        child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.refresh), title: Text('Refresh')),
+      ),
+    ];
+
     return AppBar(
-      title: Text(title),
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [
-        if (_controller != null && _currentBrowse != null && _currentCategory == null)
-          IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
+        if (canUpload) IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
         IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search',
           onPressed: () => setState(() => _isSearching = true),
         ),
-        if (!_isMediaGallery)
+        if (isCompact)
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            itemBuilder: (_) => secondaryActions,
+            onSelected: _handleAppBarMenuAction,
+          )
+        else ...[
+          if (!_isMediaGallery)
+            IconButton(
+              icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
+              tooltip: _isGrid ? 'List view' : 'Grid view',
+              onPressed: () => setState(() => _isGrid = !_isGrid),
+            ),
+          if (_currentCategory == null)
+            IconButton(
+              icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
+              onPressed: () => setState(() => _showHidden = !_showHidden),
+              tooltip: 'Show hidden files',
+            ),
           IconButton(
-            icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
-            tooltip: _isGrid ? 'List view' : 'Grid view',
-            onPressed: () => setState(() => _isGrid = !_isGrid),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: () => _loadPath(_currentBrowse?.path ?? '', category: _currentCategory),
           ),
-        if (_currentCategory == null)
-          IconButton(
-            icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
-            onPressed: () => setState(() => _showHidden = !_showHidden),
-            tooltip: 'Show hidden files',
-          ),
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: () => _loadPath(_currentBrowse?.path ?? '', category: _currentCategory),
-        ),
+        ],
       ],
     );
+  }
+
+  void _handleAppBarMenuAction(String action) {
+    switch (action) {
+      case 'toggleView':
+        setState(() => _isGrid = !_isGrid);
+      case 'toggleHidden':
+        setState(() => _showHidden = !_showHidden);
+      case 'refresh':
+        _loadPath(_currentBrowse?.path ?? '', category: _currentCategory);
+    }
   }
 
   AppBar _buildSearchAppBar() {
@@ -583,24 +634,33 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Widget _buildClipboardBanner() {
+    final colorScheme = Theme.of(context).colorScheme;
     return ColoredBox(
-      color: Theme.of(context).colorScheme.secondaryContainer,
+      color: colorScheme.secondaryContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           children: [
-            Icon(_clipboardIsCut ? Icons.drive_file_move_outlined : Icons.content_copy, size: 16),
+            Icon(
+              _clipboardIsCut ? Icons.drive_file_move_outlined : Icons.content_copy,
+              size: 16,
+              color: colorScheme.onSecondaryContainer,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '${_clipboardIsCut ? 'Move' : 'Copied'}: ${_clipboardEntry!.name}',
-                style: const TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: 13, color: colorScheme.onSecondaryContainer),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            TextButton(onPressed: _pasteHere, child: Text(_clipboardIsCut ? 'Move here' : 'Paste here')),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: colorScheme.onSecondaryContainer),
+              onPressed: _pasteHere,
+              child: Text(_clipboardIsCut ? 'Move here' : 'Paste here'),
+            ),
             IconButton(
-              icon: const Icon(Icons.close, size: 18),
+              icon: Icon(Icons.close, size: 18, color: colorScheme.onSecondaryContainer),
               onPressed: () => setState(() {
                 _clipboardEntry = null;
                 _clipboardIsCut = false;
@@ -1099,15 +1159,15 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
 
 class _Breadcrumbs extends StatelessWidget {
   final String path;
+  final String homePath;
   final Function(String) onPathTap;
   final VoidCallback onUpTap;
 
-  const _Breadcrumbs({required this.path, required this.onPathTap, required this.onUpTap});
+  const _Breadcrumbs({required this.path, required this.homePath, required this.onPathTap, required this.onUpTap});
 
   @override
   Widget build(BuildContext context) {
-    final parts = path == '/' ? [''] : path.split('/');
-    if (parts.isEmpty) parts.add('');
+    final crumbs = _crumbs();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1127,7 +1187,7 @@ class _Breadcrumbs extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  for (var i = 0; i < parts.length; i++) ...[
+                  for (var i = 0; i < crumbs.length; i++) ...[
                     if (i > 0) const Icon(Icons.chevron_right, size: 16),
                     TextButton(
                       style: TextButton.styleFrom(
@@ -1136,10 +1196,9 @@ class _Breadcrumbs extends StatelessWidget {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () {
-                        final targetPath = parts.sublist(0, i + 1).join('/');
-                        onPathTap(targetPath.isEmpty ? '/' : targetPath);
+                        onPathTap(crumbs[i].path);
                       },
-                      child: Text(parts[i].isEmpty ? 'Root' : parts[i]),
+                      child: Text(crumbs[i].label),
                     ),
                   ],
                 ],
@@ -1150,6 +1209,42 @@ class _Breadcrumbs extends StatelessWidget {
       ),
     );
   }
+
+  List<_BreadcrumbPart> _crumbs() {
+    final normalizedPath = _normalizePath(path);
+    final normalizedHome = _normalizePath(homePath);
+    final homeLabel = normalizedHome;
+
+    if (normalizedPath == normalizedHome || !normalizedPath.startsWith('$normalizedHome/')) {
+      return [_BreadcrumbPart(homeLabel, normalizedHome)];
+    }
+
+    final relativeParts = normalizedPath.substring(normalizedHome.length + 1).split('/').where((p) => p.isNotEmpty);
+    final crumbs = [_BreadcrumbPart(homeLabel, normalizedHome)];
+    var current = normalizedHome;
+    for (final part in relativeParts) {
+      current = current == '/' ? '/$part' : '$current/$part';
+      crumbs.add(_BreadcrumbPart(part, current));
+    }
+    return crumbs;
+  }
+
+  String _normalizePath(String value) {
+    if (value.isEmpty) return '/';
+    var normalized = value;
+    if (!normalized.startsWith('/')) normalized = '/$normalized';
+    while (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+}
+
+class _BreadcrumbPart {
+  final String label;
+  final String path;
+
+  const _BreadcrumbPart(this.label, this.path);
 }
 
 class FilePreviewScreen extends StatefulWidget {
