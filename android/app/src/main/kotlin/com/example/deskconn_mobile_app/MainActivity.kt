@@ -30,6 +30,14 @@ class MainActivity : FlutterActivity() {
         ensureNotificationChannel()
     }
 
+    // Flutter's default behavior for back-with-nothing-left-to-pop is to
+    // finish() the Activity, which destroys this FlutterEngine and every live
+    // WAMP/WebRTC connection along with it.
+    override fun popSystemNavigator(): Boolean {
+        moveTaskToBack(true)
+        return true
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
