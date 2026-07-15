@@ -19,6 +19,7 @@ class TerminalController {
   void Function()? onExit;
   void Function()? onClosed;
   void Function()? onModifierChanged;
+  void Function(Object error)? onError;
 
   bool ctrl = false;
   bool alt = false;
@@ -54,15 +55,22 @@ class TerminalController {
     if (_running) return;
     _log('start requested');
 
-    final connection =
-        DesktopConnectionManager().get(config.realm) ??
-        await DesktopConnectionManager().connect(
-          realm: config.realm,
-          authId: config.authId,
-          privateKey: config.privateKey,
-          webRtcEnabled: config.webRtcEnabled,
-          turnCredentials: config.turnCredentials,
-        );
+    final DesktopConnection connection;
+    try {
+      connection =
+          DesktopConnectionManager().get(config.realm) ??
+          await DesktopConnectionManager().connect(
+            realm: config.realm,
+            authId: config.authId,
+            privateKey: config.privateKey,
+            webRtcEnabled: config.webRtcEnabled,
+            turnCredentials: config.turnCredentials,
+          );
+    } catch (e) {
+      _log('connect failed error=$e');
+      onError?.call(e);
+      return;
+    }
     _log('session ready p2p=${connection.isP2P}');
 
     _encryption = await Encryption.create();

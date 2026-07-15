@@ -18,6 +18,7 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
   bool _isLoading = false;
+  Object? _startError;
 
   static const double _minFontSize = 8;
   static const double _maxFontSize = 32;
@@ -43,6 +44,9 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     widget.controller.onExit = () {
       if (mounted) Navigator.pop(context);
     };
+    widget.controller.onError = (e) {
+      if (mounted) setState(() => _startError = e);
+    };
 
     _log('attached realm=${widget.controller.config.realm} isReady=${widget.controller.isReady}');
   }
@@ -53,16 +57,76 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.onStarted = null;
     widget.controller.onExit = null;
+    widget.controller.onError = null;
     widget.controller.dispose();
     super.dispose();
   }
 
+  AppBar _launchAppBar() {
+    return AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      title: Text(widget.controller.config.desktopName, style: const TextStyle(fontSize: 15)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
+    if (_startError != null) {
+      return Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator()),
+        appBar: _launchAppBar(),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                const SizedBox(height: 16),
+                const Text('Could not open terminal', style: TextStyle(color: Colors.white, fontSize: 16)),
+                const SizedBox(height: 8),
+                Text(
+                  _startError.toString(),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white38),
+                  ),
+                  child: const Text('Go back'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: _launchAppBar(),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.terminal, color: Colors.white24, size: 48),
+              const SizedBox(height: 20),
+              const CircularProgressIndicator(color: Colors.white70),
+              const SizedBox(height: 20),
+              Text(
+                'Connecting to ${widget.controller.config.desktopName}…',
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
