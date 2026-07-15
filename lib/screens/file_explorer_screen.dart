@@ -37,6 +37,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String? _currentCategory;
 
   bool _isGrid = false;
+  bool get _isMediaGallery => _currentCategory == 'images' || _currentCategory == 'videos';
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -362,11 +363,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: 'Search',
           onPressed: () => setState(() => _isSearching = true),
         ),
-        IconButton(
-          icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
-          tooltip: _isGrid ? 'List view' : 'Grid view',
-          onPressed: () => setState(() => _isGrid = !_isGrid),
-        ),
+        if (!_isMediaGallery)
+          IconButton(
+            icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
+            tooltip: _isGrid ? 'List view' : 'Grid view',
+            onPressed: () => setState(() => _isGrid = !_isGrid),
+          ),
         if (_currentCategory == null)
           IconButton(
             icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
@@ -536,6 +538,27 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           q.isNotEmpty ? 'No results for "$_searchQuery"' : 'No files found',
           style: TextStyle(color: Theme.of(context).hintColor),
         ),
+      );
+    }
+
+    if (_isMediaGallery) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(2),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 2,
+          childAspectRatio: 1,
+        ),
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          return _MediaGalleryTile(
+            entry: entry,
+            onTap: () => _onEntryTap(entry),
+            onLongPress: () => _showEntryOptions(entry),
+          );
+        },
       );
     }
 
@@ -1755,6 +1778,68 @@ class _FileEntryTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _MediaGalleryTile extends StatelessWidget {
+  final FileEntry entry;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _MediaGalleryTile({required this.entry, required this.onTap, required this.onLongPress});
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveName = entry.isSymlink && entry.symlinkTarget != null
+        ? entry.symlinkTarget!.split('/').last
+        : entry.name;
+    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+    final isVideo = kVideoExts.contains(ext);
+    final thumbnail = _decodeThumbnail(entry.thumbnail);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: ColoredBox(
+        color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (thumbnail != null)
+              Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+            else
+              Center(
+                child: Icon(
+                  isVideo ? Icons.movie_outlined : Icons.image_outlined,
+                  size: 32,
+                  color: isDark ? Colors.white24 : Colors.black26,
+                ),
+              ),
+            if (isVideo)
+              const Positioned(
+                right: 4,
+                bottom: 4,
+                child: Icon(
+                  Icons.play_circle_fill,
+                  color: Colors.white,
+                  size: 22,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Uint8List? _decodeThumbnail(String? value) {
+    if (value == null || value.isEmpty) return null;
+    try {
+      return base64Decode(value);
+    } catch (_) {
+      return null;
+    }
   }
 }
 
