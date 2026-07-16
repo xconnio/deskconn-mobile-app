@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
@@ -782,6 +783,35 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
+  Future<void> _shareFile(FileEntry entry) async {
+    final path = _fullPath(entry);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(child: Text('Preparing ${entry.name}…', overflow: TextOverflow.ellipsis)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final bytes = await _controller!.read(path);
+      if (mounted) Navigator.pop(context);
+      await shareFileBytes(entry.name, bytes);
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showErrorSnackBar('Share failed: $e');
+      }
+    }
+  }
+
   Future<void> _uploadFile() async {
     final result = await FilePicker.platform.pickFiles(allowMultiple: false);
     if (!mounted || result == null || result.files.isEmpty) return;
@@ -896,6 +926,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   _showOpenWithDialog(entry);
+                },
+              ),
+            if (!entry.isDir)
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareFile(entry);
                 },
               ),
             ListTile(
@@ -1125,6 +1164,20 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
   }
 }
 
+// Downloads bytes are cached to a temp file since the OS share sheet needs a
+// real file path, not raw bytes; the temp copy is cleaned up once the share
+// sheet is dismissed.
+Future<void> shareFileBytes(String filename, Uint8List bytes) async {
+  final tempDir = await getTemporaryDirectory();
+  final tempFile = File('${tempDir.path}/$filename');
+  await tempFile.writeAsBytes(bytes);
+  try {
+    await SharePlus.instance.share(ShareParams(files: [XFile(tempFile.path)]));
+  } finally {
+    tempFile.delete().catchError((Object _) => tempFile);
+  }
+}
+
 void _showFileProperties(BuildContext context, FileEntry entry, {String fallbackLocation = ''}) {
   final location = entry.path.isNotEmpty ? entry.path.substring(0, entry.path.lastIndexOf('/')) : fallbackLocation;
 
@@ -1315,6 +1368,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   late final PageController _pageController = PageController(initialPage: _currentIndex);
   bool _isSaving = false;
   bool _isEditing = false;
+  bool _isSharing = false;
   bool _contentChanged = false;
 
   FileEntry get _currentEntry => _entries[_currentIndex];
@@ -1334,6 +1388,24 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _share() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    final entry = _currentEntry;
+    try {
+      final bytes = await widget.controller.read(_pathFor(entry));
+      await shareFileBytes(entry.name, bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Share failed: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
   }
 
   Future<void> _download() async {
@@ -1514,7 +1586,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
         bottomNavigationBar: _GalleryActionBar(
           isSaving: _isSaving,
           isEditing: _isEditing,
+          isSharing: _isSharing,
           canEdit: _canEditCurrent,
+          onShare: _share,
           onInfo: _showInfo,
           onEdit: _editImage,
           onDownload: _download,
@@ -1528,7 +1602,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
 class _GalleryActionBar extends StatelessWidget {
   final bool isSaving;
   final bool isEditing;
+  final bool isSharing;
   final bool canEdit;
+  final VoidCallback onShare;
   final VoidCallback onInfo;
   final VoidCallback onEdit;
   final VoidCallback onDownload;
@@ -1537,7 +1613,9 @@ class _GalleryActionBar extends StatelessWidget {
   const _GalleryActionBar({
     required this.isSaving,
     required this.isEditing,
+    required this.isSharing,
     required this.canEdit,
+    required this.onShare,
     required this.onInfo,
     required this.onEdit,
     required this.onDownload,
@@ -1555,6 +1633,9 @@ class _GalleryActionBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              isSharing
+                  ? const _ActionBarButton(icon: Icons.share_outlined, label: 'Sharing…', onTap: null, loading: true)
+                  : _ActionBarButton(icon: Icons.share_outlined, label: 'Share', onTap: onShare),
               _ActionBarButton(icon: Icons.info_outline, label: 'Info', onTap: onInfo),
               if (canEdit)
                 isEditing
