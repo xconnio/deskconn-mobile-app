@@ -279,13 +279,13 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
-  void _onEntryTap(FileEntry entry) {
+  Future<void> _onEntryTap(FileEntry entry) async {
     if (entry.isDir) {
       _loadPath(_fullPath(entry));
     } else if (entry.isSymlink) {
       _openSymlink(entry);
     } else {
-      Navigator.push(
+      final didDelete = await Navigator.push<bool>(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
@@ -294,6 +294,37 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           reverseTransitionDuration: Duration.zero,
         ),
       );
+      if (didDelete == true) {
+        _invalidateCacheFor(_currentBrowse?.path ?? '');
+        _loadPath(_currentBrowse?.path ?? '');
+      }
+    }
+  }
+
+  Future<void> _onGalleryEntryTap(List<FileEntry> entries, int index) async {
+    final entry = entries[index];
+    final didDelete = await Navigator.push<bool>(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => FilePreviewScreen(
+          controller: _controller!,
+          entry: entry,
+          path: _fullPath(entry),
+          galleryEntries: entries,
+          galleryIndex: index,
+          pathBuilder: _fullPath,
+        ),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+    if (didDelete == true) {
+      if (_currentCategory != null) {
+        _browseCache.remove('${widget.config.realm}:cat:$_currentCategory');
+      } else {
+        _invalidateCacheFor(_currentBrowse?.path ?? '');
+      }
+      _loadPath(_currentBrowse?.path ?? '', category: _currentCategory);
     }
   }
 
@@ -353,7 +384,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     String title = 'File Explorer';
     if (_currentCategory != null) {
       title = switch (_currentCategory) {
-        'images' => 'Pictures',
+        'images' => 'Photos',
         'videos' => 'Videos',
         'documents' => 'Documents',
         'pdfs' => 'PDFs',
@@ -492,7 +523,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.image_outlined),
-              title: const Text('Pictures'),
+              title: const Text('Photos'),
               selected: _currentCategory == 'images',
               onTap: () {
                 Navigator.pop(context);
@@ -590,7 +621,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           final entry = entries[index];
           return _MediaGalleryTile(
             entry: entry,
-            onTap: () => _onEntryTap(entry),
+            onTap: () => _onGalleryEntryTap(entries, index),
             onLongPress: () => _showEntryOptions(entry),
           );
         },
@@ -983,9 +1014,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
-  void _openFileAs(FileEntry entry, String type) {
+  Future<void> _openFileAs(FileEntry entry, String type) async {
     final path = entry.isSymlink ? (_resolveSymlinkTarget(entry) ?? _fullPath(entry)) : _fullPath(entry);
-    Navigator.push(
+    final didDelete = await Navigator.push<bool>(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -994,58 +1025,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         reverseTransitionDuration: Duration.zero,
       ),
     );
+    if (didDelete == true) {
+      _invalidateCacheFor(_currentBrowse?.path ?? '');
+      _loadPath(_currentBrowse?.path ?? '');
+    }
   }
 
   void _showProperties(FileEntry entry) {
-    final location = entry.path.isNotEmpty
-        ? entry.path.substring(0, entry.path.lastIndexOf('/'))
-        : _currentBrowse?.path ?? '';
-
-    String type;
-    if (entry.isSymlink) {
-      type = 'Symlink';
-    } else if (entry.isDir) {
-      type = 'Directory';
-    } else {
-      type = 'File';
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(entry.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _PropRow('Type', type),
-            if (location.isNotEmpty) _PropRow('Location', location),
-            if (!entry.isDir) _PropRow('Size', formatSize(entry.size)),
-            if (entry.mtime > 0) _PropRow('Modified', _formatMtime(entry.mtime)),
-            if (entry.mode > 0) _PropRow('Permissions', _formatMode(entry.mode)),
-            if (entry.isSymlink && entry.symlinkTarget != null) _PropRow('Links to', entry.symlinkTarget!),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-      ),
-    );
-  }
-
-  static String _formatMtime(int mtime) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(mtime * 1000).toLocal();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m';
-  }
-
-  static String _formatMode(int mode) {
-    final perm = mode & 0x1FF;
-    const r = ['r', 'w', 'x'];
-    final buf = StringBuffer();
-    for (int i = 8; i >= 0; i--) {
-      buf.write((perm >> i) & 1 == 1 ? r[i % 3] : '-');
-    }
-    return '${buf.toString()}  (${perm.toRadixString(8).padLeft(3, '0')})';
+    _showFileProperties(context, entry, fallbackLocation: _currentBrowse?.path ?? '');
   }
 
   void _showRenameDialog(FileEntry entry) {
@@ -1083,30 +1070,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
-  void _showDeleteConfirmation(FileEntry entry) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete'),
-        content: Text('Are you sure you want to delete ${entry.name}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final path = '${_currentBrowse!.path}/${entry.name}';
-                await _controller!.delete(path);
-                _loadPath(_currentBrowse!.path);
-              } catch (e) {
-                _showErrorSnackBar('Delete failed: $e');
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _showDeleteConfirmation(FileEntry entry) async {
+    if (!await _confirmDelete(context, entry.name)) return;
+    try {
+      final path = '${_currentBrowse!.path}/${entry.name}';
+      await _controller!.delete(path);
+      _loadPath(_currentBrowse!.path);
+    } catch (e) {
+      _showErrorSnackBar('Delete failed: $e');
+    }
   }
 
   void _showErrorSnackBar(String message) {
@@ -1155,6 +1127,74 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
     await target.writeAsBytes(bytes);
     return target.path;
   }
+}
+
+void _showFileProperties(BuildContext context, FileEntry entry, {String fallbackLocation = ''}) {
+  final location = entry.path.isNotEmpty ? entry.path.substring(0, entry.path.lastIndexOf('/')) : fallbackLocation;
+
+  String type;
+  if (entry.isSymlink) {
+    type = 'Symlink';
+  } else if (entry.isDir) {
+    type = 'Directory';
+  } else {
+    type = 'File';
+  }
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(entry.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PropRow('Type', type),
+          if (location.isNotEmpty) _PropRow('Location', location),
+          if (!entry.isDir) _PropRow('Size', formatSize(entry.size)),
+          if (entry.mtime > 0) _PropRow('Modified', _formatMtime(entry.mtime)),
+          if (entry.mode > 0) _PropRow('Permissions', _formatMode(entry.mode)),
+          if (entry.isSymlink && entry.symlinkTarget != null) _PropRow('Links to', entry.symlinkTarget!),
+        ],
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+    ),
+  );
+}
+
+String _formatMtime(int mtime) {
+  final dt = DateTime.fromMillisecondsSinceEpoch(mtime * 1000).toLocal();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m';
+}
+
+String _formatMode(int mode) {
+  final perm = mode & 0x1FF;
+  const r = ['r', 'w', 'x'];
+  final buf = StringBuffer();
+  for (int i = 8; i >= 0; i--) {
+    buf.write((perm >> i) & 1 == 1 ? r[i % 3] : '-');
+  }
+  return '${buf.toString()}  (${perm.toRadixString(8).padLeft(3, '0')})';
+}
+
+Future<bool> _confirmDelete(BuildContext context, String name) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete'),
+      content: Text('Are you sure you want to delete $name?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
 
 class _Breadcrumbs extends StatelessWidget {
@@ -1252,41 +1292,51 @@ class FilePreviewScreen extends StatefulWidget {
   final FileEntry entry;
   final String path;
   final String? openAs;
+  final List<FileEntry>? galleryEntries;
+  final int galleryIndex;
+  final String Function(FileEntry)? pathBuilder;
 
-  const FilePreviewScreen({super.key, required this.controller, required this.entry, required this.path, this.openAs});
+  const FilePreviewScreen({
+    super.key,
+    required this.controller,
+    required this.entry,
+    required this.path,
+    this.openAs,
+    this.galleryEntries,
+    this.galleryIndex = 0,
+    this.pathBuilder,
+  });
 
   @override
   State<FilePreviewScreen> createState() => _FilePreviewScreenState();
 }
 
 class _FilePreviewScreenState extends State<FilePreviewScreen> {
-  Future<Uint8List>? _contentFuture;
+  late final List<FileEntry> _entries = widget.galleryEntries != null
+      ? List.of(widget.galleryEntries!)
+      : [widget.entry];
+  late int _currentIndex = widget.galleryEntries != null ? widget.galleryIndex : 0;
+  late final PageController _pageController = PageController(initialPage: _currentIndex);
   bool _isSaving = false;
-  late final bool _streamMedia;
+  bool _didDelete = false;
+
+  FileEntry get _currentEntry => _entries[_currentIndex];
+
+  String _pathFor(FileEntry entry) => widget.pathBuilder?.call(entry) ?? widget.path;
 
   @override
-  void initState() {
-    super.initState();
-    final ext = _ext;
-    final mode = widget.openAs;
-    _streamMedia =
-        mode == 'video' || mode == 'audio' || (mode == null && (kVideoExts.contains(ext) || kAudioExts.contains(ext)));
-    if (!_streamMedia) {
-      _contentFuture = widget.controller.read(widget.path);
-    }
-  }
-
-  Future<Uint8List> _getContent() {
-    _contentFuture ??= widget.controller.read(widget.path);
-    return _contentFuture!;
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _download() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
+    final entry = _currentEntry;
     try {
-      final bytes = await _getContent();
-      final savedPath = await saveToDevice(widget.entry.name, bytes);
+      final bytes = await widget.controller.read(_pathFor(entry));
+      final savedPath = await saveToDevice(entry.name, bytes);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -1303,6 +1353,186 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     }
   }
 
+  void _showInfo() {
+    _showFileProperties(context, _currentEntry);
+  }
+
+  Future<void> _delete() async {
+    final entry = _currentEntry;
+    if (!await _confirmDelete(context, entry.name)) return;
+    try {
+      await widget.controller.delete(_pathFor(entry));
+      _didDelete = true;
+      if (!mounted) return;
+      if (_entries.length <= 1) {
+        Navigator.pop(context, true);
+        return;
+      }
+      final removedIndex = _currentIndex;
+      setState(() {
+        _entries.removeAt(removedIndex);
+        _currentIndex = removedIndex >= _entries.length ? _entries.length - 1 : removedIndex;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pageController.jumpToPage(_currentIndex);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _didDelete);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          title: Text(_currentEntry.name, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
+          backgroundColor: const Color(0xFF1E1E1E),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: _entries.length > 1
+            ? PageView.builder(
+                controller: _pageController,
+                itemCount: _entries.length,
+                onPageChanged: (i) => setState(() => _currentIndex = i),
+                itemBuilder: (context, i) {
+                  final entry = _entries[i];
+                  return _PreviewBody(controller: widget.controller, entry: entry, path: _pathFor(entry));
+                },
+              )
+            : _PreviewBody(
+                controller: widget.controller,
+                entry: widget.entry,
+                path: widget.path,
+                openAs: widget.openAs,
+              ),
+        bottomNavigationBar: _GalleryActionBar(
+          isSaving: _isSaving,
+          onInfo: _showInfo,
+          onDownload: _download,
+          onDelete: _delete,
+        ),
+      ),
+    );
+  }
+}
+
+class _GalleryActionBar extends StatelessWidget {
+  final bool isSaving;
+  final VoidCallback onInfo;
+  final VoidCallback onDownload;
+  final VoidCallback onDelete;
+
+  const _GalleryActionBar({
+    required this.isSaving,
+    required this.onInfo,
+    required this.onDownload,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFF1E1E1E),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _ActionBarButton(icon: Icons.info_outline, label: 'Info', onTap: onInfo),
+              isSaving
+                  ? const _ActionBarButton(icon: Icons.download_outlined, label: 'Saving…', onTap: null, loading: true)
+                  : _ActionBarButton(icon: Icons.download_outlined, label: 'Download', onTap: onDownload),
+              _ActionBarButton(icon: Icons.delete_outline, label: 'Delete', onTap: onDelete, color: Colors.redAccent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionBarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+  final bool loading;
+
+  const _ActionBarButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = Colors.white,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                  )
+                : Icon(icon, color: color, size: 22),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewBody extends StatefulWidget {
+  final FileExplorerController controller;
+  final FileEntry entry;
+  final String path;
+  final String? openAs;
+
+  const _PreviewBody({required this.controller, required this.entry, required this.path, this.openAs});
+
+  @override
+  State<_PreviewBody> createState() => _PreviewBodyState();
+}
+
+class _PreviewBodyState extends State<_PreviewBody> {
+  Future<Uint8List>? _contentFuture;
+  late final bool _streamMedia;
+
+  @override
+  void initState() {
+    super.initState();
+    final ext = _ext;
+    final mode = widget.openAs;
+    _streamMedia =
+        mode == 'video' || mode == 'audio' || (mode == null && (kVideoExts.contains(ext) || kAudioExts.contains(ext)));
+    if (!_streamMedia) {
+      _contentFuture = widget.controller.read(widget.path);
+    }
+  }
+
   String get _ext {
     final effectiveName = widget.entry.isSymlink && widget.entry.symlinkTarget != null
         ? widget.entry.symlinkTarget!.split('/').last
@@ -1313,40 +1543,14 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   Color get _bgColor {
     final effectiveExt = widget.openAs ?? _ext;
     if (effectiveExt == 'pdf') return Colors.grey.shade200;
-    if (effectiveExt == 'video' || kVideoExts.contains(effectiveExt)) {
-      return Colors.black;
-    }
-    if (effectiveExt == 'image' || effectiveExt == 'svg' || kImageExts.contains(effectiveExt)) {
-      return Colors.black;
-    }
-    return const Color(0xFF272822);
+    return Colors.black;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bgColor,
-      appBar: AppBar(
-        title: Text(widget.entry.name, style: const TextStyle(fontSize: 14)),
-        backgroundColor: const Color(0xFF1E1E1E),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          _isSaving
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    ),
-                  ),
-                )
-              : IconButton(icon: const Icon(Icons.download_outlined), tooltip: 'Save to device', onPressed: _download),
-        ],
-      ),
-      body: _streamMedia
+    return ColoredBox(
+      color: _bgColor,
+      child: _streamMedia
           ? _buildMediaContent(_ext)
           : FutureBuilder<Uint8List>(
               future: _contentFuture,
