@@ -55,6 +55,15 @@ class ShareService {
     return files;
   }
 
+  // Finishes the Activity, but only if it was cold-started specifically to
+  // handle this share (not if the app was already running and picked up the
+  // share via onNewIntent) — see MainActivity.kt's launchedForShareOnly.
+  Future<void> finishIfShareOnly() async {
+    try {
+      await _channel.invokeMethod('finishIfShareOnly');
+    } catch (_) {}
+  }
+
   void _setPending(List<SharedUploadFile> files) {
     final usable = files.where((file) => file.path.isNotEmpty).toList(growable: false);
     if (usable.isEmpty) return;

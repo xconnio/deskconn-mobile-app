@@ -31,6 +31,7 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
   bool _uploading = false;
   int _uploadIndex = 0;
   double _fileProgress = 0;
+  bool _showHiddenDirs = false;
 
   bool get _selectingDesktop => _desktop == null;
 
@@ -179,27 +180,35 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
   @override
   Widget build(BuildContext context) {
     final title = _selectingDesktop ? 'Choose desktop' : 'Choose destination';
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        leading: _selectingDesktop
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: _uploading
-                    ? null
-                    : () {
-                        setState(() {
-                          _desktop = null;
-                          _controller = null;
-                          _browse = null;
-                          _error = null;
-                        });
-                      },
-              ),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _DialogHeader(
+              title: title,
+              showBack: !_selectingDesktop,
+              onBack: _uploading
+                  ? null
+                  : () {
+                      setState(() {
+                        _desktop = null;
+                        _controller = null;
+                        _browse = null;
+                        _error = null;
+                      });
+                    },
+              onClose: _uploading ? null : () => Navigator.of(context).pop(),
+            ),
+            const Divider(height: 1),
+            Flexible(child: _selectingDesktop ? _buildDesktopPicker() : _buildFolderPicker()),
+            if (!_selectingDesktop) _buildUploadBar(),
+          ],
+        ),
       ),
-      body: _selectingDesktop ? _buildDesktopPicker() : _buildFolderPicker(),
-      bottomNavigationBar: _selectingDesktop ? null : _buildUploadBar(),
     );
   }
 
@@ -254,11 +263,17 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       return _ErrorView(message: _error ?? 'Could not load desktop', onRetry: () => _selectDesktop(_desktop!));
     }
 
-    final dirs = browse.entries.where((entry) => entry.isDir).toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final dirs =
+        browse.entries.where((entry) => entry.isDir && (_showHiddenDirs || !entry.name.startsWith('.'))).toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return Column(
       children: [
-        _PathBar(path: browse.path.isEmpty ? '/' : browse.path, onUp: _goUp),
+        _PathBar(
+          path: browse.path.isEmpty ? '/' : browse.path,
+          onUp: _goUp,
+          showHidden: _showHiddenDirs,
+          onToggleHidden: () => setState(() => _showHiddenDirs = !_showHiddenDirs),
+        ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -291,33 +306,59 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     final files = widget.files;
     final current = files[_uploadIndex.clamp(0, files.length - 1)];
     final sizeText = current.size == null ? '' : ' · ${formatSize(current.size!)}';
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _uploading
-                  ? 'Uploading ${_uploadIndex + 1} of ${files.length}: ${current.name}$sizeText'
-                  : files.length == 1
-                  ? current.name + sizeText
-                  : '${files.length} files selected',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            if (_uploading) LinearProgressIndicator(value: _fileProgress),
-            if (_uploading) const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: _controller == null || _browse == null || _uploading ? null : _uploadHere,
-              icon: const Icon(Icons.cloud_upload_outlined),
-              label: Text(_uploading ? 'Uploading...' : 'Upload here'),
-            ),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _uploading
+                ? 'Uploading ${_uploadIndex + 1} of ${files.length}: ${current.name}$sizeText'
+                : files.length == 1
+                ? current.name + sizeText
+                : '${files.length} files selected',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (_uploading) LinearProgressIndicator(value: _fileProgress),
+          if (_uploading) const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _controller == null || _browse == null || _uploading ? null : _uploadHere,
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: Text(_uploading ? 'Uploading...' : 'Upload here'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DialogHeader extends StatelessWidget {
+  final String title;
+  final bool showBack;
+  final VoidCallback? onBack;
+  final VoidCallback? onClose;
+
+  const _DialogHeader({required this.title, required this.showBack, this.onBack, this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+      child: Row(
+        children: [
+          if (showBack)
+            IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack)
+          else
+            const SizedBox(width: 48),
+          Expanded(
+            child: Text(title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          IconButton(icon: const Icon(Icons.close), onPressed: onClose),
+        ],
       ),
     );
   }
@@ -326,8 +367,10 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
 class _PathBar extends StatelessWidget {
   final String path;
   final VoidCallback onUp;
+  final bool showHidden;
+  final VoidCallback onToggleHidden;
 
-  const _PathBar({required this.path, required this.onUp});
+  const _PathBar({required this.path, required this.onUp, required this.showHidden, required this.onToggleHidden});
 
   @override
   Widget build(BuildContext context) {
@@ -336,6 +379,11 @@ class _PathBar extends StatelessWidget {
       child: ListTile(
         leading: IconButton(icon: const Icon(Icons.arrow_upward), onPressed: onUp, tooltip: 'Up'),
         title: Text(path, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: IconButton(
+          icon: Icon(showHidden ? Icons.visibility : Icons.visibility_off),
+          onPressed: onToggleHidden,
+          tooltip: showHidden ? 'Hide hidden folders' : 'Show hidden folders',
+        ),
       ),
     );
   }

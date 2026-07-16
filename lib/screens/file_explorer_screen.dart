@@ -394,8 +394,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
     final isCompact = MediaQuery.sizeOf(context).width < 480;
     final canUpload = _controller != null && _currentBrowse != null && _currentCategory == null;
+    final showHiddenToggle = _currentCategory == null;
     final secondaryActions = <PopupMenuEntry<String>>[
-      if (!_isMediaGallery)
+      if (!_isMediaGallery && isCompact)
         PopupMenuItem(
           value: 'toggleView',
           child: ListTile(
@@ -404,7 +405,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             title: Text(_isGrid ? 'List view' : 'Grid view'),
           ),
         ),
-      if (_currentCategory == null)
+      if (showHiddenToggle)
         PopupMenuItem(
           value: 'toggleHidden',
           child: ListTile(
@@ -413,10 +414,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             title: Text(_showHidden ? 'Hide hidden files' : 'Show hidden files'),
           ),
         ),
-      const PopupMenuItem(
-        value: 'refresh',
-        child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.refresh), title: Text('Refresh')),
-      ),
+      if (isCompact)
+        const PopupMenuItem(
+          value: 'refresh',
+          child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.refresh), title: Text('Refresh')),
+        ),
     ];
 
     return AppBar(
@@ -428,31 +430,24 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: 'Search',
           onPressed: () => setState(() => _isSearching = true),
         ),
-        if (isCompact)
-          PopupMenuButton<String>(
-            tooltip: 'More',
-            itemBuilder: (_) => secondaryActions,
-            onSelected: _handleAppBarMenuAction,
-          )
-        else ...[
-          if (!_isMediaGallery)
-            IconButton(
-              icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
-              tooltip: _isGrid ? 'List view' : 'Grid view',
-              onPressed: () => setState(() => _isGrid = !_isGrid),
-            ),
-          if (_currentCategory == null)
-            IconButton(
-              icon: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
-              onPressed: () => setState(() => _showHidden = !_showHidden),
-              tooltip: 'Show hidden files',
-            ),
+        if (!isCompact && !_isMediaGallery)
+          IconButton(
+            icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
+            tooltip: _isGrid ? 'List view' : 'Grid view',
+            onPressed: () => setState(() => _isGrid = !_isGrid),
+          ),
+        if (!isCompact)
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: () => _loadPath(_currentBrowse?.path ?? '', category: _currentCategory),
           ),
-        ],
+        if (secondaryActions.isNotEmpty)
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            itemBuilder: (_) => secondaryActions,
+            onSelected: _handleAppBarMenuAction,
+          ),
       ],
     );
   }
