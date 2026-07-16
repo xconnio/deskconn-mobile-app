@@ -251,15 +251,34 @@ class _AppBootstrapState extends State<AppBootstrap> {
     if (!session.loggedIn || ShareService.instance.pendingFiles.value.isEmpty) {
       return;
     }
+    // Set synchronously (not via setState) so a call made from build() itself
+    // is reflected in that same build pass without violating Flutter's
+    // no-setState-during-build rule; the deferred setState below only
+    // matters for calls triggered outside of build (e.g. the pendingFiles
+    // listener) and for reverting the flag once the dialog closes.
     _handlingSharedFiles = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() {});
       final files = ShareService.instance.takePendingFiles();
-      if (files.isEmpty || !mounted) {
+      if (files.isEmpty) {
         _handlingSharedFiles = false;
+        if (mounted) setState(() {});
         return;
       }
-      await navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ShareUploadScreen(files: files)));
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        await showDialog<void>(
+          context: ctx,
+          barrierDismissible: false,
+          builder: (_) => ShareUploadScreen(files: files),
+        );
+      }
+      if (ShareService.instance.pendingFiles.value.isEmpty) {
+        await ShareService.instance.finishIfShareOnly();
+      }
       _handlingSharedFiles = false;
+      if (mounted) setState(() {});
       if (ShareService.instance.pendingFiles.value.isNotEmpty) {
         _handlePendingSharedFiles();
       }
@@ -278,6 +297,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
         final session = context.watch<SessionProvider>();
         _syncNotification(session.loggedIn);
         if (session.loggedIn) _handlePendingSharedFiles();
+        if (_handlingSharedFiles) {
+          return const Scaffold(body: Center(child: _SplashContent()));
+        }
         return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
       },
     );

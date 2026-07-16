@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.OpenableColumns
 import android.provider.MediaStore
+import android.util.Patterns
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -28,11 +29,17 @@ class MainActivity : FlutterActivity() {
     private val channelId = "deskconn_session_v2"
     private val notifId = 1107
     private var pendingSharedFiles: List<Map<String, Any?>> = emptyList()
+    // True only when this Activity instance was freshly created (cold start)
+    // specifically to handle an incoming share. If the app was already
+    // running and received the share via onNewIntent instead, this stays
+    // false so we never finish() an Activity the user is actively using.
+    private var launchedForShareOnly = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel()
         pendingSharedFiles = extractSharedFiles(intent)
+        launchedForShareOnly = pendingSharedFiles.isNotEmpty()
     }
 
     // Flutter's default behavior for back-with-nothing-left-to-pop is to
@@ -114,6 +121,12 @@ class MainActivity : FlutterActivity() {
                         pendingSharedFiles = emptyList()
                         result.success(files)
                     }
+                    "finishIfShareOnly" -> {
+                        if (launchedForShareOnly) {
+                            finishAndRemoveTask()
+                        }
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -142,7 +155,37 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        if (uris.isEmpty() && intent.action == Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (!text.isNullOrEmpty()) {
+                return copySharedTextToCache(text)?.let { listOf(it) } ?: emptyList()
+            }
+        }
+
         return uris.mapNotNull { copySharedUriToCache(it, intent.type) }
+    }
+
+    private fun copySharedTextToCache(text: String): Map<String, Any?>? {
+        return try {
+            val dir = File(cacheDir, "shared")
+            dir.mkdirs()
+            val baseName = if (Patterns.WEB_URL.matcher(text).matches()) "shared-link" else "shared-text"
+            var target = File(dir, "$baseName.txt")
+            var n = 1
+            while (target.exists()) {
+                target = File(dir, "$baseName ($n).txt")
+                n++
+            }
+            target.writeText(text)
+            mapOf(
+                "path" to target.absolutePath,
+                "name" to target.name,
+                "mimeType" to "text/plain",
+                "size" to target.length()
+            )
+        } catch (e: Exception) {
+            null
+        }
     }
 
     @Suppress("DEPRECATION")
