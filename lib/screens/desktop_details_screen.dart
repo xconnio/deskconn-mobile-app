@@ -140,7 +140,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                         _LauncherTile(
                           icon: Icons.image_outlined,
                           badgeColor: const Color(0xFF77216F),
-                          title: "Pictures",
+                          title: "Photos",
                           enabled: terminalEnabled,
                           onWallpaper: wallpaper != null,
                           onTap: () => _openFileExplorer(context, category: 'images'),
