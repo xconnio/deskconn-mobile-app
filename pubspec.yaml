@@ -65,6 +65,7 @@ dependencies:
   package_info_plus: ^9.0.0
   http: ^1.2.0
   open_filex: ^4.7.0
+  pro_image_editor: 11.23.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

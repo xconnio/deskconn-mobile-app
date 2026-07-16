@@ -15,6 +15,7 @@ import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
+import 'package:deskconn_mobile_app/screens/image_editor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 
 class FileExplorerScreen extends StatefulWidget {
@@ -1313,11 +1314,21 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
   late int _currentIndex = widget.galleryEntries != null ? widget.galleryIndex : 0;
   late final PageController _pageController = PageController(initialPage: _currentIndex);
   bool _isSaving = false;
-  bool _didDelete = false;
+  bool _isEditing = false;
+  bool _contentChanged = false;
 
   FileEntry get _currentEntry => _entries[_currentIndex];
 
   String _pathFor(FileEntry entry) => widget.pathBuilder?.call(entry) ?? widget.path;
+
+  bool get _canEditCurrent {
+    final entry = _currentEntry;
+    final effectiveName = entry.isSymlink && entry.symlinkTarget != null
+        ? entry.symlinkTarget!.split('/').last
+        : entry.name;
+    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+    return kImageExts.contains(ext) && ext != 'svg';
+  }
 
   @override
   void dispose() {
@@ -1352,12 +1363,100 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     _showFileProperties(context, _currentEntry);
   }
 
+  Future<void> _editImage() async {
+    if (_isEditing) return;
+    final entry = _currentEntry;
+    setState(() => _isEditing = true);
+    try {
+      final bytes = await widget.controller.read(_pathFor(entry));
+      if (!mounted) return;
+      final edited = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(builder: (_) => ImageEditorScreen(bytes: bytes)),
+      );
+      if (mounted) setState(() => _isEditing = false);
+      if (edited == null || !mounted) return;
+      await _saveEditedImage(entry, edited);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isEditing = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Edit failed: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _saveEditedImage(FileEntry entry, Uint8List bytes) async {
+    final target = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Save edited photo'),
+        children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(context, 'phone'), child: const Text('Save to phone')),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'replace'),
+            child: const Text('Replace original on desktop'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'copy'),
+            child: const Text('Save as copy on desktop'),
+          ),
+        ],
+      ),
+    );
+    if (target == null || !mounted) return;
+
+    if (target == 'phone') {
+      try {
+        final savedPath = await saveToDevice(entry.name, bytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved: $savedPath')));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red));
+        }
+      }
+      return;
+    }
+
+    final path = _pathFor(entry);
+    final dir = path.contains('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+    final name = entry.name;
+    final dot = name.lastIndexOf('.');
+    final remoteName = target == 'copy'
+        ? (dot > 0 ? '${name.substring(0, dot)}_edited${name.substring(dot)}' : '${name}_edited')
+        : name;
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/$remoteName');
+      await tempFile.writeAsBytes(bytes);
+      await widget.controller.upload(tempFile.path, dir.isEmpty ? '/' : dir);
+      tempFile.delete().catchError((Object _) => tempFile);
+      _contentChanged = true;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to desktop')));
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   Future<void> _delete() async {
     final entry = _currentEntry;
     if (!await _confirmDelete(context, entry.name)) return;
     try {
       await widget.controller.delete(_pathFor(entry));
-      _didDelete = true;
+      _contentChanged = true;
       if (!mounted) return;
       if (_entries.length <= 1) {
         Navigator.pop(context, true);
@@ -1386,7 +1485,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        Navigator.pop(context, _didDelete);
+        Navigator.pop(context, _contentChanged);
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -1414,7 +1513,10 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
               ),
         bottomNavigationBar: _GalleryActionBar(
           isSaving: _isSaving,
+          isEditing: _isEditing,
+          canEdit: _canEditCurrent,
           onInfo: _showInfo,
+          onEdit: _editImage,
           onDownload: _download,
           onDelete: _delete,
         ),
@@ -1425,13 +1527,19 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
 
 class _GalleryActionBar extends StatelessWidget {
   final bool isSaving;
+  final bool isEditing;
+  final bool canEdit;
   final VoidCallback onInfo;
+  final VoidCallback onEdit;
   final VoidCallback onDownload;
   final VoidCallback onDelete;
 
   const _GalleryActionBar({
     required this.isSaving,
+    required this.isEditing,
+    required this.canEdit,
     required this.onInfo,
+    required this.onEdit,
     required this.onDownload,
     required this.onDelete,
   });
@@ -1448,6 +1556,10 @@ class _GalleryActionBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _ActionBarButton(icon: Icons.info_outline, label: 'Info', onTap: onInfo),
+              if (canEdit)
+                isEditing
+                    ? const _ActionBarButton(icon: Icons.tune, label: 'Editing…', onTap: null, loading: true)
+                    : _ActionBarButton(icon: Icons.tune, label: 'Edit', onTap: onEdit),
               isSaving
                   ? const _ActionBarButton(icon: Icons.download_outlined, label: 'Saving…', onTap: null, loading: true)
                   : _ActionBarButton(icon: Icons.download_outlined, label: 'Download', onTap: onDownload),
