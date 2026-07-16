@@ -66,6 +66,7 @@ dependencies:
   http: ^1.2.0
   open_filex: ^4.7.0
   pro_image_editor: 11.23.0
+  share_plus: 12.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
