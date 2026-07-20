@@ -19,6 +19,110 @@ const _procAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
 const _procAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
 const _procScreenshot = 'io.xconn.deskconn.deskconnd.screenshot';
 
+Uint8List _coerceBytes(dynamic raw) {
+  if (raw is Uint8List) {
+    return raw;
+  }
+  if (raw is List<int>) {
+    return Uint8List.fromList(raw);
+  }
+  if (raw is List) {
+    return Uint8List.fromList(raw.map((v) => (v as num).toInt()).toList());
+  }
+  if (raw is String) {
+    return Uint8List.fromList(base64.decode(raw));
+  }
+  throw FormatException('Unsupported payload type: ${raw.runtimeType}');
+}
+
+Uint8List? _coerceArtBytes(dynamic raw) {
+  if (raw == null) return null;
+  try {
+    final bytes = _coerceBytes(raw);
+    return bytes.isEmpty ? null : bytes;
+  } catch (_) {
+    return null;
+  }
+}
+
+class _MprisPlayer {
+  final String busName;
+  final String identity;
+  final String title;
+  final String artist;
+  final String album;
+  final String artMimeType;
+  final Uint8List? artData;
+  final String playbackStatus;
+  final bool canGoNext;
+  final bool canGoPrevious;
+  final bool canPlay;
+  final bool canPause;
+
+  const _MprisPlayer({
+    required this.busName,
+    required this.identity,
+    required this.title,
+    required this.artist,
+    required this.album,
+    required this.artMimeType,
+    required this.artData,
+    required this.playbackStatus,
+    required this.canGoNext,
+    required this.canGoPrevious,
+    required this.canPlay,
+    required this.canPause,
+  });
+
+  bool get isPlaying => playbackStatus == 'Playing';
+
+  bool get hasMetadata => title.isNotEmpty || artist.isNotEmpty || album.isNotEmpty;
+
+  bool get isStopped => playbackStatus == 'Stopped';
+
+  bool get hasControls => canGoNext || canGoPrevious || canPlay || canPause;
+
+  factory _MprisPlayer.fromMap(String busName, Map map) {
+    final normalized = <String, dynamic>{
+      for (final entry in map.entries) entry.key.toString().toLowerCase().replaceAll('_', ''): entry.value,
+    };
+    String str(String key) => normalized[key]?.toString() ?? '';
+    bool flag(String key, {required bool orElse}) => normalized[key] as bool? ?? orElse;
+
+    return _MprisPlayer(
+      busName: busName,
+      identity: str('identity').isNotEmpty ? str('identity') : busName,
+      title: str('title'),
+      artist: str('artist'),
+      album: str('album'),
+      artMimeType: str('artmimetype'),
+      artData: _coerceArtBytes(normalized['artdata']),
+      playbackStatus: str('playbackstatus'),
+      canGoNext: flag('cangonext', orElse: true),
+      canGoPrevious: flag('cangoprevious', orElse: true),
+      canPlay: flag('canplay', orElse: true),
+      canPause: flag('canpause', orElse: true),
+    );
+  }
+
+  factory _MprisPlayer.legacy(String busName, dynamic identity) {
+    return _MprisPlayer(
+      busName: busName,
+      identity: identity?.toString() ?? busName,
+      title: '',
+      artist: '',
+      album: '',
+      artMimeType: '',
+      artData: null,
+      playbackStatus: '',
+      canGoNext: true,
+      canGoPrevious: true,
+      canPlay: true,
+      canPause: true,
+    );
+  }
+}
+
 class RemoteControlScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
 
@@ -34,9 +138,24 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   bool _brightnessAvailable = false;
   bool _locking = false;
   bool _capturingScreenshot = false;
-  bool _isPlaying = false;
-  List<String> _playerNames = [];
+  bool _mprisBusy = false;
+  List<_MprisPlayer> _players = [];
   bool? _isMuted;
+
+  _MprisPlayer? get _primaryPlayer {
+    if (_players.isEmpty) return null;
+    final sorted = [..._players]..sort((a, b) => _playerScore(b).compareTo(_playerScore(a)));
+    return sorted.first;
+  }
+
+  int _playerScore(_MprisPlayer player) {
+    var score = 0;
+    if (player.isPlaying) score += 100;
+    if (!player.isStopped && player.playbackStatus.isNotEmpty) score += 40;
+    if (player.hasMetadata) score += 30;
+    if (player.hasControls) score += 10;
+    return score;
+  }
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
@@ -95,7 +214,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       final result = await session.call(_procMprisPlayers).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         final map = result.args[0] as Map;
-        setState(() => _playerNames = map.values.map((v) => v.toString()).toList());
+        setState(() {
+          _players = map.entries.map((entry) {
+            final busName = entry.key.toString();
+            final value = entry.value;
+            return value is Map ? _MprisPlayer.fromMap(busName, value) : _MprisPlayer.legacy(busName, value);
+          }).toList();
+        });
       }
     } catch (_) {}
   }
@@ -171,20 +296,39 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Uint8List _coerceBytes(dynamic raw) {
-    if (raw is Uint8List) return raw;
-    if (raw is List<int>) return Uint8List.fromList(raw);
-    if (raw is String) return Uint8List.fromList(base64.decode(raw));
-    throw FormatException('Unsupported payload type: ${raw.runtimeType}');
+  Future<void> _mprisCall(String proc, {String? playerName}) async {
+    if (_mprisBusy) return;
+    final session = _session;
+    if (session == null) return;
+
+    setState(() => _mprisBusy = true);
+    try {
+      await session.call(proc, args: playerName == null ? null : [playerName]).timeout(DeskconnConfig.callTimeout);
+    } catch (_) {
+      // MPRIS players can reject rapid or unsupported commands. Keep media
+      // controls quiet and let the scheduled refresh settle the UI.
+    }
+    _refreshPlayersAfterMprisAction();
   }
 
-  Future<void> _mprisCall(String proc) async {
-    await _run((session) => session.call(proc).timeout(DeskconnConfig.callTimeout));
+  void _refreshPlayersAfterMprisAction() {
+    for (final delay in const [
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 700),
+      Duration(milliseconds: 1400),
+    ]) {
+      Future.delayed(delay, () {
+        if (mounted) _loadPlayers();
+      });
+    }
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _mprisBusy = false);
+    });
   }
 
   Future<void> _togglePlayPause() async {
-    setState(() => _isPlaying = !_isPlaying);
-    await _mprisCall(_procMprisPlayPause);
+    final player = _primaryPlayer;
+    await _mprisCall(_procMprisPlayPause, playerName: player?.busName);
   }
 
   void _showBrightnessSheet() {
@@ -243,11 +387,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           ),
           const SizedBox(height: 16),
           _MediaCard(
-            playerNames: _playerNames,
-            isPlaying: _isPlaying,
-            onPrev: () => _mprisCall(_procMprisPrev),
-            onPlayPause: _togglePlayPause,
-            onNext: () => _mprisCall(_procMprisNext),
+            player: _primaryPlayer,
+            onPrev: _mprisBusy ? null : () => _mprisCall(_procMprisPrev, playerName: _primaryPlayer?.busName),
+            onPlayPause: _mprisBusy ? null : _togglePlayPause,
+            onNext: _mprisBusy ? null : () => _mprisCall(_procMprisNext, playerName: _primaryPlayer?.busName),
           ),
         ],
       ),
@@ -285,58 +428,95 @@ class _IconTile extends StatelessWidget {
 }
 
 class _MediaCard extends StatelessWidget {
-  final List<String> playerNames;
-  final bool isPlaying;
-  final VoidCallback onPrev;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
+  final _MprisPlayer? player;
+  final VoidCallback? onPrev;
+  final VoidCallback? onPlayPause;
+  final VoidCallback? onNext;
 
-  const _MediaCard({
-    required this.playerNames,
-    required this.isPlaying,
-    required this.onPrev,
-    required this.onPlayPause,
-    required this.onNext,
-  });
+  const _MediaCard({required this.player, required this.onPrev, required this.onPlayPause, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
-    final playerLabel = playerNames.isEmpty ? 'No active players' : playerNames.join('  ·  ');
+    final p = player;
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.music_note, size: 16, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    playerLabel,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis,
+        child: p == null
+            ? Row(
+                children: [
+                  Icon(Icons.music_note, size: 16, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 6),
+                  const Text('No active players'),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _ArtThumbnail(data: p.artData),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              p.title.isNotEmpty ? p.title : p.identity,
+                              style: Theme.of(context).textTheme.titleSmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (p.artist.isNotEmpty || p.album.isNotEmpty)
+                              Text(
+                                [p.artist, p.album].where((s) => s.isNotEmpty).join('  ·  '),
+                                style: Theme.of(context).textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(icon: const Icon(Icons.skip_previous_rounded), iconSize: 40, onPressed: onPrev),
-                IconButton(
-                  icon: Icon(isPlaying ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded),
-                  iconSize: 52,
-                  onPressed: onPlayPause,
-                ),
-                IconButton(icon: const Icon(Icons.skip_next_rounded), iconSize: 40, onPressed: onNext),
-              ],
-            ),
-          ],
-        ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(icon: const Icon(Icons.skip_previous_rounded), iconSize: 40, onPressed: onPrev),
+                      IconButton(
+                        icon: Icon(
+                          p.isPlaying ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                        ),
+                        iconSize: 52,
+                        onPressed: onPlayPause,
+                      ),
+                      IconButton(icon: const Icon(Icons.skip_next_rounded), iconSize: 40, onPressed: onNext),
+                    ],
+                  ),
+                ],
+              ),
       ),
+    );
+  }
+}
+
+class _ArtThumbnail extends StatelessWidget {
+  final Uint8List? data;
+
+  const _ArtThumbnail({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = data;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: bytes == null
+          ? Container(
+              width: 48,
+              height: 48,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.primary),
+            )
+          : Image.memory(bytes, width: 48, height: 48, fit: BoxFit.cover),
     );
   }
 }
