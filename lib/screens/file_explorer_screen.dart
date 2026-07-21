@@ -353,7 +353,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final showSidebar = _isDesktopLayout(context);
 
     return PopScope(
-      canPop: _currentCategory != null || (isAtRoot && !_isSearching),
+      canPop: !_isSearching && (_currentCategory != null || isAtRoot),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_isSearching) {
@@ -466,24 +466,33 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   AppBar _buildSearchAppBar() {
+    final colorScheme = Theme.of(context).colorScheme;
     return AppBar(
+      titleSpacing: 0,
       leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _exitSearch),
-      title: TextField(
-        controller: _searchController,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'Search files…', border: InputBorder.none),
-        onChanged: (q) => setState(() => _searchQuery = q),
+      title: Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: SearchBar(
+          controller: _searchController,
+          autoFocus: true,
+          hintText: 'Search files…',
+          leading: const Icon(Icons.search),
+          trailing: [
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() {
+                  _searchQuery = '';
+                  _searchController.clear();
+                }),
+              ),
+          ],
+          elevation: const WidgetStatePropertyAll(0),
+          backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainerHighest),
+          side: WidgetStatePropertyAll(BorderSide(color: colorScheme.outlineVariant)),
+          onChanged: (q) => setState(() => _searchQuery = q),
+        ),
       ),
-      actions: [
-        if (_searchQuery.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => setState(() {
-              _searchQuery = '';
-              _searchController.clear();
-            }),
-          ),
-      ],
     );
   }
 
