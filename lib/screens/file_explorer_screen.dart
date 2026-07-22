@@ -38,7 +38,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _isLoading = true;
   String? _error;
   bool _showHidden = false;
-  String? _currentCategory;
+  late String? _currentCategory = widget.category;
 
   bool _isGrid = false;
   bool get _isMediaGallery => _currentCategory == 'images' || _currentCategory == 'videos';
@@ -84,7 +84,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       _log('reusing cached desktop session');
       _controller = existing.explorerController ??= FileExplorerController(existing.session, widget.config.realm);
       if (_controller!.isKeyExchanged) {
-        await _loadPath(_currentBrowse?.path ?? '');
+        await _loadInitial();
         return;
       }
     }
@@ -111,18 +111,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _controller = connection.explorerController ??= FileExplorerController(connection.session, widget.config.realm);
       }
 
-      if (widget.category != null) {
-        await _loadPath('', category: widget.category);
-      } else {
-        await _loadPath(widget.initialPath ?? '');
-      }
-
-      if (widget.initialOpenFile != null && _currentBrowse != null) {
-        final entry = _currentBrowse!.entries.where((e) => _fullPath(e) == widget.initialOpenFile).firstOrNull;
-        if (entry != null && mounted) {
-          _onEntryTap(entry);
-        }
-      }
+      await _loadInitial();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -131,6 +120,21 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         });
       }
       _log('initialize failed error=$e');
+    }
+  }
+
+  Future<void> _loadInitial() async {
+    if (widget.category != null) {
+      await _loadPath('', category: widget.category);
+    } else {
+      await _loadPath(widget.initialPath ?? '');
+    }
+
+    if (widget.initialOpenFile != null && _currentBrowse != null) {
+      final entry = _currentBrowse!.entries.where((e) => _fullPath(e) == widget.initialOpenFile).firstOrNull;
+      if (entry != null && mounted) {
+        _onEntryTap(entry);
+      }
     }
   }
 
