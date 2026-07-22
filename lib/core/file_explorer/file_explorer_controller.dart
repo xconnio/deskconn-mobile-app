@@ -20,6 +20,8 @@ class FileExplorerController {
 
   static final Map<String, Uint8List> _thumbnailCache = {};
   static final Map<String, Future<Uint8List>> _thumbnailFutures = {};
+  static final Map<String, Uint8List> _readCache = {};
+  static final Map<String, Future<Uint8List>> _readFutures = {};
 
   static int _activeDownloads = 0;
   static const int _maxConcurrentDownloads = 4;
@@ -76,7 +78,29 @@ class FileExplorerController {
     return FileBrowseResult.fromJson(jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>);
   }
 
-  Future<Uint8List> read(String path) async => _download(path, false);
+  Future<Uint8List> read(String path) async {
+    final cacheKey = '$realm:$path';
+    if (_readCache.containsKey(cacheKey)) {
+      return _readCache[cacheKey]!;
+    }
+    if (_readFutures.containsKey(cacheKey)) {
+      return _readFutures[cacheKey]!;
+    }
+
+    final future = _runReadDownload(cacheKey, path);
+    _readFutures[cacheKey] = future;
+    return future;
+  }
+
+  Future<Uint8List> _runReadDownload(String cacheKey, String path) async {
+    try {
+      final data = await _download(path, false);
+      _readCache[cacheKey] = data;
+      return data;
+    } finally {
+      _readFutures.remove(cacheKey);
+    }
+  }
 
   Future<Uint8List> thumbnail(String path) async {
     final cacheKey = '$realm:$path';
@@ -274,16 +298,29 @@ class FileExplorerController {
       outgoing.put(Progress(args: ['E', seq], options: {}));
 
       await callFuture.timeout(const Duration(seconds: 10), onTimeout: () => Result());
+      _invalidateCache(remoteFilePath);
     } catch (e) {
       outgoing.cancelPending(StateError('Upload aborted'));
       rethrow;
     }
   }
 
-  Future<void> rename(String oldPath, String newPath) async =>
-      _callEncrypted('io.xconn.deskconn.deskconnd.file.rename', {'old_path': oldPath, 'new_path': newPath});
+  Future<void> rename(String oldPath, String newPath) async {
+    await _callEncrypted('io.xconn.deskconn.deskconnd.file.rename', {'old_path': oldPath, 'new_path': newPath});
+    _invalidateCache(oldPath);
+    _invalidateCache(newPath);
+  }
 
-  Future<void> delete(String path) async => _callEncrypted('io.xconn.deskconn.deskconnd.file.delete', {'path': path});
+  Future<void> delete(String path) async {
+    await _callEncrypted('io.xconn.deskconn.deskconnd.file.delete', {'path': path});
+    _invalidateCache(path);
+  }
+
+  void _invalidateCache(String path) {
+    final cacheKey = '$realm:$path';
+    _readCache.remove(cacheKey);
+    _thumbnailCache.remove(cacheKey);
+  }
 
   Future<void> copy(String srcPath, String destPath) async =>
       _callEncrypted('io.xconn.deskconn.deskconnd.file.copy', {'src': srcPath, 'dst': destPath});

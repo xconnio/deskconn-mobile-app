@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
 const bool kForceWebRtcOnly = false;
@@ -14,6 +15,11 @@ class DesktopConnection {
   final Session session;
   final bool isP2P;
   bool isAgentOnline = false;
+
+  // Reused across FileExplorerScreen instances for the same realm so a
+  // screen reopen doesn't force a redundant key-exchange RPC on an already
+  // key-exchanged, still-healthy session.
+  FileExplorerController? explorerController;
 
   void Function()? onDisconnected;
 
