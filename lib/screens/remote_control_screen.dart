@@ -631,7 +631,11 @@ class _ScreenshotPreviewScreenState extends State<_ScreenshotPreviewScreen> {
               : IconButton(icon: const Icon(Icons.download_outlined), tooltip: 'Save to device', onPressed: _save),
         ],
       ),
-      body: Center(child: InteractiveViewer(child: Image.memory(widget.bytes))),
+      body: InteractiveViewer(
+        minScale: 1,
+        maxScale: 5,
+        child: SizedBox.expand(child: Image.memory(widget.bytes, fit: BoxFit.contain)),
+      ),
     );
   }
 }

@@ -1801,16 +1801,28 @@ class _PreviewBodyState extends State<_PreviewBody> {
     if (mode != null) {
       if (mode == 'text') return _TextPreview(data: data);
       if (mode == 'image') {
-        return InteractiveViewer(child: Center(child: Image.memory(data)));
+        return InteractiveViewer(
+          minScale: 1,
+          maxScale: 5,
+          child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
+        );
       }
       if (mode == 'pdf') return _PdfPreview(data: data);
     }
 
     if (kImageExts.contains(ext)) {
-      return InteractiveViewer(child: Center(child: Image.memory(data)));
+      return InteractiveViewer(
+        minScale: 1,
+        maxScale: 5,
+        child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
+      );
     }
     if (ext == 'svg') {
-      return InteractiveViewer(child: Center(child: SvgPicture.memory(data)));
+      return InteractiveViewer(
+        minScale: 1,
+        maxScale: 5,
+        child: SizedBox.expand(child: SvgPicture.memory(data, fit: BoxFit.contain)),
+      );
     }
     if (kTextExts.contains(ext)) {
       return _TextPreview(data: data);
