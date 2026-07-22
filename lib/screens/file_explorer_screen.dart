@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
@@ -81,7 +82,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final existing = DesktopConnectionManager().get(widget.config.realm);
     if (existing != null) {
       _log('reusing cached desktop session');
-      _controller = FileExplorerController(existing.session, widget.config.realm);
+      _controller = existing.explorerController ??= FileExplorerController(existing.session, widget.config.realm);
       if (_controller!.isKeyExchanged) {
         await _loadPath(_currentBrowse?.path ?? '');
         return;
@@ -107,7 +108,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           );
       _log('controller ready p2p=${connection.isP2P}');
       if (mounted) {
-        _controller = FileExplorerController(connection.session, widget.config.realm);
+        _controller = connection.explorerController ??= FileExplorerController(connection.session, widget.config.realm);
       }
 
       if (widget.category != null) {
@@ -209,9 +210,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         });
         return;
       }
-      final sessionAlive = _controller?.session.isConnected() ?? false;
+      // isConnected() can keep reporting true even after the session's read
+      // loop has died (a known issue in the underlying WAMP client), so a
+      // call that timed out is treated as just as dead as a closed session —
+      // otherwise every retry on this realm keeps reusing the same zombie
+      // session and timing out forever.
+      final sessionAlive = (_controller?.session.isConnected() ?? false) && e is! TimeoutException;
       if (!sessionAlive) {
-        _log('session lost during browse path=$path');
+        _log('session lost during browse path=$path error=$e');
         await _reconnect();
         return;
       }
