@@ -5,6 +5,7 @@ import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -74,7 +75,7 @@ class SessionProvider extends ChangeNotifier {
         throw Exception("Empty account response");
       }
 
-      account = Map<String, dynamic>.from(res.args[0]);
+      account = Map<String, dynamic>.from(res.args[0] as Map);
 
       await Future.wait([loadDesktops(), _registerDevice(email)]);
 
@@ -118,7 +119,7 @@ class SessionProvider extends ChangeNotifier {
           final res = await session!.call("io.xconn.deskconn.account.get").timeout(DeskconnConfig.callTimeout);
           if (res.args.isEmpty) throw Exception("Empty account");
 
-          account = Map<String, dynamic>.from(res.args[0]);
+          account = Map<String, dynamic>.from(res.args[0] as Map);
 
           unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
           await loadDesktops();
@@ -148,7 +149,7 @@ class SessionProvider extends ChangeNotifier {
     try {
       final s = await _ensureSession();
       final res = await s.call("io.xconn.deskconn.desktop.list").timeout(DeskconnConfig.callTimeout);
-      desktops = List<Map<String, dynamic>>.from(res.args);
+      desktops = res.args.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (e) {
       error = "Failed to load desktops";
     } finally {
@@ -169,6 +170,8 @@ class SessionProvider extends ChangeNotifier {
       }
       await session?.close();
     } catch (_) {}
+
+    await QUICConnectionManager().close();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -215,7 +218,7 @@ class SessionProvider extends ChangeNotifier {
         throw Exception('Device registration failed: empty response');
       }
 
-      final resultData = res.args[0] as Map<String, dynamic>;
+      final resultData = Map<String, dynamic>.from(res.args[0] as Map);
       final deviceId = resultData['device_id'] ?? resultData['id'];
 
       if (deviceId == null) {

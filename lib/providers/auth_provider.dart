@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:xconn/xconn.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -22,8 +23,10 @@ class AuthProvider extends ChangeNotifier {
 
   Future<Session> _getSession() async {
     if (_session == null || !_session!.isConnected()) {
-      var client = Client(config: ClientConfig(authenticator: AnonymousAuthenticator(DeskconnConfig.serviceAuthId)));
-      _session = await client.connect(DeskconnConfig.wampUrl, DeskconnConfig.realm);
+      _session = await QUICConnectionManager().openSession(
+        DeskconnConfig.realm,
+        QUICDialerConfig(authenticator: AnonymousAuthenticator(DeskconnConfig.serviceAuthId)),
+      );
     }
     return _session!;
   }
