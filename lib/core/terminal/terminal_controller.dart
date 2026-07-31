@@ -169,6 +169,9 @@ class TerminalController {
         onStarted?.call();
         return;
       }
+      // Server sends a MIGRATE: frame immediately after the KEY: frame.
+      // It is a session-migration token for the desktop proxy, not PTY output.
+      if (_isMigrateFrame(bytes)) return;
       text = utf8.decode(_encryption!.decrypt(bytes));
     } catch (_) {
       try {
@@ -196,6 +199,15 @@ class TerminalController {
     final enc = _encryption!;
     if (!encrypt) return enc.buildClientFirstMessage(bytes);
     return enc.encrypt(bytes);
+  }
+
+  static bool _isMigrateFrame(Uint8List bytes) {
+    const prefix = [0x4D, 0x49, 0x47, 0x52, 0x41, 0x54, 0x45, 0x3A]; // 'MIGRATE:'
+    if (bytes.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (bytes[i] != prefix[i]) return false;
+    }
+    return true;
   }
 
   Uint8List _coerceBytes(dynamic raw) {

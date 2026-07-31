@@ -291,7 +291,7 @@ class DesktopConnectionManager {
       final result = await session
           .call('io.xconn.deskconn.coturn.credentials.create')
           .timeout(DeskconnConfig.callTimeout);
-      final c = result.args[0] as Map<String, dynamic>;
+      final c = Map<String, dynamic>.from(result.args[0] as Map);
       _log('turn fetch success');
       final creds = {
         'username': c['username'],

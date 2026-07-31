@@ -67,7 +67,7 @@ class _AccountScreenState extends State<AccountScreen> {
       if (!mounted) return;
 
       if (res.args.isNotEmpty) {
-        session.updateAccount(Map<String, dynamic>.from(res.args[0]));
+        session.updateAccount(Map<String, dynamic>.from(res.args[0] as Map));
       }
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
