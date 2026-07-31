@@ -9,10 +9,7 @@ class WampClient {
   Future<Session> connectCra({required String email, required String password, required String realm}) async {
     _session = await QUICConnectionManager().openSession(
       realm,
-      QUICDialerConfig(
-        authenticator: WAMPCRAAuthenticator(email, password),
-        serializer: CBORSerializer(),
-      ),
+      QUICDialerConfig(authenticator: WAMPCRAAuthenticator(email, password), serializer: CBORSerializer()),
     );
     return _session!;
   }
@@ -20,10 +17,7 @@ class WampClient {
   Future<Session> connectCryptoSign({required String authId, required String privateKey, required String realm}) async {
     _session = await QUICConnectionManager().openSession(
       realm,
-      QUICDialerConfig(
-        authenticator: CryptoSignAuthenticator(authId, privateKey),
-        serializer: CBORSerializer(),
-      ),
+      QUICDialerConfig(authenticator: CryptoSignAuthenticator(authId, privateKey), serializer: CBORSerializer()),
     );
     return _session!;
   }
@@ -36,10 +30,7 @@ class WampClient {
   }) async {
     _session = await QUICConnectionManager().openSession(
       realm,
-      QUICDialerConfig(
-        authenticator: CryptoSignAuthenticator(authId, privateKey),
-        serializer: serializer,
-      ),
+      QUICDialerConfig(authenticator: CryptoSignAuthenticator(authId, privateKey), serializer: serializer),
     );
     return _session!;
   }
