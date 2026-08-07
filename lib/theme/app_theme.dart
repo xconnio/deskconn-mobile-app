@@ -53,8 +53,8 @@ class DeskconnTheme {
 
   static ThemeData dark() {
     final scheme = ColorScheme.dark(
-      primary: DeskconnColors.primary,
-      onPrimary: DeskconnColors.onPrimary,
+      primary: DeskconnColors.darkOnSurface,
+      onPrimary: DeskconnColors.darkSurface,
       secondary: DeskconnColors.secondary,
       onSecondary: Colors.white,
       surface: DeskconnColors.darkSurface,

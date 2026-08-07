@@ -22,7 +22,7 @@ class DeskconnInputs {
       fillColor: DeskconnColors.darkSurface,
       border: _border(DeskconnColors.darkBorder),
       enabledBorder: _border(DeskconnColors.darkBorder),
-      focusedBorder: _border(DeskconnColors.primary),
+      focusedBorder: _border(DeskconnColors.darkOnSurface),
       errorBorder: _border(Colors.red.shade300),
       focusedErrorBorder: _border(Colors.red.shade300),
       labelStyle: const TextStyle(color: Colors.white70),
