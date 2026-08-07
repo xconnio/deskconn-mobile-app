@@ -19,6 +19,7 @@ class _AccountScreenState extends State<AccountScreen> {
   bool savingProfile = false;
   bool savingPassword = false;
   String? error;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -183,8 +184,18 @@ class _AccountScreenState extends State<AccountScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: passCtrl,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'New password'),
+            obscureText: _obscurePassword,
+            decoration: InputDecoration(
+              labelText: 'New password',
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
+            ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),

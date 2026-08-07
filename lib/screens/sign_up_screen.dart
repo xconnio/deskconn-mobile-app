@@ -24,6 +24,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? emailError;
   String? nameError;
   String? passwordError;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -95,7 +96,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                           TextField(
                             controller: passCtrl,
-                            obscureText: true,
+                            obscureText: _obscurePassword,
                             onChanged: (v) {
                               if (emailError != null || nameError != null || passwordError != null) {
                                 setState(() {
@@ -105,7 +106,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 });
                               }
                             },
-                            decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              errorText: passwordError,
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ),
                           ),
 
                           const SizedBox(height: 24),

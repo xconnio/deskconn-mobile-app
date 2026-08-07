@@ -23,6 +23,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final passCtrl = TextEditingController();
   String? emailError;
   String? passwordError;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -94,7 +95,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                           TextField(
                             controller: passCtrl,
-                            obscureText: true,
+                            obscureText: _obscurePassword,
                             onChanged: (v) {
                               if (emailError != null || passwordError != null) {
                                 setState(() {
@@ -103,7 +104,18 @@ class _SignInScreenState extends State<SignInScreen> {
                                 });
                               }
                             },
-                            decoration: InputDecoration(labelText: 'Password', errorText: passwordError),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              errorText: passwordError,
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ),
                           ),
 
                           const SizedBox(height: 24),
