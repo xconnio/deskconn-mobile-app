@@ -22,6 +22,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool _otpSent = false;
   bool _loading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -106,8 +107,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                     TextField(
                       controller: passCtrl,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: "New password"),
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: "New password",
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
 
