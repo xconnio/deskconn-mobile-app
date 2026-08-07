@@ -14,7 +14,6 @@ class DesktopSessionLaunchConfig {
   final String authId;
   final String privateKey;
   final bool webRtcEnabled;
-  final Map<String, dynamic>? turnCredentials;
 
   DesktopSessionLaunchConfig({
     required this.sessionKey,
@@ -23,7 +22,6 @@ class DesktopSessionLaunchConfig {
     required this.authId,
     required this.privateKey,
     required this.webRtcEnabled,
-    this.turnCredentials,
   });
 }
 

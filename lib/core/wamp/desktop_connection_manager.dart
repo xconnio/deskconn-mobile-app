@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
-import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
@@ -41,10 +40,6 @@ class DesktopConnectionManager {
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
   final Set<String> _noWebRtcSupportRealms = {};
 
-  Map<String, dynamic>? _turnCredentials;
-  DateTime? _turnCredentialsExpiry;
-  Future<Map<String, dynamic>>? _pendingTurnCredentials;
-
   void _log(String message) {
     debugPrint('[DesktopSession ${DateTime.now().toIso8601String()}] $message');
   }
@@ -63,27 +58,14 @@ class DesktopConnectionManager {
     return null;
   }
 
-  Future<void> prefetchTurnCredentials(String authId, String privateKey) async {
-    try {
-      await _getTurnCredentials(authId, privateKey);
-    } catch (_) {}
-  }
-
   Future<DesktopConnection> acquire({
     required String realm,
     required String authId,
     required bool webRtcEnabled,
     required String privateKey,
-    Map<String, dynamic>? turnCredentials,
   }) {
     _log('acquire realm=$realm webrtc=$webRtcEnabled');
-    return connect(
-      realm: realm,
-      authId: authId,
-      webRtcEnabled: webRtcEnabled,
-      privateKey: privateKey,
-      turnCredentials: turnCredentials,
-    );
+    return connect(realm: realm, authId: authId, webRtcEnabled: webRtcEnabled, privateKey: privateKey);
   }
 
   Future<DesktopConnection> connect({
@@ -91,7 +73,6 @@ class DesktopConnectionManager {
     required String authId,
     required bool webRtcEnabled,
     required String privateKey,
-    Map<String, dynamic>? turnCredentials,
   }) async {
     final pendingKey = 'session:$realm';
     final pending = _pendingConnections[pendingKey];
@@ -100,13 +81,7 @@ class DesktopConnectionManager {
       return pending;
     }
 
-    final future = _connectInternal(
-      realm: realm,
-      authId: authId,
-      webRtcEnabled: webRtcEnabled,
-      privateKey: privateKey,
-      turnCredentials: turnCredentials,
-    );
+    final future = _connectInternal(realm: realm, authId: authId, webRtcEnabled: webRtcEnabled, privateKey: privateKey);
     _pendingConnections[pendingKey] = future;
 
     try {
@@ -123,7 +98,6 @@ class DesktopConnectionManager {
     required String authId,
     required bool webRtcEnabled,
     required String privateKey,
-    Map<String, dynamic>? turnCredentials,
   }) async {
     final key = 'session:$realm';
     final existing = _connections[key];
@@ -154,9 +128,6 @@ class DesktopConnectionManager {
       realm: realm,
       serializer: CBORSerializer(),
     );
-    final turnFuture = (willUseWebRtc && turnCredentials == null) ? _getTurnCredentials(authId, privateKey) : null;
-    turnFuture?.ignore();
-
     final signalingSession = await signalingFuture;
 
     Session finalSession = signalingSession;
@@ -184,8 +155,6 @@ class DesktopConnectionManager {
       const connectTimeout = Duration(seconds: 20);
       Object? lastError;
       try {
-        final credentials = turnCredentials ?? await turnFuture!;
-
         final config = web_rtc.ClientConfig(
           realm: realm,
           procedureWebRTCOffer: 'io.xconn.webrtc.offer',
@@ -193,7 +162,6 @@ class DesktopConnectionManager {
           topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
           iceServers: [
             {'urls': 'stun:stun.l.google.com:19302'},
-            {'urls': credentials['urls'], 'username': credentials['username'], 'credential': credentials['credential']},
           ],
           serializer: CBORSerializer(),
           session: signalingSession,
@@ -254,59 +222,5 @@ class DesktopConnectionManager {
       await release(realm);
     }
     _noWebRtcSupportRealms.clear();
-  }
-
-  Future<Map<String, dynamic>> _getTurnCredentials(String authId, String privateKey) {
-    final cached = _turnCredentials;
-    final expiry = _turnCredentialsExpiry;
-    if (cached != null && expiry != null && DateTime.now().isBefore(expiry)) {
-      _log('turn cache hit');
-      return Future.value(cached);
-    }
-
-    final pending = _pendingTurnCredentials;
-    if (pending != null) {
-      _log('turn join pending fetch');
-      return pending;
-    }
-
-    final future = _fetchTurnCredentials(authId, privateKey);
-    _pendingTurnCredentials = future;
-    return future.whenComplete(() {
-      if (_pendingTurnCredentials == future) {
-        _pendingTurnCredentials = null;
-      }
-    });
-  }
-
-  Future<Map<String, dynamic>> _fetchTurnCredentials(String authId, String privateKey) async {
-    _log('turn fetch start');
-    final turnClient = WampClient();
-    try {
-      final session = await turnClient.connectCryptoSign(
-        authId: authId,
-        privateKey: privateKey,
-        realm: DeskconnConfig.realm,
-      );
-      final result = await session
-          .call('io.xconn.deskconn.coturn.credentials.create')
-          .timeout(DeskconnConfig.callTimeout);
-      final c = Map<String, dynamic>.from(result.args[0] as Map);
-      _log('turn fetch success');
-      final creds = {
-        'username': c['username'],
-        'credential': c['credential'],
-        'urls': c['urls'],
-        'expires_at': c['expires_at'],
-      };
-      _turnCredentials = creds;
-      final expiresAt = creds['expires_at'];
-      _turnCredentialsExpiry = expiresAt is int
-          ? DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000).subtract(const Duration(minutes: 1))
-          : DateTime.now().add(const Duration(hours: 1));
-      return creds;
-    } finally {
-      await turnClient.disconnect();
-    }
   }
 }
