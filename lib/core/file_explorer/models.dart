@@ -99,7 +99,7 @@ class FileBrowseResult {
       entries:
           (json['entries'] as List<dynamic>?)?.map((e) => FileEntry.fromJson(Map<String, dynamic>.from(e))).toList() ??
           [],
-      nextCursor: json['next_cursor'] as String?,
+      nextCursor: json['next_cursor'] is String ? json['next_cursor'] as String : null,
       hasMore: _toBool(json['has_more']),
     );
   }
