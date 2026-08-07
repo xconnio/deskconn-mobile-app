@@ -81,8 +81,16 @@ class FileBrowseResult {
   final String path;
   final String homePath;
   final List<FileEntry> entries;
+  final String? nextCursor;
+  final bool hasMore;
 
-  FileBrowseResult({required this.path, required this.homePath, required this.entries});
+  FileBrowseResult({
+    required this.path,
+    required this.homePath,
+    required this.entries,
+    this.nextCursor,
+    this.hasMore = false,
+  });
 
   factory FileBrowseResult.fromJson(Map<String, dynamic> json) {
     return FileBrowseResult(
@@ -91,6 +99,8 @@ class FileBrowseResult {
       entries:
           (json['entries'] as List<dynamic>?)?.map((e) => FileEntry.fromJson(Map<String, dynamic>.from(e))).toList() ??
           [],
+      nextCursor: json['next_cursor'] as String?,
+      hasMore: _toBool(json['has_more']),
     );
   }
 }

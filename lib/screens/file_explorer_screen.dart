@@ -33,12 +33,16 @@ class FileExplorerScreen extends StatefulWidget {
 }
 
 class _FileExplorerScreenState extends State<FileExplorerScreen> {
+  static const int _pageSize = 200;
+
   FileExplorerController? _controller;
   FileBrowseResult? _currentBrowse;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _error;
   bool _showHidden = false;
   late String? _currentCategory = widget.category;
+  final ScrollController _scrollController = ScrollController();
 
   bool _isGrid = false;
   bool get _isMediaGallery => _currentCategory == 'images' || _currentCategory == 'videos';
@@ -59,12 +63,22 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   void initState() {
     super.initState();
     _initialize();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
   }
 
   void _exitSearch() {
@@ -191,7 +205,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       } else if (category != null) {
         result = await _controller!.index(category);
       } else {
-        result = await _controller!.browse(path);
+        result = await _controller!.browse(path, limit: _pageSize);
       }
 
       final cacheKey = category != null ? '${widget.config.realm}:cat:$category' : '${widget.config.realm}:$path';
@@ -232,6 +246,34 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
+  Future<void> _loadMore() async {
+    final current = _currentBrowse;
+    if (current == null || !current.hasMore || _isLoadingMore || _isLoading || _currentCategory != null) return;
+    if (_controller == null) return;
+
+    setState(() => _isLoadingMore = true);
+    try {
+      final more = await _controller!.browse(current.path, cursor: current.nextCursor, limit: _pageSize);
+      final merged = FileBrowseResult(
+        path: current.path,
+        homePath: current.homePath,
+        entries: [...current.entries, ...more.entries],
+        nextCursor: more.nextCursor,
+        hasMore: more.hasMore,
+      );
+      _browseCache['${widget.config.realm}:${current.path}'] = merged;
+      if (mounted) {
+        setState(() {
+          _currentBrowse = merged;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      _log('load more failed path=${current.path} error=$e');
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
   String _fullPath(FileEntry entry) {
     if (entry.path.isNotEmpty) return entry.path;
     final dir = _currentBrowse!.path;
@@ -264,7 +306,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      final result = await _controller!.browse(browsePath);
+      final result = await _controller!.browse(browsePath, limit: _pageSize);
       _browseCache['${widget.config.realm}:$browsePath'] = result;
       if (mounted) {
         setState(() {
@@ -624,6 +666,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
     if (_isMediaGallery) {
       return GridView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.all(2),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
@@ -645,6 +688,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
     if (_isGrid) {
       return GridView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.all(8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 4,
@@ -652,8 +696,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           crossAxisSpacing: 4,
           childAspectRatio: 0.8,
         ),
-        itemCount: entries.length,
+        itemCount: entries.length + (_isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index >= entries.length) return const _LoadMoreIndicator();
           final entry = entries[index];
           return _FileEntryGrid(
             entry: entry,
@@ -666,8 +711,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
 
     return ListView.builder(
-      itemCount: entries.length,
+      controller: _scrollController,
+      itemCount: entries.length + (_isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index >= entries.length) return const _LoadMoreIndicator();
         final entry = entries[index];
         return _FileEntryTile(
           entry: entry,
@@ -1136,6 +1183,18 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _LoadMoreIndicator extends StatelessWidget {
+  const _LoadMoreIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+    );
   }
 }
 

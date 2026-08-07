@@ -53,11 +53,16 @@ class FileExplorerController {
     _keyExchanged = true;
   }
 
-  Future<FileBrowseResult> browse(String path) async {
+  Future<FileBrowseResult> browse(String path, {String? cursor, int? limit}) async {
     await ensureKeyExchanged();
-    final encryptedPath = _encryption!.encrypt(utf8.encode(path));
+    final payload = <String, dynamic>{
+      'path': path,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (limit != null && limit > 0) 'limit': limit,
+    };
+    final encryptedPayload = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
     final res = await session
-        .call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPath])
+        .call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPayload])
         .timeout(DeskconnConfig.callTimeout);
     if (res.args.isEmpty) throw Exception('Browse failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
