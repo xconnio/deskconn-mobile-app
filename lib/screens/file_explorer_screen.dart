@@ -104,7 +104,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             authId: widget.config.authId,
             privateKey: widget.config.privateKey,
             webRtcEnabled: widget.config.webRtcEnabled,
-            turnCredentials: widget.config.turnCredentials,
           );
       _log('controller ready p2p=${connection.isP2P}');
       if (mounted) {

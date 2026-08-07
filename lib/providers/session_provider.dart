@@ -79,12 +79,6 @@ class SessionProvider extends ChangeNotifier {
 
       await Future.wait([loadDesktops(), _registerDevice(email)]);
 
-      // Device's cryptosign key only exists once _registerDevice above completes.
-      final privateKey = await DeviceIdentity.privateKey();
-      if (privateKey != null) {
-        unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
-      }
-
       loggedIn = true;
       notifyListeners();
     } catch (e) {
@@ -121,7 +115,6 @@ class SessionProvider extends ChangeNotifier {
 
           account = Map<String, dynamic>.from(res.args[0] as Map);
 
-          unawaited(DesktopConnectionManager().prefetchTurnCredentials(email, privateKey));
           await loadDesktops();
 
           loggedIn = true;

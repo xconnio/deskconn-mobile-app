@@ -64,7 +64,6 @@ class TerminalController {
             authId: config.authId,
             privateKey: config.privateKey,
             webRtcEnabled: config.webRtcEnabled,
-            turnCredentials: config.turnCredentials,
           );
     } catch (e) {
       _log('connect failed error=$e');
