@@ -2372,7 +2372,7 @@ class _FileEntryGrid extends StatelessWidget {
                 child: Icon(
                   selected ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 18,
-                  color: selected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                  color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline,
                 ),
               ),
           ],
@@ -2455,6 +2455,7 @@ class _FileEntryTile extends StatelessWidget {
       title: _buildTitle(context),
       subtitle: subtitle,
       selected: selectionMode && selected,
+      selectedTileColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
       onTap: onTap,
       onLongPress: onLongPress,
     );
