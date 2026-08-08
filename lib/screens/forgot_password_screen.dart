@@ -37,7 +37,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: DeskconnUI.background,
       appBar: AppBar(title: const Text("Reset password")),
       body: Center(
         child: Card(
