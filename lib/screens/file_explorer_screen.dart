@@ -2327,7 +2327,7 @@ class _FileEntryTile extends StatelessWidget {
       subtitle: subtitle,
       onTap: onTap,
       onLongPress: onLongPress,
-      trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: onLongPress),
+      //      trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: onLongPress),
     );
   }
 
