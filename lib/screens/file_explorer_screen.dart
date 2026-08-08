@@ -20,6 +20,8 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.da
 import 'package:deskconn_mobile_app/screens/image_editor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 
+const _googleBlue = Color(0xFF1A73E8);
+
 class FileExplorerScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
   final String? initialPath;
@@ -46,6 +48,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   bool _isGrid = false;
   bool get _isMediaGallery => _currentCategory == 'images' || _currentCategory == 'videos';
+  bool get _canUpload => _controller != null && _currentBrowse != null && _currentCategory == null;
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -577,7 +580,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       };
     }
     final isCompact = MediaQuery.sizeOf(context).width < 480;
-    final canUpload = _controller != null && _currentBrowse != null && _currentCategory == null;
     final showHiddenToggle = _currentCategory == null;
     final secondaryActions = <PopupMenuEntry<String>>[
       if (!_isMediaGallery && isCompact)
@@ -608,7 +610,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     return AppBar(
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [
-        if (canUpload) IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
+        if (_canUpload) IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
         IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search',
@@ -708,7 +710,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   AppBar _buildSearchAppBar() {
-    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AppBar(
       titleSpacing: 0,
       leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _exitSearch),
@@ -717,7 +719,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         child: SearchBar(
           controller: _searchController,
           autoFocus: true,
-          hintText: 'Search files…',
+          hintText: 'Search in Files',
           leading: const Icon(Icons.search),
           trailing: [
             if (_searchQuery.isNotEmpty)
@@ -730,8 +732,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               ),
           ],
           elevation: const WidgetStatePropertyAll(0),
-          backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainerHighest),
-          side: WidgetStatePropertyAll(BorderSide(color: colorScheme.outlineVariant)),
+          backgroundColor: WidgetStatePropertyAll(isDark ? const Color(0xFF2D2E30) : const Color(0xFFF1F3F4)),
+          side: const WidgetStatePropertyAll(BorderSide.none),
+          shape: const WidgetStatePropertyAll(StadiumBorder()),
           onChanged: (q) => setState(() => _searchQuery = q),
         ),
       ),
@@ -763,6 +766,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.folder_outlined),
               title: const Text('All Files'),
               selected: _currentCategory == null,
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('');
@@ -773,6 +778,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.image_outlined),
               title: const Text('Photos'),
               selected: _currentCategory == 'images',
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'images');
@@ -782,6 +789,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.video_library_outlined),
               title: const Text('Videos'),
               selected: _currentCategory == 'videos',
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'videos');
@@ -791,6 +800,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.description_outlined),
               title: const Text('Documents'),
               selected: _currentCategory == 'documents',
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'documents');
@@ -800,6 +811,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.picture_as_pdf_outlined),
               title: const Text('PDFs'),
               selected: _currentCategory == 'pdfs',
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'pdfs');
@@ -809,6 +822,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.text_snippet_outlined),
               title: const Text('Texts'),
               selected: _currentCategory == 'texts',
+              selectedColor: _googleBlue,
+              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'texts');
@@ -852,11 +867,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     if (_isMediaGallery) {
       return GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.all(2),
+        padding: const EdgeInsets.all(6),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          mainAxisSpacing: 2,
-          crossAxisSpacing: 2,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
           childAspectRatio: 1,
         ),
         itemCount: entries.length,
@@ -880,7 +895,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         controller: _scrollController,
         padding: const EdgeInsets.all(8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
+          crossAxisCount: 3,
           mainAxisSpacing: 4,
           crossAxisSpacing: 4,
           childAspectRatio: 0.8,
@@ -1377,6 +1392,14 @@ void _showFileProperties(BuildContext context, FileEntry entry, {String fallback
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
     ),
   );
+}
+
+String _formatEntryDate(int mtime) {
+  if (mtime <= 0) return '';
+  final dt = DateTime.fromMillisecondsSinceEpoch(mtime * 1000).toLocal();
+  final now = DateTime.now();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return dt.year == now.year ? '${months[dt.month - 1]} ${dt.day}' : '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
 }
 
 String _formatMtime(int mtime) {
@@ -2354,13 +2377,13 @@ class _FileEntryGrid extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        color: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : null,
+        color: selected ? _googleBlue.withValues(alpha: 0.12) : null,
         child: Stack(
           children: [
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _FileEntryVisual(entry: entry, ext: ext, size: 56, iconSize: 44),
+                _FileEntryVisual(entry: entry, ext: ext, size: 72, iconSize: 56),
                 const SizedBox(height: 4),
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
               ],
@@ -2372,7 +2395,7 @@ class _FileEntryGrid extends StatelessWidget {
                 child: Icon(
                   selected ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 18,
-                  color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline,
+                  color: selected ? _googleBlue : Theme.of(context).colorScheme.outline,
                 ),
               ),
           ],
@@ -2444,34 +2467,44 @@ class _FileEntryTile extends StatelessWidget {
         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.secondary),
         overflow: TextOverflow.ellipsis,
       );
-    } else if (!entry.isDir) {
-      subtitle = Text(formatSize(entry.size));
+    } else {
+      final date = _formatEntryDate(entry.mtime);
+      final text = entry.isDir ? date : (date.isEmpty ? formatSize(entry.size) : '${formatSize(entry.size)} • $date');
+      if (text.isNotEmpty) {
+        subtitle = Text(text, style: TextStyle(fontSize: 14, color: Theme.of(context).hintColor));
+      }
     }
 
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      minVerticalPadding: 16,
+      minLeadingWidth: 60,
       leading: selectionMode
-          ? Checkbox(value: selected, onChanged: (_) => onTap())
-          : _FileEntryVisual(entry: entry, ext: ext, size: 40, iconSize: 34),
+          ? Checkbox(value: selected, activeColor: _googleBlue, onChanged: (_) => onTap())
+          : _FileEntryVisual(entry: entry, ext: ext, size: 60, iconSize: 28),
       title: _buildTitle(context),
       subtitle: subtitle,
       selected: selectionMode && selected,
-      selectedTileColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+      selectedColor: _googleBlue,
+      selectedTileColor: _googleBlue.withValues(alpha: 0.12),
       onTap: onTap,
       onLongPress: onLongPress,
     );
   }
 
+  static const _titleStyle = TextStyle(fontSize: 17, fontWeight: FontWeight.w500);
+
   Widget _buildTitle(BuildContext context) {
     final name = entry.name;
     final q = highlight;
-    if (q == null || q.isEmpty) return Text(name);
+    if (q == null || q.isEmpty) return Text(name, style: _titleStyle);
     final lower = name.toLowerCase();
     final idx = lower.indexOf(q);
-    if (idx < 0) return Text(name);
+    if (idx < 0) return Text(name, style: _titleStyle);
     final color = Theme.of(context).colorScheme.primary;
     return RichText(
       text: TextSpan(
-        style: DefaultTextStyle.of(context).style,
+        style: DefaultTextStyle.of(context).style.merge(_titleStyle),
         children: [
           if (idx > 0) TextSpan(text: name.substring(0, idx)),
           TextSpan(
@@ -2513,45 +2546,48 @@ class _MediaGalleryTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: ColoredBox(
-        color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (thumbnail != null)
-              Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
-            else
-              Center(
-                child: Icon(
-                  isVideo ? Icons.movie_outlined : Icons.image_outlined,
-                  size: 32,
-                  color: isDark ? Colors.white24 : Colors.black26,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: ColoredBox(
+          color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (thumbnail != null)
+                Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+              else
+                Center(
+                  child: Icon(
+                    isVideo ? Icons.movie_outlined : Icons.image_outlined,
+                    size: 32,
+                    color: isDark ? Colors.white24 : Colors.black26,
+                  ),
                 ),
-              ),
-            if (isVideo)
-              const Positioned(
-                right: 4,
-                bottom: 4,
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.white,
-                  size: 22,
-                  shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+              if (isVideo)
+                const Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: Icon(
+                    Icons.play_circle_fill,
+                    color: Colors.white,
+                    size: 22,
+                    shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                  ),
                 ),
-              ),
-            if (selected) ColoredBox(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35)),
-            if (selectionMode)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Icon(
-                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 20,
-                  color: selected ? Colors.white : Colors.white70,
-                  shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+              if (selected) ColoredBox(color: _googleBlue.withValues(alpha: 0.35)),
+              if (selectionMode)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Icon(
+                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                    size: 20,
+                    color: selected ? _googleBlue : Colors.white70,
+                    shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2585,7 +2621,7 @@ class _FileEntryVisual extends StatelessWidget {
       return SizedBox.square(
         dimension: size,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(14),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -2621,10 +2657,17 @@ class _FileEntryVisual extends StatelessWidget {
       iconColor = getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
     }
 
+    final effectiveIconSize = entry.isDir ? iconSize + 6 : iconSize;
     return SizedBox.square(
       dimension: size,
-      child: Center(
-        child: Icon(iconData, color: iconColor, size: iconSize),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2D2E30) : const Color(0xFFF1F3F4),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Center(
+          child: Icon(iconData, color: iconColor, size: effectiveIconSize),
+        ),
       ),
     );
   }
