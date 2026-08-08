@@ -3,7 +3,6 @@ import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/screens/verify_otp_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
-import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -39,7 +38,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, actions: const [ThemeToggleButton()]),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
