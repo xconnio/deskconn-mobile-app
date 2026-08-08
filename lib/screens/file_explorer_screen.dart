@@ -579,32 +579,17 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _ => _currentCategory![0].toUpperCase() + _currentCategory!.substring(1),
       };
     }
-    final isCompact = MediaQuery.sizeOf(context).width < 480;
     final showHiddenToggle = _currentCategory == null;
     final secondaryActions = <PopupMenuEntry<String>>[
-      if (!_isMediaGallery && isCompact)
-        PopupMenuItem(
-          value: 'toggleView',
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
-            title: Text(_isGrid ? 'List view' : 'Grid view'),
-          ),
-        ),
+      if (!_isMediaGallery)
+        _menuItem('toggleView', _isGrid ? Icons.view_list : Icons.grid_view, _isGrid ? 'List view' : 'Grid view'),
       if (showHiddenToggle)
-        PopupMenuItem(
-          value: 'toggleHidden',
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(_showHidden ? Icons.visibility : Icons.visibility_off),
-            title: Text(_showHidden ? 'Hide hidden files' : 'Show hidden files'),
-          ),
+        _menuItem(
+          'toggleHidden',
+          _showHidden ? Icons.visibility : Icons.visibility_off,
+          _showHidden ? 'Hide hidden files' : 'Show hidden files',
         ),
-      if (isCompact)
-        const PopupMenuItem(
-          value: 'refresh',
-          child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.refresh), title: Text('Refresh')),
-        ),
+      _menuItem('refresh', Icons.refresh, 'Refresh'),
     ];
 
     return AppBar(
@@ -616,24 +601,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: 'Search',
           onPressed: () => setState(() => _isSearching = true),
         ),
-        if (!isCompact && !_isMediaGallery)
-          IconButton(
-            icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view),
-            tooltip: _isGrid ? 'List view' : 'Grid view',
-            onPressed: () => setState(() => _isGrid = !_isGrid),
-          ),
-        if (!isCompact)
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: () => _loadPath(_currentBrowse?.path ?? '', category: _currentCategory),
-          ),
-        if (secondaryActions.isNotEmpty)
-          PopupMenuButton<String>(
-            tooltip: 'More',
-            itemBuilder: (_) => secondaryActions,
-            onSelected: _handleAppBarMenuAction,
-          ),
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          itemBuilder: (_) => secondaryActions,
+          onSelected: _handleAppBarMenuAction,
+        ),
       ],
     );
   }
@@ -651,18 +623,25 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: 'More',
           onSelected: (action) => _handleSelectionMenuAction(action, single),
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'selectAll', child: Text('Select all')),
-            const PopupMenuItem(value: 'moveTo', child: Text('Move to')),
-            const PopupMenuItem(value: 'copyTo', child: Text('Copy to')),
-            if (single != null && !single.isDir) const PopupMenuItem(value: 'openWith', child: Text('Open with...')),
-            if (single != null && !single.isDir) const PopupMenuItem(value: 'download', child: Text('Download')),
-            if (!hasDir) const PopupMenuItem(value: 'share', child: Text('Share')),
-            if (single != null) const PopupMenuItem(value: 'rename', child: Text('Rename')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-            if (single != null) const PopupMenuItem(value: 'details', child: Text('Details')),
+            _menuItem('selectAll', Icons.select_all, 'Select all'),
+            _menuItem('moveTo', Icons.drive_file_move_outlined, 'Move to'),
+            _menuItem('copyTo', Icons.content_copy, 'Copy to'),
+            if (single != null && !single.isDir) _menuItem('openWith', Icons.open_in_new_outlined, 'Open with...'),
+            if (single != null && !single.isDir) _menuItem('download', Icons.download_outlined, 'Download'),
+            if (!hasDir) _menuItem('share', Icons.share_outlined, 'Share'),
+            if (single != null) _menuItem('rename', Icons.edit_outlined, 'Rename'),
+            _menuItem('delete', Icons.delete_outline, 'Delete'),
+            if (single != null) _menuItem('details', Icons.info_outline, 'Details'),
           ],
         ),
       ],
+    );
+  }
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+    return PopupMenuItem(
+      value: value,
+      child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(label)),
     );
   }
 
@@ -710,34 +689,36 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   AppBar _buildSearchAppBar() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AppBar(
       titleSpacing: 0,
       leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _exitSearch),
-      title: Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: SearchBar(
-          controller: _searchController,
-          autoFocus: true,
-          hintText: 'Search in Files',
-          leading: const Icon(Icons.search),
-          trailing: [
-            if (_searchQuery.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => setState(() {
-                  _searchQuery = '';
-                  _searchController.clear();
-                }),
-              ),
-          ],
-          elevation: const WidgetStatePropertyAll(0),
-          backgroundColor: WidgetStatePropertyAll(isDark ? const Color(0xFF2D2E30) : const Color(0xFFF1F3F4)),
-          side: const WidgetStatePropertyAll(BorderSide.none),
-          shape: const WidgetStatePropertyAll(StadiumBorder()),
-          onChanged: (q) => setState(() => _searchQuery = q),
+      title: TextField(
+        controller: _searchController,
+        autofocus: true,
+        autofillHints: const [],
+        style: const TextStyle(fontSize: 20),
+        decoration: const InputDecoration(
+          hintText: 'Search',
+          filled: false,
+          isCollapsed: true,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
         ),
+        onChanged: (q) => setState(() => _searchQuery = q),
       ),
+      actions: [
+        if (_searchQuery.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => setState(() {
+              _searchQuery = '';
+              _searchController.clear();
+            }),
+          ),
+      ],
     );
   }
 
@@ -2471,7 +2452,11 @@ class _FileEntryTile extends StatelessWidget {
       final date = _formatEntryDate(entry.mtime);
       final text = entry.isDir ? date : (date.isEmpty ? formatSize(entry.size) : '${formatSize(entry.size)} • $date');
       if (text.isNotEmpty) {
-        subtitle = Text(text, style: TextStyle(fontSize: 14, color: Theme.of(context).hintColor));
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        subtitle = Text(
+          text,
+          style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFFA8ABB5) : const Color(0xFF5C5F68)),
+        );
       }
     }
 
@@ -2492,19 +2477,27 @@ class _FileEntryTile extends StatelessWidget {
     );
   }
 
-  static const _titleStyle = TextStyle(fontSize: 17, fontWeight: FontWeight.w500);
+  TextStyle _titleStyle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      color: isDark ? const Color(0xFFE3E5EF) : const Color(0xFF2F323A),
+    );
+  }
 
   Widget _buildTitle(BuildContext context) {
     final name = entry.name;
+    final titleStyle = _titleStyle(context);
     final q = highlight;
-    if (q == null || q.isEmpty) return Text(name, style: _titleStyle);
+    if (q == null || q.isEmpty) return Text(name, style: titleStyle);
     final lower = name.toLowerCase();
     final idx = lower.indexOf(q);
-    if (idx < 0) return Text(name, style: _titleStyle);
+    if (idx < 0) return Text(name, style: titleStyle);
     final color = Theme.of(context).colorScheme.primary;
     return RichText(
       text: TextSpan(
-        style: DefaultTextStyle.of(context).style.merge(_titleStyle),
+        style: DefaultTextStyle.of(context).style.merge(titleStyle),
         children: [
           if (idx > 0) TextSpan(text: name.substring(0, idx)),
           TextSpan(
@@ -2651,7 +2644,7 @@ class _FileEntryVisual extends StatelessWidget {
       iconColor = isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary;
     } else if (entry.isDir) {
       iconData = Icons.folder;
-      iconColor = isDark ? const Color(0xFFE2E8F0) : DeskconnColors.primary;
+      iconColor = isDark ? const Color(0xFFBDC7DC) : const Color(0xFF565F72);
     } else {
       iconData = getFileIcon(ext);
       iconColor = getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
@@ -2662,7 +2655,7 @@ class _FileEntryVisual extends StatelessWidget {
       dimension: size,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF2D2E30) : const Color(0xFFF1F3F4),
+          color: isDark ? const Color(0xFF1D2026) : const Color(0xFFE6E8F1),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Center(
