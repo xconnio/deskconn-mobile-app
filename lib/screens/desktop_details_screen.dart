@@ -331,7 +331,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open File Explorer: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Files: $e")));
       }
     }
   }

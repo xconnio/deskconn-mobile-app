@@ -50,8 +50,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  FileEntry? _clipboardEntry;
+  List<FileEntry> _clipboardEntries = [];
   bool _clipboardIsCut = false;
+
+  bool _selectionMode = false;
+  final Set<String> _selectedPaths = {};
 
   static final Map<String, FileBrowseResult> _browseCache = {};
 
@@ -381,6 +384,132 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
   }
 
+  void _enterSelectionMode(FileEntry entry) {
+    setState(() {
+      _selectionMode = true;
+      _selectedPaths
+        ..clear()
+        ..add(_fullPath(entry));
+    });
+  }
+
+  void _toggleSelection(FileEntry entry) {
+    final path = _fullPath(entry);
+    setState(() {
+      if (!_selectedPaths.remove(path)) {
+        _selectedPaths.add(path);
+      }
+      if (_selectedPaths.isEmpty) _selectionMode = false;
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedPaths.clear();
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedPaths
+        ..clear()
+        ..addAll(_visibleEntries().map(_fullPath));
+    });
+  }
+
+  List<FileEntry> _visibleEntries() {
+    final q = _searchQuery.toLowerCase();
+    return _currentBrowse?.entries.where((e) {
+          if (!_showHidden && e.name.startsWith('.')) return false;
+          if (q.isNotEmpty && !e.name.toLowerCase().contains(q)) return false;
+          return true;
+        }).toList() ??
+        [];
+  }
+
+  List<FileEntry> get _selectedEntries =>
+      _currentBrowse?.entries.where((e) => _selectedPaths.contains(_fullPath(e))).toList() ?? [];
+
+  Future<void> _bulkDelete() async {
+    final entries = _selectedEntries;
+    if (entries.isEmpty) return;
+    final label = entries.length == 1 ? entries.first.name : '${entries.length} items';
+    if (!await _confirmDelete(context, label)) return;
+
+    var failed = 0;
+    for (final entry in entries) {
+      try {
+        await _controller!.delete(_fullPath(entry));
+      } catch (e) {
+        failed++;
+        _log('bulk delete failed path=${_fullPath(entry)} error=$e');
+      }
+    }
+
+    if (!mounted) return;
+    _exitSelectionMode();
+    _invalidateCacheFor(_currentBrowse?.path ?? '');
+    _loadPath(_currentBrowse?.path ?? '', category: _currentCategory);
+    final ok = entries.length - failed;
+    _showErrorSnackBar(
+      failed == 0 ? 'Deleted $ok item${ok == 1 ? '' : 's'}' : 'Deleted $ok of ${entries.length}, $failed failed',
+    );
+  }
+
+  void _bulkStageClipboard({required bool cut}) {
+    final entries = _selectedEntries;
+    if (entries.isEmpty) return;
+    setState(() {
+      _clipboardEntries = entries;
+      _clipboardIsCut = cut;
+    });
+    _exitSelectionMode();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          cut
+              ? '${entries.length} item${entries.length == 1 ? '' : 's'} ready to move - navigate to destination and tap Move here'
+              : '${entries.length} item${entries.length == 1 ? '' : 's'} copied — navigate to destination and tap Paste here',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _bulkShare() async {
+    final entries = _selectedEntries.where((e) => !e.isDir).toList();
+    if (entries.isEmpty) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('Preparing files…')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final files = <(String, Uint8List)>[];
+      for (final entry in entries) {
+        files.add((entry.name, await _controller!.read(_fullPath(entry))));
+      }
+      if (mounted) Navigator.pop(context);
+      await shareFileBytesList(files);
+      if (mounted) _exitSelectionMode();
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showErrorSnackBar('Share failed: $e');
+      }
+    }
+  }
+
   void _goUp() {
     if (_currentBrowse == null ||
         _currentBrowse!.path == _currentBrowse!.homePath ||
@@ -404,17 +533,19 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final showSidebar = _isDesktopLayout(context);
 
     return PopScope(
-      canPop: !_isSearching && (_currentCategory != null || isAtRoot),
+      canPop: !_selectionMode && !_isSearching && (_currentCategory != null || isAtRoot),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        if (_isSearching) {
+        if (_selectionMode) {
+          _exitSelectionMode();
+        } else if (_isSearching) {
           _exitSearch();
         } else {
           _goUp();
         }
       },
       child: Scaffold(
-        appBar: _isSearching ? _buildSearchAppBar() : _buildNormalAppBar(),
+        appBar: _selectionMode ? _buildSelectionAppBar() : (_isSearching ? _buildSearchAppBar() : _buildNormalAppBar()),
         drawer: showSidebar ? _buildDrawer() : null,
         body: Column(
           children: [
@@ -425,7 +556,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 onPathTap: _loadPath,
                 onUpTap: _goUp,
               ),
-            if (_clipboardEntry != null) _buildClipboardBanner(),
+            if (_clipboardEntries.isNotEmpty) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
           ],
         ),
@@ -434,7 +565,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   AppBar _buildNormalAppBar() {
-    String title = 'File Explorer';
+    String title = 'Files';
     if (_currentCategory != null) {
       title = switch (_currentCategory) {
         'images' => 'Photos',
@@ -505,6 +636,66 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
+  AppBar _buildSelectionAppBar() {
+    final selected = _selectedEntries;
+    final hasDir = selected.any((e) => e.isDir);
+    final single = selected.length == 1 ? selected.first : null;
+
+    return AppBar(
+      leading: IconButton(icon: const Icon(Icons.close), onPressed: _exitSelectionMode),
+      title: Text('${selected.length} selected'),
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          onSelected: (action) => _handleSelectionMenuAction(action, single),
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'selectAll', child: Text('Select all')),
+            const PopupMenuItem(value: 'moveTo', child: Text('Move to')),
+            const PopupMenuItem(value: 'copyTo', child: Text('Copy to')),
+            if (single != null && !single.isDir) const PopupMenuItem(value: 'openWith', child: Text('Open with...')),
+            if (single != null && !single.isDir) const PopupMenuItem(value: 'download', child: Text('Download')),
+            if (!hasDir) const PopupMenuItem(value: 'share', child: Text('Share')),
+            if (single != null) const PopupMenuItem(value: 'rename', child: Text('Rename')),
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            if (single != null) const PopupMenuItem(value: 'details', child: Text('Details')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _handleSelectionMenuAction(String action, FileEntry? single) {
+    switch (action) {
+      case 'selectAll':
+        _selectAll();
+      case 'moveTo':
+        _bulkStageClipboard(cut: true);
+      case 'copyTo':
+        _bulkStageClipboard(cut: false);
+      case 'openWith':
+        if (single != null) {
+          _exitSelectionMode();
+          _showOpenWithDialog(single);
+        }
+      case 'download':
+        if (single != null) {
+          _exitSelectionMode();
+          _downloadFile(single);
+        }
+      case 'share':
+        _bulkShare();
+      case 'rename':
+        if (single != null) {
+          _exitSelectionMode();
+          _showRenameDialog(single);
+        }
+      case 'delete':
+        _bulkDelete();
+      case 'details':
+        if (single != null) _showProperties(single);
+    }
+  }
+
   void _handleAppBarMenuAction(String action) {
     switch (action) {
       case 'toggleView':
@@ -561,7 +752,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                     Icon(Icons.folder_shared, size: 48, color: Colors.white),
                     SizedBox(height: 12),
                     Text(
-                      'File Explorer',
+                      'Files',
                       style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -647,13 +838,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     }
 
     final q = _searchQuery.toLowerCase();
-    final entries =
-        _currentBrowse?.entries.where((e) {
-          if (!_showHidden && e.name.startsWith('.')) return false;
-          if (q.isNotEmpty && !e.name.toLowerCase().contains(q)) return false;
-          return true;
-        }).toList() ??
-        [];
+    final entries = _visibleEntries();
 
     if (entries.isEmpty) {
       return Center(
@@ -679,8 +864,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           final entry = entries[index];
           return _MediaGalleryTile(
             entry: entry,
-            onTap: () => _onGalleryEntryTap(entries, index),
-            onLongPress: () => _showEntryOptions(entry),
+            selectionMode: _selectionMode,
+            selected: _selectedPaths.contains(_fullPath(entry)),
+            onTap: () => _selectionMode ? _toggleSelection(entry) : _onGalleryEntryTap(entries, index),
+            onLongPress: () {
+              if (!_selectionMode) _enterSelectionMode(entry);
+            },
           );
         },
       );
@@ -702,8 +891,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           final entry = entries[index];
           return _FileEntryGrid(
             entry: entry,
-            onTap: () => _onEntryTap(entry),
-            onLongPress: () => _showEntryOptions(entry),
+            selectionMode: _selectionMode,
+            selected: _selectedPaths.contains(_fullPath(entry)),
+            onTap: () => _selectionMode ? _toggleSelection(entry) : _onEntryTap(entry),
+            onLongPress: () {
+              if (!_selectionMode) _enterSelectionMode(entry);
+            },
             highlight: q.isNotEmpty ? q : null,
           );
         },
@@ -718,8 +911,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         final entry = entries[index];
         return _FileEntryTile(
           entry: entry,
-          onTap: () => _onEntryTap(entry),
-          onLongPress: () => _showEntryOptions(entry),
+          selectionMode: _selectionMode,
+          selected: _selectedPaths.contains(_fullPath(entry)),
+          onTap: () => _selectionMode ? _toggleSelection(entry) : _onEntryTap(entry),
+          onLongPress: () {
+            if (!_selectionMode) _enterSelectionMode(entry);
+          },
           highlight: q.isNotEmpty ? q : null,
         );
       },
@@ -728,6 +925,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   Widget _buildClipboardBanner() {
     final colorScheme = Theme.of(context).colorScheme;
+    final label = _clipboardEntries.length == 1 ? _clipboardEntries.first.name : '${_clipboardEntries.length} items';
     return ColoredBox(
       color: colorScheme.secondaryContainer,
       child: Padding(
@@ -742,7 +940,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${_clipboardIsCut ? 'Move' : 'Copied'}: ${_clipboardEntry!.name}',
+                '${_clipboardIsCut ? 'Move' : 'Copied'}: $label',
                 style: TextStyle(fontSize: 13, color: colorScheme.onSecondaryContainer),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -755,7 +953,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             IconButton(
               icon: Icon(Icons.close, size: 18, color: colorScheme.onSecondaryContainer),
               onPressed: () => setState(() {
-                _clipboardEntry = null;
+                _clipboardEntries = [];
                 _clipboardIsCut = false;
               }),
               padding: EdgeInsets.zero,
@@ -769,44 +967,52 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Future<void> _pasteHere() async {
-    if (_clipboardEntry == null || _currentBrowse == null) return;
-    final entry = _clipboardEntry!;
+    if (_clipboardEntries.isEmpty || _currentBrowse == null) return;
+    final entries = _clipboardEntries;
     final isCut = _clipboardIsCut;
-    final srcPath = entry.path;
-    final srcDir = srcPath.substring(0, srcPath.lastIndexOf('/'));
     final destDir = _currentBrowse!.path;
-    var destPath = '$destDir/${entry.name}';
 
-    if (destPath == srcPath) {
-      if (isCut) {
-        setState(() {
-          _clipboardEntry = null;
-          _clipboardIsCut = false;
-        });
-        return;
+    var failed = 0;
+    for (final entry in entries) {
+      final srcPath = entry.path;
+      final srcDir = srcPath.substring(0, srcPath.lastIndexOf('/'));
+      var destPath = '$destDir/${entry.name}';
+
+      if (destPath == srcPath) {
+        if (!isCut) {
+          final name = entry.name;
+          final dot = entry.isDir ? -1 : name.lastIndexOf('.');
+          destPath = dot > 0
+              ? '$destDir/${name.substring(0, dot)}_copy${name.substring(dot)}'
+              : '$destDir/${name}_copy';
+        } else {
+          continue;
+        }
       }
-      final name = entry.name;
-      final dot = entry.isDir ? -1 : name.lastIndexOf('.');
-      destPath = dot > 0 ? '$destDir/${name.substring(0, dot)}_copy${name.substring(dot)}' : '$destDir/${name}_copy';
+
+      try {
+        if (isCut) {
+          await _controller!.rename(srcPath, destPath);
+          _invalidateCacheFor(srcDir);
+        } else {
+          await _controller!.copy(srcPath, destPath);
+        }
+      } catch (e) {
+        failed++;
+        _log('paste failed src=$srcPath dst=$destPath error=$e');
+      }
     }
 
-    try {
-      if (isCut) {
-        await _controller!.rename(srcPath, destPath);
-        _invalidateCacheFor(srcDir);
-      } else {
-        await _controller!.copy(srcPath, destPath);
-      }
-      if (mounted) {
-        setState(() {
-          _clipboardEntry = null;
-          _clipboardIsCut = false;
-        });
-      }
-      _invalidateCacheFor(destDir);
-      _loadPath(destDir);
-    } catch (e) {
-      if (mounted) _showErrorSnackBar('Paste failed: $e');
+    if (mounted) {
+      setState(() {
+        _clipboardEntries = [];
+        _clipboardIsCut = false;
+      });
+    }
+    _invalidateCacheFor(destDir);
+    _loadPath(destDir);
+    if (failed > 0 && mounted) {
+      _showErrorSnackBar('${entries.length - failed} of ${entries.length} pasted, $failed failed');
     }
   }
 
@@ -844,35 +1050,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (mounted) {
         Navigator.pop(context);
         _showErrorSnackBar('Download failed: $e');
-      }
-    }
-  }
-
-  Future<void> _shareFile(FileEntry entry) async {
-    final path = _fullPath(entry);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 20),
-            Expanded(child: Text('Preparing ${entry.name}…', overflow: TextOverflow.ellipsis)),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final bytes = await _controller!.read(path);
-      if (mounted) Navigator.pop(context);
-      await shareFileBytes(entry.name, bytes);
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        _showErrorSnackBar('Share failed: $e');
       }
     }
   }
@@ -958,98 +1135,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _showErrorSnackBar('Upload failed: $e');
       }
     }
-  }
-
-  void _showEntryOptions(FileEntry entry) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Properties'),
-              onTap: () {
-                Navigator.pop(context);
-                _showProperties(entry);
-              },
-            ),
-            if (!entry.isDir)
-              ListTile(
-                leading: const Icon(Icons.download_outlined),
-                title: const Text('Download'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(entry);
-                },
-              ),
-            if (!entry.isDir)
-              ListTile(
-                leading: const Icon(Icons.open_in_new_outlined),
-                title: const Text('Open with...'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showOpenWithDialog(entry);
-                },
-              ),
-            if (!entry.isDir)
-              ListTile(
-                leading: const Icon(Icons.share_outlined),
-                title: const Text('Share'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareFile(entry);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.content_copy),
-              title: const Text('Copy'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _clipboardEntry = entry;
-                  _clipboardIsCut = false;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('"${entry.name}" copied — navigate to destination and tap Paste here')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.drive_file_move_outlined),
-              title: const Text('Move'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _clipboardEntry = entry;
-                  _clipboardIsCut = true;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('"${entry.name}" ready to move - navigate to destination and tap Move here')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Rename'),
-              onTap: () {
-                Navigator.pop(context);
-                _showRenameDialog(entry);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Delete', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation(entry);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showOpenWithDialog(FileEntry entry) {
@@ -1170,17 +1255,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
-  Future<void> _showDeleteConfirmation(FileEntry entry) async {
-    if (!await _confirmDelete(context, entry.name)) return;
-    try {
-      final path = '${_currentBrowse!.path}/${entry.name}';
-      await _controller!.delete(path);
-      _loadPath(_currentBrowse!.path);
-    } catch (e) {
-      _showErrorSnackBar('Delete failed: $e');
-    }
-  }
-
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
@@ -1252,6 +1326,24 @@ Future<void> shareFileBytes(String filename, Uint8List bytes) async {
     await SharePlus.instance.share(ShareParams(files: [XFile(tempFile.path)]));
   } finally {
     tempFile.delete().catchError((Object _) => tempFile);
+  }
+}
+
+/// Same as [shareFileBytes] but for multiple files in a single share sheet.
+Future<void> shareFileBytesList(List<(String, Uint8List)> files) async {
+  final tempDir = await getTemporaryDirectory();
+  final tempFiles = <File>[];
+  try {
+    for (final (filename, bytes) in files) {
+      final tempFile = File('${tempDir.path}/$filename');
+      await tempFile.writeAsBytes(bytes);
+      tempFiles.add(tempFile);
+    }
+    await SharePlus.instance.share(ShareParams(files: tempFiles.map((f) => XFile(f.path)).toList()));
+  } finally {
+    for (final tempFile in tempFiles) {
+      tempFile.delete().catchError((Object _) => tempFile);
+    }
   }
 }
 
@@ -2227,8 +2319,17 @@ class _FileEntryGrid extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final String? highlight;
+  final bool selectionMode;
+  final bool selected;
 
-  const _FileEntryGrid({required this.entry, required this.onTap, required this.onLongPress, this.highlight});
+  const _FileEntryGrid({
+    required this.entry,
+    required this.onTap,
+    required this.onLongPress,
+    this.highlight,
+    this.selectionMode = false,
+    this.selected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2252,13 +2353,30 @@ class _FileEntryGrid extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _FileEntryVisual(entry: entry, ext: ext, size: 56, iconSize: 44),
-          const SizedBox(height: 4),
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
-        ],
+      child: Container(
+        color: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : null,
+        child: Stack(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _FileEntryVisual(entry: entry, ext: ext, size: 56, iconSize: 44),
+                const SizedBox(height: 4),
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: nameWidget),
+              ],
+            ),
+            if (selectionMode)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: Icon(
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: selected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2300,8 +2418,17 @@ class _FileEntryTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final String? highlight;
+  final bool selectionMode;
+  final bool selected;
 
-  const _FileEntryTile({required this.entry, required this.onTap, required this.onLongPress, this.highlight});
+  const _FileEntryTile({
+    required this.entry,
+    required this.onTap,
+    required this.onLongPress,
+    this.highlight,
+    this.selectionMode = false,
+    this.selected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2322,12 +2449,14 @@ class _FileEntryTile extends StatelessWidget {
     }
 
     return ListTile(
-      leading: _FileEntryVisual(entry: entry, ext: ext, size: 40, iconSize: 34),
+      leading: selectionMode
+          ? Checkbox(value: selected, onChanged: (_) => onTap())
+          : _FileEntryVisual(entry: entry, ext: ext, size: 40, iconSize: 34),
       title: _buildTitle(context),
       subtitle: subtitle,
+      selected: selectionMode && selected,
       onTap: onTap,
       onLongPress: onLongPress,
-      //      trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: onLongPress),
     );
   }
 
@@ -2359,8 +2488,16 @@ class _MediaGalleryTile extends StatelessWidget {
   final FileEntry entry;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final bool selectionMode;
+  final bool selected;
 
-  const _MediaGalleryTile({required this.entry, required this.onTap, required this.onLongPress});
+  const _MediaGalleryTile({
+    required this.entry,
+    required this.onTap,
+    required this.onLongPress,
+    this.selectionMode = false,
+    this.selected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2399,6 +2536,18 @@ class _MediaGalleryTile extends StatelessWidget {
                   color: Colors.white,
                   size: 22,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                ),
+              ),
+            if (selected) ColoredBox(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35)),
+            if (selectionMode)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Icon(
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 20,
+                  color: selected ? Colors.white : Colors.white70,
+                  shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
                 ),
               ),
           ],
