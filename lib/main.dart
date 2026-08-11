@@ -14,6 +14,7 @@ import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/share_upload_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/app_theme.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
@@ -63,6 +64,18 @@ Future<void> main() async {
 class DeskconnApp extends StatelessWidget {
   const DeskconnApp({super.key});
 
+  SystemUiOverlayStyle _systemUiOverlayStyle(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: isDark ? DeskconnColors.darkBackground : DeskconnColors.body,
+      systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -79,6 +92,14 @@ class DeskconnApp extends StatelessWidget {
             theme: DeskconnTheme.light(),
             darkTheme: DeskconnTheme.dark(),
             themeMode: theme.mode,
+            builder: (context, child) {
+              final brightness = Theme.of(context).brightness;
+
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: _systemUiOverlayStyle(brightness),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const AppBootstrap(),
           );
         },
