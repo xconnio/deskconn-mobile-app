@@ -60,18 +60,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      RadioListTile<ThemeMode>(
-                        title: const Text('System Default'),
-                        value: ThemeMode.system,
-                      ),
-                      RadioListTile<ThemeMode>(
-                        title: const Text('Light'),
-                        value: ThemeMode.light,
-                      ),
-                      RadioListTile<ThemeMode>(
-                        title: const Text('Dark'),
-                        value: ThemeMode.dark,
-                      ),
+                      RadioListTile<ThemeMode>(title: const Text('System Default'), value: ThemeMode.system),
+                      RadioListTile<ThemeMode>(title: const Text('Light'), value: ThemeMode.light),
+                      RadioListTile<ThemeMode>(title: const Text('Dark'), value: ThemeMode.dark),
                     ],
                   ),
                 ),
@@ -80,15 +71,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('Cancel'),
-                      ),
+                      TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
                       const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(dialogContext, pending),
-                        child: const Text('OK'),
-                      ),
+                      FilledButton(onPressed: () => Navigator.pop(dialogContext, pending), child: const Text('OK')),
                     ],
                   ),
                 ),

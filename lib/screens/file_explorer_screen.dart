@@ -1571,9 +1571,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       await shareFileBytes(entry.name, bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Share failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Share failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSharing = false);
@@ -1594,9 +1594,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Download failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1624,9 +1624,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isEditing = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Edit failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Edit failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
       }
     }
   }
@@ -1659,9 +1659,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+          );
         }
       }
       return;
@@ -1688,9 +1688,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
       }
     }
   }
@@ -1716,9 +1716,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Delete failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
       }
     }
   }
@@ -2453,10 +2453,7 @@ class _FileEntryTile extends StatelessWidget {
       final text = entry.isDir ? date : (date.isEmpty ? formatSize(entry.size) : '${formatSize(entry.size)} • $date');
       if (text.isNotEmpty) {
         final palette = DeskconnPalette.of(context);
-        subtitle = Text(
-          text,
-          style: TextStyle(fontSize: 12, color: palette.fileTextSubtle),
-        );
+        subtitle = Text(text, style: TextStyle(fontSize: 12, color: palette.fileTextSubtle));
       }
     }
 
@@ -2478,11 +2475,7 @@ class _FileEntryTile extends StatelessWidget {
   }
 
   TextStyle _titleStyle(BuildContext context) {
-    return TextStyle(
-      fontSize: 15,
-      fontWeight: FontWeight.w500,
-      color: DeskconnPalette.of(context).fileTileText,
-    );
+    return TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: DeskconnPalette.of(context).fileTileText);
   }
 
   Widget _buildTitle(BuildContext context) {
@@ -2653,10 +2646,7 @@ class _FileEntryVisual extends StatelessWidget {
     return SizedBox.square(
       dimension: size,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: palette.fileTileBackground,
-          borderRadius: BorderRadius.circular(14),
-        ),
+        decoration: BoxDecoration(color: palette.fileTileBackground, borderRadius: BorderRadius.circular(14)),
         child: Center(
           child: Icon(iconData, color: iconColor, size: effectiveIconSize),
         ),
