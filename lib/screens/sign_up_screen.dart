@@ -167,7 +167,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             Text(
                               auth.error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.red),
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),
                           ],
 

@@ -32,7 +32,6 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: DeskconnUI.background,
       appBar: AppBar(title: const Text("Verify email")),
       body: Center(
         child: Card(
@@ -115,7 +114,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                   if (auth.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
-                      child: Text(auth.error!, style: const TextStyle(color: Colors.red)),
+                      child: Text(auth.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ),
                 ],
               ),

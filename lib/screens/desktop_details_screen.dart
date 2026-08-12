@@ -11,6 +11,7 @@ import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -113,63 +114,68 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _probeDesktopConnection,
-                    child: GridView.count(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
-                      crossAxisCount: 4,
-                      crossAxisSpacing: 4,
-                      mainAxisSpacing: 4,
-                      childAspectRatio: 0.85,
-                      children: [
-                        _LauncherTile(
-                          icon: Icons.description_outlined,
-                          badgeColor: const Color(0xFF2C82C9),
-                          title: "Documents",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openFileExplorer(context, category: 'documents'),
-                        ),
-                        _LauncherTile(
-                          icon: Icons.folder_open,
-                          badgeColor: const Color(0xFFE95420),
-                          title: "Files",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openFileExplorer(context),
-                        ),
-                        _LauncherTile(
-                          icon: Icons.image_outlined,
-                          badgeColor: const Color(0xFF77216F),
-                          title: "Photos",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openFileExplorer(context, category: 'images'),
-                        ),
-                        _LauncherTile(
-                          icon: Icons.settings_remote_outlined,
-                          badgeColor: const Color(0xFF0E8420),
-                          title: "Remote Ctrl",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openRemoteControl(context),
-                        ),
-                        _LauncherTile(
-                          icon: Icons.terminal,
-                          badgeColor: const Color(0xFF2C2C2C),
-                          title: "Terminal",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openTerminal(context),
-                        ),
-                        _LauncherTile(
-                          icon: Icons.video_library_outlined,
-                          badgeColor: const Color(0xFFC7162B),
-                          title: "Videos",
-                          enabled: terminalEnabled,
-                          onWallpaper: wallpaper != null,
-                          onTap: () => _openFileExplorer(context, category: 'videos'),
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final palette = DeskconnPalette.of(context);
+                        return GridView.count(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
+                          crossAxisCount: 4,
+                          crossAxisSpacing: 4,
+                          mainAxisSpacing: 4,
+                          childAspectRatio: 0.85,
+                          children: [
+                            _LauncherTile(
+                              icon: Icons.description_outlined,
+                              badgeColor: palette.osUbuntu,
+                              title: "Documents",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openFileExplorer(context, category: 'documents'),
+                            ),
+                            _LauncherTile(
+                              icon: Icons.folder_open,
+                              badgeColor: palette.osKubuntu,
+                              title: "Files",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openFileExplorer(context),
+                            ),
+                            _LauncherTile(
+                              icon: Icons.image_outlined,
+                              badgeColor: palette.osXubuntu,
+                              title: "Photos",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openFileExplorer(context, category: 'images'),
+                            ),
+                            _LauncherTile(
+                              icon: Icons.settings_remote_outlined,
+                              badgeColor: palette.osMint,
+                              title: "Remote Ctrl",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openRemoteControl(context),
+                            ),
+                            _LauncherTile(
+                              icon: Icons.terminal,
+                              badgeColor: palette.osDebian,
+                              title: "Terminal",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openTerminal(context),
+                            ),
+                            _LauncherTile(
+                              icon: Icons.video_library_outlined,
+                              badgeColor: palette.osWindows,
+                              title: "Videos",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openFileExplorer(context, category: 'videos'),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -504,13 +510,15 @@ class _DesktopLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = DeskconnPalette.of(context);
     final (dotColor, statusLabel) = switch (status) {
-      _DesktopConnectionStatus.checking => (Theme.of(context).colorScheme.secondary, 'connecting'),
-      _DesktopConnectionStatus.routed => (Colors.amber.shade700, 'routed'),
-      _DesktopConnectionStatus.p2p => (Colors.green, 'p2p'),
-      _DesktopConnectionStatus.offline => (Colors.red, 'offline'),
+      _DesktopConnectionStatus.checking => (colorScheme.secondary, 'connecting'),
+      _DesktopConnectionStatus.routed => (palette.statusRouted, 'routed'),
+      _DesktopConnectionStatus.p2p => (palette.statusOnline, 'p2p'),
+      _DesktopConnectionStatus.offline => (palette.statusOffline, 'offline'),
     };
-    final textColor = onWallpaper ? Colors.white : Theme.of(context).colorScheme.onSurface;
+    final textColor = onWallpaper ? Colors.white : colorScheme.onSurface;
 
     final content = Row(
       mainAxisSize: MainAxisSize.min,

@@ -64,7 +64,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: DialogTheme.of(context).backgroundColor ?? const Color(0xFF1E1E1E),
+      backgroundColor: DialogTheme.of(context).backgroundColor ?? theme.colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -114,11 +114,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: theme.colorScheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.3)),
                 ),
-                child: Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                child: Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 13)),
               ),
               const SizedBox(height: 16),
             ],

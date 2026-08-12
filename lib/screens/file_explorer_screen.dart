@@ -1411,7 +1411,7 @@ Future<bool> _confirmDelete(BuildContext context, String name) async {
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          child: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ),
       ],
     ),
@@ -1574,7 +1574,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Share failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Share failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     } finally {
       if (mounted) setState(() => _isSharing = false);
@@ -1597,7 +1597,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Download failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1627,7 +1627,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
         setState(() => _isEditing = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Edit failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Edit failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     }
   }
@@ -1662,7 +1662,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red));
+          ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
         }
       }
       return;
@@ -1691,7 +1691,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     }
   }
@@ -1719,7 +1719,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     }
   }
@@ -2452,10 +2452,10 @@ class _FileEntryTile extends StatelessWidget {
       final date = _formatEntryDate(entry.mtime);
       final text = entry.isDir ? date : (date.isEmpty ? formatSize(entry.size) : '${formatSize(entry.size)} • $date');
       if (text.isNotEmpty) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final palette = DeskconnPalette.of(context);
         subtitle = Text(
           text,
-          style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFFA8ABB5) : const Color(0xFF5C5F68)),
+          style: TextStyle(fontSize: 12, color: palette.fileTextSubtle),
         );
       }
     }
@@ -2465,24 +2465,23 @@ class _FileEntryTile extends StatelessWidget {
       minVerticalPadding: 16,
       minLeadingWidth: 60,
       leading: selectionMode
-          ? Checkbox(value: selected, activeColor: _googleBlue, onChanged: (_) => onTap())
+          ? Checkbox(value: selected, activeColor: DeskconnPalette.of(context).googleBlue, onChanged: (_) => onTap())
           : _FileEntryVisual(entry: entry, ext: ext, size: 60, iconSize: 28),
       title: _buildTitle(context),
       subtitle: subtitle,
       selected: selectionMode && selected,
-      selectedColor: _googleBlue,
-      selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+      selectedColor: DeskconnPalette.of(context).googleBlue,
+      selectedTileColor: DeskconnPalette.of(context).googleBlue.withValues(alpha: 0.12),
       onTap: onTap,
       onLongPress: onLongPress,
     );
   }
 
   TextStyle _titleStyle(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w500,
-      color: isDark ? const Color(0xFFE3E5EF) : const Color(0xFF2F323A),
+      color: DeskconnPalette.of(context).fileTileText,
     );
   }
 
@@ -2534,7 +2533,7 @@ class _MediaGalleryTile extends StatelessWidget {
     final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
     final isVideo = kVideoExts.contains(ext);
     final thumbnail = _decodeThumbnail(entry.thumbnail);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = DeskconnPalette.of(context);
 
     return GestureDetector(
       onTap: onTap,
@@ -2542,7 +2541,7 @@ class _MediaGalleryTile extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: ColoredBox(
-          color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0),
+          color: palette.fileTilePlaceholder,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -2553,7 +2552,7 @@ class _MediaGalleryTile extends StatelessWidget {
                   child: Icon(
                     isVideo ? Icons.movie_outlined : Icons.image_outlined,
                     size: 32,
-                    color: isDark ? Colors.white24 : Colors.black26,
+                    color: palette.fileTextSubtle.withValues(alpha: 0.55),
                   ),
                 ),
               if (isVideo)
@@ -2606,7 +2605,7 @@ class _FileEntryVisual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = DeskconnPalette.of(context);
     final thumbnail = _decodeThumbnail(entry.thumbnail);
     final isVideo = kVideoExts.contains(ext);
 
@@ -2618,7 +2617,7 @@ class _FileEntryVisual extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ColoredBox(color: isDark ? const Color(0xFF111827) : const Color(0xFFE2E8F0)),
+              ColoredBox(color: palette.fileTilePlaceholder),
               Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true),
               if (isVideo)
                 const Align(
@@ -2641,13 +2640,13 @@ class _FileEntryVisual extends StatelessWidget {
     final Color iconColor;
     if (entry.isSymlink) {
       iconData = Icons.link;
-      iconColor = isDark ? const Color(0xFFCBD5E1) : DeskconnColors.secondary;
+      iconColor = palette.iconSymlink;
     } else if (entry.isDir) {
       iconData = Icons.folder;
-      iconColor = isDark ? const Color(0xFFBDC7DC) : const Color(0xFF565F72);
+      iconColor = palette.iconFolder;
     } else {
       iconData = getFileIcon(ext);
-      iconColor = getFileIconColor(ext, isDark: isDark) ?? (isDark ? const Color(0xFFCBD5E1) : Colors.blueGrey);
+      iconColor = getFileIconColor(ext, palette) ?? palette.iconFile;
     }
 
     final effectiveIconSize = entry.isDir ? iconSize + 6 : iconSize;
@@ -2655,7 +2654,7 @@ class _FileEntryVisual extends StatelessWidget {
       dimension: size,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1D2026) : const Color(0xFFE6E8F1),
+          color: palette.fileTileBackground,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Center(

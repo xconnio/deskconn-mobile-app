@@ -600,7 +600,7 @@ class _ScreenshotPreviewScreenState extends State<_ScreenshotPreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red));
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
