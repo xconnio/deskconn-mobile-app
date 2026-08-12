@@ -5,13 +5,10 @@ import 'package:flutter/material.dart';
 /// so light/dark are driven from a single source of truth.
 class DeskconnColors {
   static const primary = Color(0xFF111827);
-  static const primaryHover = Color(0xFF1F2937);
-  static const primarySoft = Color(0xFFE8EAED);
   static const onPrimary = Colors.white;
   static const secondary = Color(0xFF2C2E33);
 
   static const body = Color(0xFFF8FAFC);
-  static const background = Color(0xFFFFFFFF);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceTint = Color(0xFFF1F5F9);
   static const border = Color(0xFFE2E8F0);
@@ -79,7 +76,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
   final Color osXubuntu;
   final Color osMint;
   final Color osDebian;
-  final Color osFedora;
   final Color osWindows;
 
   const DeskconnPalette({
@@ -119,7 +115,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     required this.osXubuntu,
     required this.osMint,
     required this.osDebian,
-    required this.osFedora,
     required this.osWindows,
   });
 
@@ -160,7 +155,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     osXubuntu: Color(0xFF77216F),
     osMint: Color(0xFF0E8420),
     osDebian: Color(0xFF2C2C2C),
-    osFedora: Color(0xFF294172),
     osWindows: Color(0xFFC7162B),
   );
 
@@ -201,7 +195,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     osXubuntu: Color(0xFF77216F),
     osMint: Color(0xFF0E8420),
     osDebian: Color(0xFF9E9E9E),
-    osFedora: Color(0xFF294172),
     osWindows: Color(0xFFC7162B),
   );
 
@@ -247,7 +240,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     Color? osXubuntu,
     Color? osMint,
     Color? osDebian,
-    Color? osFedora,
     Color? osWindows,
   }) {
     return DeskconnPalette(
@@ -287,7 +279,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
       osXubuntu: osXubuntu ?? this.osXubuntu,
       osMint: osMint ?? this.osMint,
       osDebian: osDebian ?? this.osDebian,
-      osFedora: osFedora ?? this.osFedora,
       osWindows: osWindows ?? this.osWindows,
     );
   }
@@ -332,7 +323,6 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
       osXubuntu: Color.lerp(osXubuntu, other.osXubuntu, t)!,
       osMint: Color.lerp(osMint, other.osMint, t)!,
       osDebian: Color.lerp(osDebian, other.osDebian, t)!,
-      osFedora: Color.lerp(osFedora, other.osFedora, t)!,
       osWindows: Color.lerp(osWindows, other.osWindows, t)!,
     );
   }

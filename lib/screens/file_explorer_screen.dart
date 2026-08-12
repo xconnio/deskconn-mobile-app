@@ -20,8 +20,6 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.da
 import 'package:deskconn_mobile_app/screens/image_editor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 
-const _googleBlue = Color(0xFF1A73E8);
-
 class FileExplorerScreen extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
   final String? initialPath;
@@ -723,6 +721,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Widget _buildDrawer() {
+    final palette = DeskconnPalette.of(context);
     return Drawer(
       child: SafeArea(
         child: Column(
@@ -747,8 +746,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.folder_outlined),
               title: const Text('All Files'),
               selected: _currentCategory == null,
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('');
@@ -759,8 +758,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.image_outlined),
               title: const Text('Photos'),
               selected: _currentCategory == 'images',
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'images');
@@ -770,8 +769,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.video_library_outlined),
               title: const Text('Videos'),
               selected: _currentCategory == 'videos',
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'videos');
@@ -781,8 +780,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.description_outlined),
               title: const Text('Documents'),
               selected: _currentCategory == 'documents',
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'documents');
@@ -792,8 +791,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.picture_as_pdf_outlined),
               title: const Text('PDFs'),
               selected: _currentCategory == 'pdfs',
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'pdfs');
@@ -803,8 +802,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               leading: const Icon(Icons.text_snippet_outlined),
               title: const Text('Texts'),
               selected: _currentCategory == 'texts',
-              selectedColor: _googleBlue,
-              selectedTileColor: _googleBlue.withValues(alpha: 0.12),
+              selectedColor: palette.googleBlue,
+              selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
               onTap: () {
                 Navigator.pop(context);
                 _loadPath('', category: 'texts');
@@ -2337,6 +2336,7 @@ class _FileEntryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = DeskconnPalette.of(context);
     final effectiveName = entry.isSymlink && entry.symlinkTarget != null
         ? entry.symlinkTarget!.split('/').last
         : entry.name;
@@ -2358,7 +2358,7 @@ class _FileEntryGrid extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        color: selected ? _googleBlue.withValues(alpha: 0.12) : null,
+        color: selected ? palette.googleBlue.withValues(alpha: 0.12) : null,
         child: Stack(
           children: [
             Column(
@@ -2376,7 +2376,7 @@ class _FileEntryGrid extends StatelessWidget {
                 child: Icon(
                   selected ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 18,
-                  color: selected ? _googleBlue : Theme.of(context).colorScheme.outline,
+                  color: selected ? palette.googleBlue : Theme.of(context).colorScheme.outline,
                 ),
               ),
           ],
@@ -2566,7 +2566,7 @@ class _MediaGalleryTile extends StatelessWidget {
                     shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                   ),
                 ),
-              if (selected) ColoredBox(color: _googleBlue.withValues(alpha: 0.35)),
+              if (selected) ColoredBox(color: palette.googleBlue.withValues(alpha: 0.35)),
               if (selectionMode)
                 Positioned(
                   top: 4,
@@ -2574,7 +2574,7 @@ class _MediaGalleryTile extends StatelessWidget {
                   child: Icon(
                     selected ? Icons.check_circle : Icons.radio_button_unchecked,
                     size: 20,
-                    color: selected ? _googleBlue : Colors.white70,
+                    color: selected ? palette.googleBlue : Colors.white70,
                     shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
                   ),
                 ),
