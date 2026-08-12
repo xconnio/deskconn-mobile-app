@@ -2,6 +2,7 @@ import 'package:deskconn_mobile_app/theme/buttons.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/theme/inputs.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class DeskconnTheme {
   static ThemeData light() {
@@ -46,6 +47,13 @@ class DeskconnTheme {
         foregroundColor: DeskconnColors.heading,
         elevation: 0,
         scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemNavigationBarColor: DeskconnColors.body,
+          systemNavigationBarIconBrightness: Brightness.dark,
+        ),
       ),
       drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.surface),
       extensions: const [DeskconnPalette.light],
@@ -92,6 +100,13 @@ class DeskconnTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: DeskconnColors.darkBackground,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
       ),
       drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.darkBackground),
       extensions: const [DeskconnPalette.dark],
