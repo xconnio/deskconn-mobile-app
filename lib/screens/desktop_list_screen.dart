@@ -5,6 +5,7 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/desktop_details_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -214,7 +215,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return AppShell(
       title: 'Desktops',
@@ -281,22 +282,17 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: isDark ? 0.35 : 0.7)),
+                      side: BorderSide(color: colorScheme.outlineVariant),
                     ),
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(
-                          Icons.desktop_windows,
-                          color: isDark ? Colors.white : Theme.of(context).primaryColor,
-                        ),
+                        child: Icon(Icons.desktop_windows, color: colorScheme.primary),
                       ),
                       title: Text(name ?? 'Unnamed Desktop', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('• $shortId', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
@@ -326,11 +322,13 @@ class _ConnectionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = DeskconnPalette.of(context);
     final (dotColor, label) = switch (status) {
-      _RowStatus.connecting => (Theme.of(context).colorScheme.secondary, 'connecting'),
-      _RowStatus.p2p => (Colors.green, 'p2p'),
-      _RowStatus.routed => (Colors.amber.shade700, 'routed'),
-      _RowStatus.offline => (Colors.red, 'offline'),
+      _RowStatus.connecting => (colorScheme.secondary, 'connecting'),
+      _RowStatus.p2p => (palette.statusOnline, 'p2p'),
+      _RowStatus.routed => (palette.statusRouted, 'routed'),
+      _RowStatus.offline => (palette.statusOffline, 'offline'),
     };
 
     return InkWell(

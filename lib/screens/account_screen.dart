@@ -161,7 +161,7 @@ class _AccountScreenState extends State<AccountScreen> {
           if (error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
-              child: Text(error!, style: const TextStyle(color: Colors.red)),
+              child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
           const Text('Email'),
           const SizedBox(height: 4),
@@ -209,7 +209,10 @@ class _AccountScreenState extends State<AccountScreen> {
           const Divider(),
           const SizedBox(height: 16),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: _confirmDelete,
             child: const Text('Delete account'),
           ),

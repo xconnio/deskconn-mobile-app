@@ -2,12 +2,10 @@ import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
-import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
-import 'theme_toggle.dart';
 
 enum AppShellSection { account, desktops, settings }
 
@@ -47,7 +45,6 @@ class AppShell extends StatelessWidget {
     final session = context.watch<SessionProvider>();
     final account = session.account;
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final name = (account?['name'] as String? ?? '').trim();
     final email = (account?['email'] as String? ?? '').trim();
@@ -62,7 +59,6 @@ class AppShell extends StatelessWidget {
       name: name,
       email: email,
       initial: initial,
-      isDark: isDark,
       colorScheme: colorScheme,
       session: session,
       openSection: _openSection,
@@ -72,7 +68,7 @@ class AppShell extends StatelessWidget {
     final showMobileDrawer = !showSidebar && currentSection == AppShellSection.desktops;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title), bottom: bottom, actions: [...?actions, const ThemeToggleButton()]),
+      appBar: AppBar(title: Text(title), bottom: bottom, actions: actions),
       drawer: showMobileDrawer ? Drawer(child: sidebar) : null,
       body: showSidebar
           ? Row(
@@ -100,7 +96,6 @@ class _AppSidebar extends StatelessWidget {
   final String name;
   final String email;
   final String initial;
-  final bool isDark;
   final ColorScheme colorScheme;
   final SessionProvider session;
   final Future<void> Function(
@@ -117,7 +112,6 @@ class _AppSidebar extends StatelessWidget {
     required this.name,
     required this.email,
     required this.initial,
-    required this.isDark,
     required this.colorScheme,
     required this.session,
     required this.openSection,
@@ -138,27 +132,27 @@ class _AppSidebar extends StatelessWidget {
               closeDrawer: closeDrawerOnTap,
             ),
             child: Container(
-              color: isDark ? DeskconnColors.darkSurfaceTint : colorScheme.primary,
+              color: colorScheme.surfaceContainerHighest,
               padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: colorScheme.onPrimary.withValues(alpha: 0.15),
+                    backgroundColor: colorScheme.onSurface.withValues(alpha: 0.12),
                     child: Text(
                       initial,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onPrimary),
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                     ),
                   ),
                   const SizedBox(height: 14),
                   if (name.isNotEmpty)
                     Text(
                       name,
-                      style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600, fontSize: 15),
+                      style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 15),
                     ),
                   if (email.isNotEmpty)
-                    Text(email, style: TextStyle(color: colorScheme.onPrimary.withValues(alpha: 0.8), fontSize: 13)),
+                    Text(email, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13)),
                 ],
               ),
             ),
@@ -195,8 +189,8 @@ class _AppSidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
             child: ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+              title: Text('Logout', style: TextStyle(color: Theme.of(context).colorScheme.error)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               onTap: () async {
                 if (closeDrawerOnTap) Navigator.pop(context);
@@ -228,9 +222,8 @@ class _NavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultColor = isDark ? colorScheme.onSurface.withValues(alpha: 0.88) : null;
-    final selectedColor = isDark ? Colors.white : colorScheme.primary;
+    final defaultColor = colorScheme.onSurface.withValues(alpha: 0.88);
+    final selectedColor = colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
@@ -244,7 +237,7 @@ class _NavTile extends StatelessWidget {
           ),
         ),
         selected: selected,
-        selectedTileColor: isDark ? Colors.white.withValues(alpha: 0.06) : colorScheme.primary.withValues(alpha: 0.08),
+        selectedTileColor: colorScheme.surfaceContainerHighest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         onTap: onTap,
       ),

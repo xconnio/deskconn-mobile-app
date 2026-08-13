@@ -56,13 +56,14 @@ class DeskconnTheme {
         ),
       ),
       drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.surface),
+      extensions: const [DeskconnPalette.light],
     );
   }
 
   static ThemeData dark() {
     final scheme = ColorScheme.dark(
       primary: DeskconnColors.darkOnSurface,
-      onPrimary: DeskconnColors.darkSurface,
+      onPrimary: DeskconnColors.darkBackground,
       secondary: DeskconnColors.secondary,
       onSecondary: Colors.white,
       surface: DeskconnColors.darkSurface,
@@ -108,6 +109,7 @@ class DeskconnTheme {
         ),
       ),
       drawerTheme: const DrawerThemeData(backgroundColor: DeskconnColors.darkBackground),
+      extensions: const [DeskconnPalette.dark],
     );
   }
 }

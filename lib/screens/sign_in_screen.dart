@@ -171,10 +171,10 @@ class _SignInScreenState extends State<SignInScreen> {
 
                           if (session.error != null) ...[
                             const SizedBox(height: 12),
-                            const Text(
+                            Text(
                               'Invalid email or password',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.red),
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),
                           ],
 

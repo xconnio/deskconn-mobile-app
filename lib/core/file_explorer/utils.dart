@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:flutter/material.dart';
 
 const kImageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'svg'};
@@ -96,46 +97,31 @@ IconData getFileIcon(String ext) {
 
 // Mirrors the color-by-type convention of most desktop/mobile file managers
 // (Windows Explorer, Files by Google, etc.) so file types are recognizable
-// by color at a glance, not just by icon shape.
-Color? getFileIconColor(String ext, {required bool isDark}) {
-  if (kImageExts.contains(ext)) {
-    return isDark ? const Color(0xFFC4B5FD) : const Color(0xFF7C3AED);
-  }
-  if (kVideoExts.contains(ext)) {
-    return isDark ? const Color(0xFFFDA4AF) : const Color(0xFFE11D48);
-  }
-  if (kAudioExts.contains(ext)) {
-    return isDark ? const Color(0xFFF9A8D4) : const Color(0xFFDB2777);
-  }
-  if (kWordExts.contains(ext)) {
-    return isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB);
-  }
-  if (kExcelExts.contains(ext)) {
-    return isDark ? const Color(0xFF86EFAC) : const Color(0xFF16A34A);
-  }
-  if (kPowerPointExts.contains(ext)) {
-    return isDark ? const Color(0xFFFDBA74) : const Color(0xFFEA580C);
-  }
-  if (kTextExts.contains(ext)) {
-    return isDark ? const Color(0xFF5EEAD4) : const Color(0xFF0D9488);
-  }
-  if (kArchiveExts.contains(ext)) {
-    return isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309);
-  }
+// by color at a glance, not just by icon shape. Resolved via the active
+// palette so light/dark stay coherent with the app theme.
+Color? getFileIconColor(String ext, DeskconnPalette palette) {
+  if (kImageExts.contains(ext)) return palette.typeImage;
+  if (kVideoExts.contains(ext)) return palette.typeVideo;
+  if (kAudioExts.contains(ext)) return palette.typeAudio;
+  if (kWordExts.contains(ext)) return palette.typeWord;
+  if (kExcelExts.contains(ext)) return palette.typeExcel;
+  if (kPowerPointExts.contains(ext)) return palette.typePowerPoint;
+  if (kTextExts.contains(ext)) return palette.typeText;
+  if (kArchiveExts.contains(ext)) return palette.typeArchive;
   switch (ext) {
     case 'pdf':
-      return isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626);
+      return palette.typePdf;
     case 'apk':
-      return isDark ? const Color(0xFF86EFAC) : const Color(0xFF16A34A);
+      return palette.typeExecutable;
     case 'exe':
     case 'msi':
     case 'dmg':
-      return isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5);
+      return palette.typeExecutable;
     case 'db':
     case 'sqlite':
     case 'sqlite3':
-      return isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5);
+      return palette.typeExecutable;
     default:
-      return isDark ? const Color(0xFFCBD5E1) : null;
+      return palette.typeDefault;
   }
 }
