@@ -22,8 +22,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   String? emailError;
   String? nameError;
-  String? passwordError;
   bool _obscurePassword = true;
+
+  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
+  bool get _canCreateAccount =>
+      Validators.email(emailCtrl.text) == null && Validators.name(nameCtrl.text) == null && _passwordMeetsRequirements;
 
   @override
   void dispose() {
@@ -64,13 +67,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           TextField(
                             controller: emailCtrl,
                             onChanged: (v) {
-                              if (emailError != null || nameError != null || passwordError != null) {
-                                setState(() {
-                                  emailError = null;
-                                  nameError = null;
-                                  passwordError = null;
-                                });
-                              }
+                              setState(() {
+                                emailError = null;
+                              });
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
@@ -80,13 +79,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           TextField(
                             controller: nameCtrl,
                             onChanged: (v) {
-                              if (emailError != null || nameError != null || passwordError != null) {
-                                setState(() {
-                                  emailError = null;
-                                  nameError = null;
-                                  passwordError = null;
-                                });
-                              }
+                              setState(() {
+                                nameError = null;
+                              });
                             },
                             decoration: InputDecoration(labelText: 'Username', errorText: nameError),
                           ),
@@ -97,17 +92,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             controller: passCtrl,
                             obscureText: _obscurePassword,
                             onChanged: (v) {
-                              if (emailError != null || nameError != null || passwordError != null) {
-                                setState(() {
-                                  emailError = null;
-                                  nameError = null;
-                                  passwordError = null;
-                                });
-                              }
+                              setState(() {});
                             },
                             decoration: InputDecoration(
                               labelText: 'Password',
-                              errorText: passwordError,
                               suffixIcon: IconButton(
                                 icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                                 onPressed: () {
@@ -118,6 +106,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          _PasswordRequirementItem(isMet: _passwordMeetsRequirements),
 
                           const SizedBox(height: 24),
 
@@ -133,32 +123,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                   ),
                                 )
                               : ElevatedButton(
-                                  onPressed: () async {
-                                    FocusScope.of(context).unfocus();
+                                  onPressed: _canCreateAccount
+                                      ? () async {
+                                          FocusScope.of(context).unfocus();
 
-                                    setState(() {
-                                      emailError = Validators.email(emailCtrl.text);
-                                      nameError = Validators.name(nameCtrl.text);
-                                      passwordError = Validators.password(passCtrl.text);
-                                    });
+                                          setState(() {
+                                            emailError = Validators.email(emailCtrl.text);
+                                            nameError = Validators.name(nameCtrl.text);
+                                          });
 
-                                    if (emailError != null || nameError != null || passwordError != null) {
-                                      return;
-                                    }
+                                          if (emailError != null || nameError != null || !_passwordMeetsRequirements) {
+                                            return;
+                                          }
 
-                                    final ok = await auth.createAccount(
-                                      email: emailCtrl.text.trim(),
-                                      name: nameCtrl.text.trim(),
-                                      password: passCtrl.text,
-                                    );
+                                          final ok = await auth.createAccount(
+                                            email: emailCtrl.text.trim(),
+                                            name: nameCtrl.text.trim(),
+                                            password: passCtrl.text,
+                                          );
 
-                                    if (ok && context.mounted) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (_) => const VerifyOtpScreen()),
-                                      );
-                                    }
-                                  },
+                                          if (ok && context.mounted) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(builder: (_) => const VerifyOtpScreen()),
+                                            );
+                                          }
+                                        }
+                                      : null,
                                   child: const Text('Create account'),
                                 ),
 
@@ -193,6 +184,49 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PasswordRequirementItem extends StatelessWidget {
+  final bool isMet;
+
+  const _PasswordRequirementItem({required this.isMet});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final activeColor = Colors.green.shade600;
+    final inactiveColor = scheme.onSurface.withValues(alpha: 0.32);
+    final iconColor = isMet ? Colors.white : inactiveColor;
+    final textColor = scheme.onSurface;
+    final borderColor = isMet ? activeColor : inactiveColor;
+    final backgroundColor = isMet ? activeColor : Colors.transparent;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2.5),
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: backgroundColor,
+              border: Border.all(color: borderColor),
+            ),
+            child: Icon(Icons.check, size: 13, color: iconColor),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            Validators.passwordRequirement,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: textColor),
+          ),
+        ),
+      ],
     );
   }
 }
