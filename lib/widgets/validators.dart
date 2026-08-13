@@ -1,4 +1,7 @@
 class Validators {
+  static const passwordRequirement =
+      'Password should be at least 8 characters and include uppercase, lowercase, number, and special character.';
+
   static String? required(String v, {String label = 'Field'}) {
     if (v.trim().isEmpty) return '$label is required';
     return null;
@@ -19,14 +22,17 @@ class Validators {
 
   static String? password(String v) {
     if (v.isEmpty) return 'Password is required';
-    if (v.length < 8) return 'Password too short';
-    if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Add uppercase letter';
-    if (!RegExp(r'[a-z]').hasMatch(v)) return 'Add lowercase letter';
-    if (!RegExp(r'[0-9]').hasMatch(v)) return 'Add number';
-    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(v)) {
-      return 'Add special character';
-    }
+
+    if (!isPasswordValid(v)) return passwordRequirement;
     return null;
+  }
+
+  static bool isPasswordValid(String v) {
+    return v.length >= 8 &&
+        RegExp(r'[A-Z]').hasMatch(v) &&
+        RegExp(r'[a-z]').hasMatch(v) &&
+        RegExp(r'[0-9]').hasMatch(v) &&
+        RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(v);
   }
 
   static String? otp(String v) {
