@@ -91,8 +91,18 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     }
   }
 
+  static const int _maxConcurrentPrewarms = 2;
+  static const Duration _prewarmBatchGap = Duration(milliseconds: 500);
+
   Future<void> _prewarmAll(List<Map<String, dynamic>> desktops) async {
-    await Future.wait(desktops.map(_prewarm));
+    for (var i = 0; i < desktops.length; i += _maxConcurrentPrewarms) {
+      if (!mounted) return;
+      final batch = desktops.skip(i).take(_maxConcurrentPrewarms);
+      await Future.wait(batch.map(_prewarm));
+      if (i + _maxConcurrentPrewarms < desktops.length) {
+        await Future.delayed(_prewarmBatchGap);
+      }
+    }
   }
 
   Future<bool> _connect(String realm, bool webRtcEnabled) async {

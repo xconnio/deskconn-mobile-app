@@ -32,6 +32,7 @@ Future<void> main() async {
   PlatformDispatcher.instance.onError = (error, stack) {
     if (error is StateError && error.message == 'Terminal closed') return true;
     if (error.toString().contains('WebRTC data channel closed')) return true;
+    if (error.toString().contains('WebRTC connection failed before data channel opened')) return true;
     return false;
   };
 
