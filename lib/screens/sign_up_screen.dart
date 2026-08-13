@@ -19,6 +19,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final emailCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final nameFocus = FocusNode();
+  final passFocus = FocusNode();
 
   String? emailError;
   String? nameError;
@@ -33,6 +35,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     emailCtrl.dispose();
     nameCtrl.dispose();
     passCtrl.dispose();
+    nameFocus.dispose();
+    passFocus.dispose();
     super.dispose();
   }
 
@@ -66,6 +70,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         children: [
                           TextField(
                             controller: emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) => nameFocus.requestFocus(),
                             onChanged: (v) {
                               setState(() {
                                 emailError = null;
@@ -78,6 +85,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                           TextField(
                             controller: nameCtrl,
+                            focusNode: nameFocus,
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) => passFocus.requestFocus(),
                             onChanged: (v) {
                               setState(() {
                                 nameError = null;
@@ -90,7 +100,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                           TextField(
                             controller: passCtrl,
+                            focusNode: passFocus,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => FocusScope.of(context).unfocus(),
                             onChanged: (v) {
                               setState(() {});
                             },
@@ -167,6 +180,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             onPressed: auth.isLoading
                                 ? null
                                 : () {
+                                    if (Navigator.canPop(context)) {
+                                      Navigator.pop(context);
+                                      return;
+                                    }
+
                                     Navigator.pushReplacement(
                                       context,
                                       MaterialPageRoute(builder: (_) => const SignInScreen()),

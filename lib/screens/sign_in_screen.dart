@@ -21,6 +21,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final passFocus = FocusNode();
   String? emailError;
   String? passwordError;
   bool _obscurePassword = true;
@@ -47,6 +48,7 @@ class _SignInScreenState extends State<SignInScreen> {
   void dispose() {
     emailCtrl.dispose();
     passCtrl.dispose();
+    passFocus.dispose();
     super.dispose();
   }
 
@@ -80,6 +82,9 @@ class _SignInScreenState extends State<SignInScreen> {
                         children: [
                           TextField(
                             controller: emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) => passFocus.requestFocus(),
                             onChanged: (v) {
                               if (emailError != null || passwordError != null) {
                                 setState(() {
@@ -95,7 +100,10 @@ class _SignInScreenState extends State<SignInScreen> {
 
                           TextField(
                             controller: passCtrl,
+                            focusNode: passFocus,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => FocusScope.of(context).unfocus(),
                             onChanged: (v) {
                               if (emailError != null || passwordError != null) {
                                 setState(() {
@@ -138,7 +146,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                                 setState(() {
                                   emailError = Validators.email(emailCtrl.text);
-                                  passwordError = Validators.required(passCtrl.text);
+                                  passwordError = Validators.required(passCtrl.text, label: 'Password');
                                 });
 
                                 if (emailError != null || passwordError != null) {
