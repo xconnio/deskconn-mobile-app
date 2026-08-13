@@ -1880,6 +1880,7 @@ class _PreviewBody extends StatefulWidget {
 class _PreviewBodyState extends State<_PreviewBody> {
   Future<Uint8List>? _contentFuture;
   late final bool _streamMedia;
+  late final bool _unsupported;
 
   @override
   void initState() {
@@ -1888,7 +1889,8 @@ class _PreviewBodyState extends State<_PreviewBody> {
     final mode = widget.openAs;
     _streamMedia =
         mode == 'video' || mode == 'audio' || (mode == null && (kVideoExts.contains(ext) || kAudioExts.contains(ext)));
-    if (!_streamMedia) {
+    _unsupported = mode == null && !_streamMedia && !isPreviewSupported(ext);
+    if (!_streamMedia && !_unsupported) {
       _contentFuture = widget.controller.read(widget.path);
     }
   }
@@ -1912,6 +1914,8 @@ class _PreviewBodyState extends State<_PreviewBody> {
       color: _bgColor,
       child: _streamMedia
           ? _buildMediaContent(_ext)
+          : _unsupported
+          ? _UnknownPreview(entry: widget.entry, ext: _ext)
           : FutureBuilder<Uint8List>(
               future: _contentFuture,
               builder: (context, snapshot) {

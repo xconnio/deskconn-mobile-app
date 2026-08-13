@@ -56,6 +56,13 @@ const kTextExts = {
 const kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3gp', 'ogv'};
 const kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
 
+bool isPreviewSupported(String ext) =>
+    kImageExts.contains(ext) ||
+    kTextExts.contains(ext) ||
+    kVideoExts.contains(ext) ||
+    kAudioExts.contains(ext) ||
+    ext == 'pdf';
+
 String formatSize(int bytes) {
   if (bytes <= 0) return "0 B";
   const suffixes = ["B", "KB", "MB", "GB", "TB"];
