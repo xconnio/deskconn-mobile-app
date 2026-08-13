@@ -152,7 +152,9 @@ class SessionProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await DesktopConnectionManager().invalidateAll();
+    try {
+      await DesktopConnectionManager().invalidateAll();
+    } catch (_) {}
 
     try {
       final identity = await DeviceIdentity.deviceId();
@@ -164,12 +166,18 @@ class SessionProvider extends ChangeNotifier {
       await session?.close();
     } catch (_) {}
 
-    await QUICConnectionManager().close();
+    try {
+      await QUICConnectionManager().close();
+    } catch (_) {}
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
 
-    await DeviceIdentity.clear();
+    try {
+      await DeviceIdentity.clear();
+    } catch (_) {}
 
     session = null;
     account = null;
