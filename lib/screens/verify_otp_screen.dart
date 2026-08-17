@@ -19,7 +19,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   final otpCtrl = TextEditingController();
   bool _loading = false;
 
-  String? requiredError;
+  String? otpError;
 
   @override
   void dispose() {
@@ -53,13 +53,13 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     maxLength: 6,
                     enabled: !_loading,
                     onChanged: (v) {
-                      if (requiredError != null) {
+                      if (otpError != null) {
                         setState(() {
-                          requiredError = null;
+                          otpError = null;
                         });
                       }
                     },
-                    decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
+                    decoration: InputDecoration(labelText: 'OTP', errorText: otpError),
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
@@ -67,11 +67,10 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                         ? null
                         : () async {
                             setState(() {
-                              requiredError = Validators.required(otpCtrl.text);
+                              otpError = Validators.otp(otpCtrl.text);
                             });
 
-                            if (requiredError != null) return;
-                            if (otpCtrl.text.length != 6) return;
+                            if (otpError != null) return;
 
                             FocusScope.of(context).unfocus();
                             setState(() => _loading = true);
