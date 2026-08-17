@@ -49,6 +49,11 @@ class SessionProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
 
+  void clearError() {
+    error = null;
+    notifyListeners();
+  }
+
   void _setLoading(bool v) {
     _isLoading = v;
     notifyListeners();

@@ -16,6 +16,11 @@ class AuthProvider extends ChangeNotifier {
 
   String? get pendingPassword => _pendingPassword;
 
+  void clearError() {
+    error = null;
+    notifyListeners();
+  }
+
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();

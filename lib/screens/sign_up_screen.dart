@@ -3,6 +3,7 @@ import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/screens/verify_otp_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
+import 'package:deskconn_mobile_app/widgets/password_requirement_item.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -29,6 +30,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
   bool get _canCreateAccount =>
       Validators.email(emailCtrl.text) == null && Validators.name(nameCtrl.text) == null && _passwordMeetsRequirements;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthProvider>().clearError();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -120,7 +132,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _PasswordRequirementItem(isMet: _passwordMeetsRequirements),
+                          PasswordRequirementItem(isMet: _passwordMeetsRequirements),
 
                           const SizedBox(height: 24),
 
@@ -202,49 +214,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PasswordRequirementItem extends StatelessWidget {
-  final bool isMet;
-
-  const _PasswordRequirementItem({required this.isMet});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final activeColor = Colors.green.shade600;
-    final inactiveColor = scheme.onSurface.withValues(alpha: 0.32);
-    final iconColor = isMet ? Colors.white : inactiveColor;
-    final textColor = scheme.onSurface;
-    final borderColor = isMet ? activeColor : inactiveColor;
-    final backgroundColor = isMet ? activeColor : Colors.transparent;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2.5),
-          child: Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: backgroundColor,
-              border: Border.all(color: borderColor),
-            ),
-            child: Icon(Icons.check, size: 13, color: iconColor),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            Validators.passwordRequirement,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: textColor),
-          ),
-        ),
-      ],
     );
   }
 }
