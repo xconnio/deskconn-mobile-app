@@ -19,24 +19,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final emailCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final confirmPassCtrl = TextEditingController();
   final nameFocus = FocusNode();
   final passFocus = FocusNode();
+  final confirmPassFocus = FocusNode();
 
   String? emailError;
   String? nameError;
+  String? confirmPasswordError;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
+  bool get _passwordsMatch => confirmPassCtrl.text == passCtrl.text;
   bool get _canCreateAccount =>
-      Validators.email(emailCtrl.text) == null && Validators.name(nameCtrl.text) == null && _passwordMeetsRequirements;
+      Validators.email(emailCtrl.text) == null &&
+      Validators.name(nameCtrl.text, label: 'Username') == null &&
+      _passwordMeetsRequirements &&
+      _passwordsMatch;
 
   @override
   void dispose() {
     emailCtrl.dispose();
     nameCtrl.dispose();
     passCtrl.dispose();
+    confirmPassCtrl.dispose();
     nameFocus.dispose();
     passFocus.dispose();
+    confirmPassFocus.dispose();
     super.dispose();
   }
 
@@ -102,8 +112,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             controller: passCtrl,
                             focusNode: passFocus,
                             obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) => confirmPassFocus.requestFocus(),
                             onChanged: (v) {
                               setState(() {});
                             },
@@ -121,6 +131,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                           const SizedBox(height: 12),
                           _PasswordRequirementItem(isMet: _passwordMeetsRequirements),
+
+                          const SizedBox(height: 16),
+
+                          TextField(
+                            controller: confirmPassCtrl,
+                            focusNode: confirmPassFocus,
+                            obscureText: _obscureConfirmPassword,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                            onChanged: (v) {
+                              setState(() {
+                                confirmPasswordError = null;
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Confirm password',
+                              errorText: confirmPasswordError,
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
 
                           const SizedBox(height: 24),
 
@@ -142,10 +179,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                                           setState(() {
                                             emailError = Validators.email(emailCtrl.text);
-                                            nameError = Validators.name(nameCtrl.text);
+                                            nameError = Validators.name(nameCtrl.text, label: 'Username');
+                                            confirmPasswordError = _passwordsMatch ? null : 'Passwords do not match';
                                           });
 
-                                          if (emailError != null || nameError != null || !_passwordMeetsRequirements) {
+                                          if (emailError != null ||
+                                              nameError != null ||
+                                              !_passwordMeetsRequirements ||
+                                              confirmPasswordError != null) {
                                             return;
                                           }
 
