@@ -36,8 +36,9 @@ class Validators {
   }
 
   static String? otp(String v) {
-    if (v.trim().isEmpty) return 'OTP required';
-    if (v.trim().length < 4) return 'Invalid OTP';
+    final value = v.trim();
+    if (value.isEmpty) return 'OTP required';
+    if (!RegExp(r'^\d{6}$').hasMatch(value)) return 'Enter the 6-digit code';
     return null;
   }
 }
