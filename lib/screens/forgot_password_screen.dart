@@ -17,18 +17,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailCtrl = TextEditingController();
   final otpCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final confirmPassCtrl = TextEditingController();
 
   String? emailError;
+  String? otpError;
+  String? passwordError;
+  String? confirmPasswordError;
 
   bool _otpSent = false;
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     emailCtrl.dispose();
     otpCtrl.dispose();
     passCtrl.dispose();
+    confirmPassCtrl.dispose();
     super.dispose();
   }
 
@@ -100,20 +106,68 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     TextField(
                       controller: otpCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "OTP"),
+                      maxLength: 6,
+                      onChanged: (v) {
+                        if (otpError != null) {
+                          setState(() {
+                            otpError = null;
+                          });
+                        }
+                      },
+                      decoration: InputDecoration(labelText: "OTP", errorText: otpError),
                     ),
                     const SizedBox(height: 12),
 
                     TextField(
                       controller: passCtrl,
                       obscureText: _obscurePassword,
+                      onChanged: (v) {
+                        if (passwordError != null) {
+                          setState(() {
+                            passwordError = null;
+                          });
+                        }
+                      },
                       decoration: InputDecoration(
                         labelText: "New password",
+                        errorText: passwordError,
                         suffixIcon: IconButton(
                           icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                           onPressed: () {
                             setState(() {
                               _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      Validators.passwordRequirement,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: confirmPassCtrl,
+                      obscureText: _obscureConfirmPassword,
+                      onChanged: (v) {
+                        if (confirmPasswordError != null) {
+                          setState(() {
+                            confirmPasswordError = null;
+                          });
+                        }
+                      },
+                      decoration: InputDecoration(
+                        labelText: "Confirm new password",
+                        errorText: confirmPasswordError,
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirmPassword = !_obscureConfirmPassword;
                             });
                           },
                         ),
@@ -125,6 +179,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _loading
                           ? null
                           : () async {
+                              setState(() {
+                                otpError = Validators.otp(otpCtrl.text);
+                                passwordError = Validators.password(passCtrl.text);
+                                confirmPasswordError = confirmPassCtrl.text == passCtrl.text
+                                    ? null
+                                    : 'Passwords do not match';
+                              });
+
+                              if (otpError != null || passwordError != null || confirmPasswordError != null) {
+                                return;
+                              }
+
                               setState(() => _loading = true);
                               final ok = await auth.resetPassword(otp: otpCtrl.text.trim(), newPassword: passCtrl.text);
                               if (!mounted) return;
