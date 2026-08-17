@@ -19,25 +19,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailCtrl = TextEditingController();
   final otpCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final confirmPassCtrl = TextEditingController();
   final passFocus = FocusNode();
+  final confirmPassFocus = FocusNode();
 
   String? emailError;
+  String? confirmPasswordError;
   String? submitError;
 
   bool _otpSent = false;
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
 
-  bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
+  bool get _passwordsMatch => confirmPassCtrl.text == passCtrl.text;
+
+  bool get _canResetPassword =>
+      Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements && _passwordsMatch;
 
   @override
   void dispose() {
     emailCtrl.dispose();
     otpCtrl.dispose();
     passCtrl.dispose();
+    confirmPassCtrl.dispose();
     passFocus.dispose();
+    confirmPassFocus.dispose();
     super.dispose();
   }
 
@@ -119,6 +128,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                     _otpSent = true;
                                     otpCtrl.clear();
                                     passCtrl.clear();
+                                    confirmPassCtrl.clear();
                                   });
                                 } else {
                                   setState(() {
@@ -152,13 +162,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         controller: passCtrl,
                         focusNode: passFocus,
                         obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
+                        textInputAction: TextInputAction.next,
                         onChanged: (_) {
                           setState(() {
                             submitError = null;
                           });
                         },
-                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                        onSubmitted: (_) => confirmPassFocus.requestFocus(),
                         decoration: InputDecoration(
                           labelText: "New password",
                           suffixIcon: IconButton(
@@ -178,10 +188,46 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                       const SizedBox(height: 16),
 
+                      TextField(
+                        controller: confirmPassCtrl,
+                        focusNode: confirmPassFocus,
+                        obscureText: _obscureConfirmPassword,
+                        textInputAction: TextInputAction.done,
+                        onChanged: (_) {
+                          setState(() {
+                            confirmPasswordError = null;
+                            submitError = null;
+                          });
+                        },
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                        decoration: InputDecoration(
+                          labelText: "Confirm new password",
+                          errorText: confirmPasswordError,
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () {
+                              setState(() {
+                                _obscureConfirmPassword = !_obscureConfirmPassword;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
                       ElevatedButton(
                         onPressed: _loading || !_canResetPassword
                             ? null
                             : () async {
+                                setState(() {
+                                  confirmPasswordError = _passwordsMatch ? null : 'Passwords do not match';
+                                });
+
+                                if (confirmPasswordError != null) {
+                                  return;
+                                }
+
                                 setState(() {
                                   _loading = true;
                                 });
