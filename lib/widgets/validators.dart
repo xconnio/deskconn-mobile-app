@@ -14,9 +14,9 @@ class Validators {
     return null;
   }
 
-  static String? name(String v) {
-    if (v.trim().isEmpty) return 'Name is required';
-    if (v.trim().length < 2) return 'Name is too short';
+  static String? name(String v, {String label = 'Name'}) {
+    if (v.trim().isEmpty) return '$label is required';
+    if (v.trim().length < 2) return '$label is too short';
     return null;
   }
 
