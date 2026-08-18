@@ -67,7 +67,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     if (realm == null) return;
     try {
       final checksumResult = await session
-          .call('io.xconn.deskconn.deskconnd.wallpaper.checksum')
+          .call(DeskconnProcedures.deskconndWallpaperChecksum)
           .timeout(DeskconnConfig.callTimeout);
       if (checksumResult.args.isEmpty) return;
       final checksum = checksumResult.args[0].toString();
@@ -76,7 +76,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       if (cachedChecksum == checksum && _wallpaperBytes != null) return;
 
       final getResult = await session
-          .call('io.xconn.deskconn.deskconnd.wallpaper.get')
+          .call(DeskconnProcedures.deskconndWallpaperGet)
           .timeout(const Duration(seconds: 120));
       if (getResult.args.length < 2) return;
 
@@ -273,7 +273,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     try {
       final enc = await Encryption.create();
       await session
-          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
+          .call(DeskconnProcedures.deskconndKeyExchange, args: [enc.clientPublicKey])
           .timeout(const Duration(seconds: 3));
       return true;
     } catch (e) {

@@ -22,6 +22,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final passFocus = FocusNode();
 
   String? emailError;
+  String? submitError;
 
   bool _otpSent = false;
   bool _loading = false;
@@ -30,17 +31,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
 
   bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<AuthProvider>().clearError();
-      }
-    });
-  }
 
   @override
   void dispose() {
@@ -84,12 +74,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         onChanged: (v) {
-                          context.read<AuthProvider>().clearError();
-
                           if (emailError != null) {
                             setState(() {
                               emailError = null;
+                              submitError = null;
                             });
+                          } else if (submitError != null) {
+                            setState(() => submitError = null);
                           }
                         },
                         decoration: InputDecoration(labelText: 'Email', errorText: emailError),
@@ -103,6 +94,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             : () async {
                                 setState(() {
                                   emailError = Validators.email(emailCtrl.text);
+                                  submitError = null;
                                 });
 
                                 if (emailError != null) {
@@ -113,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   _loading = true;
                                 });
 
-                                final ok = await auth.requestPasswordReset(emailCtrl.text.trim());
+                                final result = await auth.requestPasswordReset(emailCtrl.text.trim());
 
                                 if (!mounted) return;
 
@@ -121,12 +113,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   _loading = false;
                                 });
 
-                                if (ok) {
+                                if (result.isSuccess) {
                                   setState(() {
                                     FocusManager.instance.primaryFocus?.unfocus();
                                     _otpSent = true;
                                     otpCtrl.clear();
                                     passCtrl.clear();
+                                  });
+                                } else {
+                                  setState(() {
+                                    submitError = result.error;
                                   });
                                 }
                               },
@@ -142,8 +138,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         textInputAction: TextInputAction.next,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                         onChanged: (_) {
-                          context.read<AuthProvider>().clearError();
-                          setState(() {});
+                          setState(() {
+                            submitError = null;
+                          });
                         },
                         onSubmitted: (_) => passFocus.requestFocus(),
                         decoration: InputDecoration(labelText: "OTP", suffixText: '${otpCtrl.text.length}/6'),
@@ -157,8 +154,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.done,
                         onChanged: (_) {
-                          context.read<AuthProvider>().clearError();
-                          setState(() {});
+                          setState(() {
+                            submitError = null;
+                          });
                         },
                         onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         decoration: InputDecoration(
@@ -188,7 +186,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   _loading = true;
                                 });
 
-                                final ok = await auth.resetPassword(
+                                final result = await auth.resetPassword(
                                   otp: otpCtrl.text.trim(),
                                   newPassword: passCtrl.text,
                                 );
@@ -199,19 +197,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   _loading = false;
                                 });
 
-                                if (ok && context.mounted) {
-                                  auth.clearError();
+                                if (result.isSuccess && context.mounted) {
                                   Navigator.pop(context);
+                                } else {
+                                  setState(() {
+                                    submitError = result.error;
+                                  });
                                 }
                               },
                         child: const Text("Reset password"),
                       ),
                     ],
 
-                    if (auth.error != null) ...[
+                    if (submitError != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        auth.error!,
+                        submitError!,
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),

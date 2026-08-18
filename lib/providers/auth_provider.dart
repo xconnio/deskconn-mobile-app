@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:xconn/xconn.dart';
 
@@ -9,17 +10,11 @@ class AuthProvider extends ChangeNotifier {
 
   String? pendingEmail;
   String? _pendingPassword;
-  String? error;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
   String? get pendingPassword => _pendingPassword;
-
-  void clearError() {
-    error = null;
-    notifyListeners();
-  }
 
   void _setLoading(bool value) {
     _isLoading = value;
@@ -36,109 +31,84 @@ class AuthProvider extends ChangeNotifier {
     return _session!;
   }
 
-  Future<bool> createAccount({required String email, required String name, required String password}) async {
-    error = null;
+  Future<OperationResult> createAccount({required String email, required String name, required String password}) async {
     _setLoading(true);
 
     try {
       var session = await _getSession();
       await session
-          .call("io.xconn.deskconn.account.create", args: [email, name, password])
+          .call(DeskconnProcedures.accountCreate, args: [email, name, password])
           .timeout(DeskconnConfig.callTimeout);
 
       pendingEmail = email;
       _pendingPassword = password;
 
-      _setLoading(false);
-      return true;
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
+      return OperationResult.failure(e.toString());
+    } finally {
       _setLoading(false);
-      return false;
     }
   }
 
-  Future<bool> verifyOtp(String otp) async {
+  Future<OperationResult> verifyOtp(String otp) async {
     if (pendingEmail == null) {
-      error = "No pending verification";
-      notifyListeners();
-      return false;
+      return const OperationResult.failure("No pending verification");
     }
-
-    error = null;
-    notifyListeners();
 
     try {
       var session = await _getSession();
       await session
-          .call("io.xconn.deskconn.account.verify", args: [pendingEmail, otp])
+          .call(DeskconnProcedures.accountVerify, args: [pendingEmail, otp])
           .timeout(DeskconnConfig.callTimeout);
 
-      notifyListeners();
-      return true;
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
+      return OperationResult.failure(e.toString());
     }
   }
 
-  Future<void> resendOtp() async {
-    if (pendingEmail == null) return;
+  Future<OperationResult> resendOtp() async {
+    if (pendingEmail == null) {
+      return const OperationResult.failure("No pending verification");
+    }
 
     try {
       var session = await _getSession();
-      await session
-          .call("io.xconn.deskconn.account.otp.resend", args: [pendingEmail])
-          .timeout(DeskconnConfig.callTimeout);
+      await session.call(DeskconnProcedures.accountOtpResend, args: [pendingEmail]).timeout(DeskconnConfig.callTimeout);
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
-      notifyListeners();
+      return OperationResult.failure(e.toString());
     }
   }
 
-  Future<bool> requestPasswordReset(String email) async {
-    error = null;
-    notifyListeners();
-
+  Future<OperationResult> requestPasswordReset(String email) async {
     try {
       var session = await _getSession();
-      await session
-          .call("io.xconn.deskconn.account.password.forget", args: [email])
-          .timeout(DeskconnConfig.callTimeout);
+      await session.call(DeskconnProcedures.accountPasswordForget, args: [email]).timeout(DeskconnConfig.callTimeout);
 
       pendingEmail = email;
       notifyListeners();
-      return true;
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
+      return OperationResult.failure(e.toString());
     }
   }
 
-  Future<bool> resetPassword({required String otp, required String newPassword}) async {
+  Future<OperationResult> resetPassword({required String otp, required String newPassword}) async {
     if (pendingEmail == null) {
-      error = "No pending password reset";
-      notifyListeners();
-      return false;
+      return const OperationResult.failure("No pending password reset");
     }
-
-    error = null;
-    notifyListeners();
 
     try {
       var session = await _getSession();
       await session
-          .call("io.xconn.deskconn.account.password.reset", args: [pendingEmail, newPassword, otp])
+          .call(DeskconnProcedures.accountPasswordReset, args: [pendingEmail, newPassword, otp])
           .timeout(DeskconnConfig.callTimeout);
 
-      notifyListeners();
-      return true;
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
+      return OperationResult.failure(e.toString());
     }
   }
 

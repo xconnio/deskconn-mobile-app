@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
@@ -157,9 +158,9 @@ class DesktopConnectionManager {
       try {
         final config = web_rtc.ClientConfig(
           realm: realm,
-          procedureWebRTCOffer: 'io.xconn.webrtc.offer',
-          topicAnswererOnCandidate: 'io.xconn.webrtc.answerer.on_candidate',
-          topicOffererOnCandidate: 'io.xconn.webrtc.offerer.on_candidate',
+          procedureWebRTCOffer: DeskconnProcedures.webrtcOffer,
+          topicAnswererOnCandidate: DeskconnProcedures.webrtcAnswererOnCandidate,
+          topicOffererOnCandidate: DeskconnProcedures.webrtcOffererOnCandidate,
           iceServers: [
             {'urls': 'stun:stun.l.google.com:19302'},
           ],

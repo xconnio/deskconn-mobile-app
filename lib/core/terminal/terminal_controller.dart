@@ -9,6 +9,7 @@ import 'package:xconn/src/types.dart';
 import 'blocking_queue.dart';
 import 'terminal_background_service.dart';
 import 'terminal_encryption.dart';
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 
 class TerminalController {
@@ -83,7 +84,7 @@ class TerminalController {
     _attachInput();
 
     try {
-      await connection.session.callProgressiveProgress('io.xconn.deskconn.deskconnd.shell', _sender, _receiver);
+      await connection.session.callProgressiveProgress(DeskconnProcedures.deskconndShell, _sender, _receiver);
     } catch (e) {
       // Mirrors what a real ssh client prints on a dropped connection —
       // a clean disconnect notice, not a raw exception dump — then exits
