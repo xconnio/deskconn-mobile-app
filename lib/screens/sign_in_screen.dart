@@ -26,6 +26,13 @@ class _SignInScreenState extends State<SignInScreen> {
   String? passwordError;
   bool _obscurePassword = true;
 
+  void _clearForm() {
+    emailCtrl.clear();
+    passCtrl.clear();
+    emailError = null;
+    passwordError = null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -198,8 +205,18 @@ class _SignInScreenState extends State<SignInScreen> {
                           TextButton(
                             onPressed: session.isLoading
                                 ? null
-                                : () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpScreen()));
+                                : () async {
+                                    context.read<SessionProvider>().clearError();
+                                    setState(_clearForm);
+
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                                    );
+
+                                    if (!context.mounted) return;
+                                    context.read<SessionProvider>().clearError();
+                                    setState(_clearForm);
                                   },
                             child: const Text('Create account'),
                           ),
