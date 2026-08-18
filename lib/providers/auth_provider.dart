@@ -75,9 +75,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       var session = await _getSession();
-      await session
-          .call(DeskconnProcedures.accountOtpResend, args: [pendingEmail])
-          .timeout(DeskconnConfig.callTimeout);
+      await session.call(DeskconnProcedures.accountOtpResend, args: [pendingEmail]).timeout(DeskconnConfig.callTimeout);
       return const OperationResult.success();
     } catch (e) {
       return OperationResult.failure(e.toString());
@@ -87,9 +85,7 @@ class AuthProvider extends ChangeNotifier {
   Future<OperationResult> requestPasswordReset(String email) async {
     try {
       var session = await _getSession();
-      await session
-          .call(DeskconnProcedures.accountPasswordForget, args: [email])
-          .timeout(DeskconnConfig.callTimeout);
+      await session.call(DeskconnProcedures.accountPasswordForget, args: [email]).timeout(DeskconnConfig.callTimeout);
 
       pendingEmail = email;
       notifyListeners();

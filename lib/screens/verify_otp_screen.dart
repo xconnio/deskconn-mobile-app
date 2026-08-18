@@ -34,137 +34,137 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-        appBar: AppBar(title: const Text("Verify email")),
-        body: Center(
-          child: Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
-            child: SizedBox(
-              width: DeskconnUI.cardWidth,
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const DeskconnLogo(),
-                    const SizedBox(height: 16),
+      appBar: AppBar(title: const Text("Verify email")),
+      body: Center(
+        child: Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
+          child: SizedBox(
+            width: DeskconnUI.cardWidth,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const DeskconnLogo(),
+                  const SizedBox(height: 16),
 
-                    const Text("Enter the 6-digit code sent to your email", textAlign: TextAlign.center),
+                  const Text("Enter the 6-digit code sent to your email", textAlign: TextAlign.center),
 
-                    const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                    TextField(
-                      controller: otpCtrl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                      enabled: !_loading,
-                      onChanged: (v) {
-                        if (requiredError != null) {
-                          setState(() {
-                            requiredError = null;
-                            submitError = null;
-                          });
-                        } else if (submitError != null) {
-                          setState(() => submitError = null);
-                        }
-                      },
-                      decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
-                    ),
+                  TextField(
+                    controller: otpCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                    enabled: !_loading,
+                    onChanged: (v) {
+                      if (requiredError != null) {
+                        setState(() {
+                          requiredError = null;
+                          submitError = null;
+                        });
+                      } else if (submitError != null) {
+                        setState(() => submitError = null);
+                      }
+                    },
+                    decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
+                  ),
 
-                    const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                    ElevatedButton(
-                      onPressed: _loading
-                          ? null
-                          : () async {
-                              setState(() {
-                                requiredError = Validators.otp(otpCtrl.text);
-                                submitError = null;
-                              });
+                  ElevatedButton(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            setState(() {
+                              requiredError = Validators.otp(otpCtrl.text);
+                              submitError = null;
+                            });
 
-                              if (requiredError != null) return;
+                            if (requiredError != null) return;
 
-                              FocusScope.of(context).unfocus();
+                            FocusScope.of(context).unfocus();
 
-                              setState(() {
-                                _loading = true;
-                              });
+                            setState(() {
+                              _loading = true;
+                            });
 
-                              try {
-                                final result = await auth.verifyOtp(otpCtrl.text.trim());
+                            try {
+                              final result = await auth.verifyOtp(otpCtrl.text.trim());
+
+                              if (!context.mounted) return;
+
+                              if (result.isSuccess) {
+                                final email = auth.pendingEmail;
+                                final password = auth.pendingPassword;
+
+                                if (email == null || password == null) {
+                                  setState(() {
+                                    _loading = false;
+                                  });
+                                  return;
+                                }
+
+                                final loginResult = await context.read<SessionProvider>().login(email, password);
 
                                 if (!context.mounted) return;
 
-                                if (result.isSuccess) {
-                                  final email = auth.pendingEmail;
-                                  final password = auth.pendingPassword;
-
-                                  if (email == null || password == null) {
-                                    setState(() {
-                                      _loading = false;
-                                    });
-                                    return;
-                                  }
-
-                                  final loginResult = await context.read<SessionProvider>().login(email, password);
-
-                                  if (!context.mounted) return;
-
-                                  if (loginResult.isSuccess) {
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                                      (_) => false,
-                                    );
-                                  } else {
-                                    setState(() {
-                                      _loading = false;
-                                      submitError = loginResult.error;
-                                    });
-                                  }
+                                if (loginResult.isSuccess) {
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                                    (_) => false,
+                                  );
                                 } else {
                                   setState(() {
                                     _loading = false;
-                                    submitError = result.error;
+                                    submitError = loginResult.error;
                                   });
                                 }
-                              } catch (_) {
-                                if (mounted) {
-                                  setState(() {
-                                    _loading = false;
-                                  });
-                                }
+                              } else {
+                                setState(() {
+                                  _loading = false;
+                                  submitError = result.error;
+                                });
                               }
-                            },
-                      child: _loading
-                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text("Verify"),
-                    ),
+                            } catch (_) {
+                              if (mounted) {
+                                setState(() {
+                                  _loading = false;
+                                });
+                              }
+                            }
+                          },
+                    child: _loading
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text("Verify"),
+                  ),
 
-                    TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () async {
-                              final result = await auth.resendOtp();
-                              if (!mounted || result.isSuccess) return;
-                              setState(() {
-                                submitError = result.error;
-                              });
-                            },
-                      child: const Text("Resend code"),
-                    ),
+                  TextButton(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            final result = await auth.resendOtp();
+                            if (!mounted || result.isSuccess) return;
+                            setState(() {
+                              submitError = result.error;
+                            });
+                          },
+                    child: const Text("Resend code"),
+                  ),
 
-                    if (submitError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      ),
-                  ],
-                ),
+                  if (submitError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    ),
+                ],
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }
