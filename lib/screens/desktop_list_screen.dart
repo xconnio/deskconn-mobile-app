@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
@@ -83,7 +84,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     try {
       final enc = await Encryption.create();
       await connection.session
-          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
+          .call(DeskconnProcedures.deskconndKeyExchange, args: [enc.clientPublicKey])
           .timeout(const Duration(seconds: 4));
     } catch (_) {
       await DesktopConnectionManager().release(realm);
@@ -119,7 +120,7 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
       );
       final enc = await Encryption.create();
       await connection.session
-          .call('io.xconn.deskconn.deskconnd.key.exchange', args: [enc.clientPublicKey])
+          .call(DeskconnProcedures.deskconndKeyExchange, args: [enc.clientPublicKey])
           .timeout(const Duration(seconds: 5));
       connection.isAgentOnline = true;
       return true;

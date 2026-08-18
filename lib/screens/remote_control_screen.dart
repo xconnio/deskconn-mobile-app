@@ -8,16 +8,16 @@ import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart' show save
 import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
 
-const _procLock = 'io.xconn.deskconn.deskconnd.screen.lock';
-const _procBrightnessGet = 'io.xconn.deskconn.deskconnd.screen.brightness.get';
-const _procBrightnessSet = 'io.xconn.deskconn.deskconnd.screen.brightness.set';
-const _procMprisPlayers = 'io.xconn.deskconn.deskconnd.mpris.players';
-const _procMprisPlayPause = 'io.xconn.deskconn.deskconnd.mpris.playpause';
-const _procMprisPrev = 'io.xconn.deskconn.deskconnd.mpris.previous';
-const _procMprisNext = 'io.xconn.deskconn.deskconnd.mpris.next';
-const _procAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
-const _procAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
-const _procScreenshot = 'io.xconn.deskconn.deskconnd.screenshot';
+const _procLock = DeskconnProcedures.deskconndScreenLock;
+const _procBrightnessGet = DeskconnProcedures.deskconndScreenBrightnessGet;
+const _procBrightnessSet = DeskconnProcedures.deskconndScreenBrightnessSet;
+const _procMprisPlayers = DeskconnProcedures.deskconndMprisPlayers;
+const _procMprisPlayPause = DeskconnProcedures.deskconndMprisPlayPause;
+const _procMprisPrev = DeskconnProcedures.deskconndMprisPrevious;
+const _procMprisNext = DeskconnProcedures.deskconndMprisNext;
+const _procAudioIsMuted = DeskconnProcedures.deskconndAudioIsMuted;
+const _procAudioToggleMute = DeskconnProcedures.deskconndAudioToggleMute;
+const _procScreenshot = DeskconnProcedures.deskconndScreenshot;
 
 Uint8List _coerceBytes(dynamic raw) {
   if (raw is Uint8List) {

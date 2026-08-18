@@ -39,7 +39,7 @@ class FileExplorerController {
   Future<void> _doKeyExchange() async {
     _encryption = await Encryption.create();
     final res = await session
-        .call('io.xconn.deskconn.deskconnd.key.exchange', args: [_encryption!.clientPublicKey])
+        .call(DeskconnProcedures.deskconndKeyExchange, args: [_encryption!.clientPublicKey])
         .timeout(DeskconnConfig.callTimeout);
 
     if (res.args.isEmpty) {
@@ -62,7 +62,7 @@ class FileExplorerController {
     };
     final encryptedPayload = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
     final res = await session
-        .call('io.xconn.deskconn.deskconnd.file.browse', args: [encryptedPayload])
+        .call(DeskconnProcedures.deskconndFileBrowse, args: [encryptedPayload])
         .timeout(DeskconnConfig.callTimeout);
     if (res.args.isEmpty) throw Exception('Browse failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
@@ -76,7 +76,7 @@ class FileExplorerController {
     };
     final encrypted = _encryption!.encrypt(utf8.encode(jsonEncode(payload)));
     final res = await session
-        .call('io.xconn.deskconn.deskconnd.index.query', args: [encrypted])
+        .call(DeskconnProcedures.deskconndIndexQuery, args: [encrypted])
         .timeout(DeskconnConfig.callTimeout);
     if (res.args.isEmpty) throw Exception('Index query failed: empty response');
     final decrypted = _encryption!.decrypt(_coerceBytes(res.args[0]));
@@ -173,7 +173,7 @@ class FileExplorerController {
     }
 
     session
-        .callProgress('io.xconn.deskconn.deskconnd.file.download', (result) {
+        .callProgress(DeskconnProcedures.deskconndFileDownload, (result) {
           queue.add(result);
           notify();
         }, args: [path, isThumbnail, enc.clientPublicKey])
@@ -242,7 +242,7 @@ class FileExplorerController {
     Future<Progress> sender() => outgoing.take();
     Future<void> receiver(Result _) async {}
 
-    final callFuture = session.callProgressiveProgress('io.xconn.deskconn.deskconnd.file.upload', sender, receiver);
+    final callFuture = session.callProgressiveProgress(DeskconnProcedures.deskconndFileUpload, sender, receiver);
     // A dead connection mid-transfer previously wasn't noticed until after
     // the entire local file had already been read and encrypted — wasted
     // work on a call that's already failed. This lets the chunk loop below
@@ -311,13 +311,13 @@ class FileExplorerController {
   }
 
   Future<void> rename(String oldPath, String newPath) async {
-    await _callEncrypted('io.xconn.deskconn.deskconnd.file.rename', {'old_path': oldPath, 'new_path': newPath});
+    await _callEncrypted(DeskconnProcedures.deskconndFileRename, {'old_path': oldPath, 'new_path': newPath});
     _invalidateCache(oldPath);
     _invalidateCache(newPath);
   }
 
   Future<void> delete(String path) async {
-    await _callEncrypted('io.xconn.deskconn.deskconnd.file.delete', {'path': path});
+    await _callEncrypted(DeskconnProcedures.deskconndFileDelete, {'path': path});
     _invalidateCache(path);
   }
 
@@ -328,7 +328,7 @@ class FileExplorerController {
   }
 
   Future<void> copy(String srcPath, String destPath) async =>
-      _callEncrypted('io.xconn.deskconn.deskconnd.file.copy', {'src': srcPath, 'dst': destPath});
+      _callEncrypted(DeskconnProcedures.deskconndFileCopy, {'src': srcPath, 'dst': destPath});
 
   Future<void> _callEncrypted(String procedure, Map<String, dynamic> payload) async {
     await ensureKeyExchanged();

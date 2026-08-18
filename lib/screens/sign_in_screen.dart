@@ -24,6 +24,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final passFocus = FocusNode();
   String? emailError;
   String? passwordError;
+  String? submitError;
   bool _obscurePassword = true;
 
   void _clearForm() {
@@ -31,6 +32,7 @@ class _SignInScreenState extends State<SignInScreen> {
     passCtrl.clear();
     emailError = null;
     passwordError = null;
+    submitError = null;
   }
 
   @override
@@ -97,6 +99,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
+                                  submitError = null;
                                 });
                               }
                             },
@@ -116,6 +119,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
+                                  submitError = null;
                                 });
                               }
                             },
@@ -154,32 +158,35 @@ class _SignInScreenState extends State<SignInScreen> {
                                 setState(() {
                                   emailError = Validators.email(emailCtrl.text);
                                   passwordError = Validators.required(passCtrl.text, label: 'Password');
+                                  submitError = null;
                                 });
 
                                 if (emailError != null || passwordError != null) {
                                   return;
                                 }
 
-                                try {
-                                  await session.login(emailCtrl.text.trim(), passCtrl.text);
-                                } catch (_) {}
+                                final result = await session.login(emailCtrl.text.trim(), passCtrl.text);
 
                                 if (!context.mounted) return;
 
-                                if (session.loggedIn) {
+                                if (result.isSuccess && session.loggedIn) {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(builder: (_) => const DesktopListScreen()),
                                   );
+                                } else {
+                                  setState(() {
+                                    submitError = 'Invalid email or password';
+                                  });
                                 }
                               },
                               child: const Text('Sign in'),
                             ),
 
-                          if (session.error != null) ...[
+                          if (submitError != null) ...[
                             const SizedBox(height: 12),
                             Text(
-                              'Invalid email or password',
+                              submitError!,
                               textAlign: TextAlign.center,
                               style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),
@@ -206,7 +213,6 @@ class _SignInScreenState extends State<SignInScreen> {
                             onPressed: session.isLoading
                                 ? null
                                 : () async {
-                                    context.read<SessionProvider>().clearError();
                                     setState(_clearForm);
 
                                     await Navigator.push(
@@ -215,7 +221,6 @@ class _SignInScreenState extends State<SignInScreen> {
                                     );
 
                                     if (!context.mounted) return;
-                                    context.read<SessionProvider>().clearError();
                                     setState(_clearForm);
                                   },
                             child: const Text('Create account'),

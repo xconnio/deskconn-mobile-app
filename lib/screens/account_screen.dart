@@ -62,7 +62,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
     try {
       final res = await session.session!
-          .call('io.xconn.deskconn.account.update', kwargs: {'name': nameCtrl.text.trim()})
+          .call(DeskconnProcedures.accountUpdate, kwargs: {'name': nameCtrl.text.trim()})
           .timeout(DeskconnConfig.callTimeout);
 
       if (!mounted) return;
@@ -93,7 +93,7 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final session = context.read<SessionProvider>();
       await session.session!
-          .call('io.xconn.deskconn.account.update', kwargs: {'password': passCtrl.text})
+          .call(DeskconnProcedures.accountUpdate, kwargs: {'password': passCtrl.text})
           .timeout(DeskconnConfig.callTimeout);
       passCtrl.clear();
     } catch (e) {
@@ -133,7 +133,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final session = context.read<SessionProvider>();
 
     try {
-      await session.session!.call('io.xconn.deskconn.account.delete').timeout(DeskconnConfig.callTimeout);
+      await session.session!.call(DeskconnProcedures.accountDelete).timeout(DeskconnConfig.callTimeout);
     } catch (_) {}
 
     await session.logout();

@@ -25,22 +25,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   String? emailError;
   String? nameError;
+  String? submitError;
   bool _obscurePassword = true;
 
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
   bool get _canCreateAccount =>
       Validators.email(emailCtrl.text) == null && Validators.name(nameCtrl.text) == null && _passwordMeetsRequirements;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<AuthProvider>().clearError();
-      }
-    });
-  }
 
   @override
   void dispose() {
@@ -88,6 +78,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             onChanged: (v) {
                               setState(() {
                                 emailError = null;
+                                submitError = null;
                               });
                             },
                             decoration: InputDecoration(labelText: 'Email', errorText: emailError),
@@ -103,6 +94,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             onChanged: (v) {
                               setState(() {
                                 nameError = null;
+                                submitError = null;
                               });
                             },
                             decoration: InputDecoration(labelText: 'Username', errorText: nameError),
@@ -117,7 +109,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => FocusScope.of(context).unfocus(),
                             onChanged: (v) {
-                              setState(() {});
+                              setState(() {
+                                submitError = null;
+                              });
                             },
                             decoration: InputDecoration(
                               labelText: 'Password',
@@ -155,33 +149,40 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                           setState(() {
                                             emailError = Validators.email(emailCtrl.text);
                                             nameError = Validators.name(nameCtrl.text);
+                                            submitError = null;
                                           });
 
                                           if (emailError != null || nameError != null || !_passwordMeetsRequirements) {
                                             return;
                                           }
 
-                                          final ok = await auth.createAccount(
+                                          final result = await auth.createAccount(
                                             email: emailCtrl.text.trim(),
                                             name: nameCtrl.text.trim(),
                                             password: passCtrl.text,
                                           );
 
-                                          if (ok && context.mounted) {
+                                          if (!context.mounted) return;
+
+                                          if (result.isSuccess) {
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(builder: (_) => const VerifyOtpScreen()),
                                             );
+                                          } else {
+                                            setState(() {
+                                              submitError = result.error;
+                                            });
                                           }
                                         }
                                       : null,
                                   child: const Text('Create account'),
                                 ),
 
-                          if (auth.error != null) ...[
+                          if (submitError != null) ...[
                             const SizedBox(height: 12),
                             Text(
-                              auth.error!,
+                              submitError!,
                               textAlign: TextAlign.center,
                               style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),

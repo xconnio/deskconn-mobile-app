@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 import 'package:deskconn_mobile_app/core/wamp/ui.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
@@ -20,17 +21,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   bool _loading = false;
 
   String? requiredError;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<AuthProvider>().clearError();
-      }
-    });
-  }
+  String? submitError;
 
   @override
   void dispose() {
@@ -42,13 +33,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    return PopScope(
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          auth.clearError();
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(title: const Text("Verify email")),
         body: Center(
           child: Card(
@@ -71,14 +56,16 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                       controller: otpCtrl,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                       enabled: !_loading,
                       onChanged: (v) {
-                        context.read<AuthProvider>().clearError();
-
                         if (requiredError != null) {
                           setState(() {
                             requiredError = null;
+                            submitError = null;
                           });
+                        } else if (submitError != null) {
+                          setState(() => submitError = null);
                         }
                       },
                       decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
@@ -91,12 +78,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                           ? null
                           : () async {
                               setState(() {
-                                requiredError = Validators.required(otpCtrl.text);
+                                requiredError = Validators.otp(otpCtrl.text);
+                                submitError = null;
                               });
 
                               if (requiredError != null) return;
-
-                              if (otpCtrl.text.length != 6) return;
 
                               FocusScope.of(context).unfocus();
 
@@ -105,11 +91,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                               });
 
                               try {
-                                final ok = await auth.verifyOtp(otpCtrl.text.trim());
+                                final result = await auth.verifyOtp(otpCtrl.text.trim());
 
                                 if (!context.mounted) return;
 
-                                if (ok) {
+                                if (result.isSuccess) {
                                   final email = auth.pendingEmail;
                                   final password = auth.pendingPassword;
 
@@ -120,18 +106,26 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                     return;
                                   }
 
-                                  await context.read<SessionProvider>().login(email, password);
+                                  final loginResult = await context.read<SessionProvider>().login(email, password);
 
                                   if (!context.mounted) return;
 
-                                  Navigator.pushAndRemoveUntil(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                                    (_) => false,
-                                  );
+                                  if (loginResult.isSuccess) {
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                                      (_) => false,
+                                    );
+                                  } else {
+                                    setState(() {
+                                      _loading = false;
+                                      submitError = loginResult.error;
+                                    });
+                                  }
                                 } else {
                                   setState(() {
                                     _loading = false;
+                                    submitError = result.error;
                                   });
                                 }
                               } catch (_) {
@@ -147,12 +141,23 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                           : const Text("Verify"),
                     ),
 
-                    TextButton(onPressed: _loading ? null : auth.resendOtp, child: const Text("Resend code")),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              final result = await auth.resendOtp();
+                              if (!mounted || result.isSuccess) return;
+                              setState(() {
+                                submitError = result.error;
+                              });
+                            },
+                      child: const Text("Resend code"),
+                    ),
 
-                    if (auth.error != null)
+                    if (submitError != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: Text(auth.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        child: Text(submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       ),
                   ],
                 ),
@@ -160,7 +165,6 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }

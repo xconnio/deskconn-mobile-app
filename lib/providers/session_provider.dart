@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
@@ -49,11 +50,6 @@ class SessionProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
 
-  void clearError() {
-    error = null;
-    notifyListeners();
-  }
-
   void _setLoading(bool v) {
     _isLoading = v;
     notifyListeners();
@@ -67,14 +63,14 @@ class SessionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> desktops = [];
   bool desktopsLoading = false;
 
-  Future<void> login(String email, String password) async {
+  Future<OperationResult> login(String email, String password) async {
     error = null;
     _setLoading(true);
 
     try {
       session = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
 
-      final res = await session!.call("io.xconn.deskconn.account.get").timeout(DeskconnConfig.callTimeout);
+      final res = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
 
       if (res.args.isEmpty) {
         throw Exception("Empty account response");
@@ -86,15 +82,15 @@ class SessionProvider extends ChangeNotifier {
 
       loggedIn = true;
       notifyListeners();
+      return const OperationResult.success();
     } catch (e) {
-      error = e.toString();
       session = null;
       account = null;
       desktops.clear();
       loggedIn = false;
 
       notifyListeners();
-      rethrow;
+      return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
     }
@@ -115,7 +111,7 @@ class SessionProvider extends ChangeNotifier {
         if (privateKey != null && email != null) {
           session = await _client.connectCryptoSign(authId: email, privateKey: privateKey, realm: DeskconnConfig.realm);
 
-          final res = await session!.call("io.xconn.deskconn.account.get").timeout(DeskconnConfig.callTimeout);
+          final res = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
           if (res.args.isEmpty) throw Exception("Empty account");
 
           account = Map<String, dynamic>.from(res.args[0] as Map);
@@ -146,7 +142,7 @@ class SessionProvider extends ChangeNotifier {
 
     try {
       final s = await _ensureSession();
-      final res = await s.call("io.xconn.deskconn.desktop.list").timeout(DeskconnConfig.callTimeout);
+      final res = await s.call(DeskconnProcedures.desktopList).timeout(DeskconnConfig.callTimeout);
       desktops = res.args.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (e) {
       error = "Failed to load desktops";
@@ -165,7 +161,7 @@ class SessionProvider extends ChangeNotifier {
       final identity = await DeviceIdentity.deviceId();
       if (identity != null) {
         try {
-          await session?.call('io.xconn.deskconn.device.delete', args: [identity]).timeout(DeskconnConfig.callTimeout);
+          await session?.call(DeskconnProcedures.deviceDelete, args: [identity]).timeout(DeskconnConfig.callTimeout);
         } catch (_) {}
       }
       await session?.close();
@@ -217,7 +213,7 @@ class SessionProvider extends ChangeNotifier {
       final deviceModel = await _getDeviceModel();
 
       final res = await session!
-          .call('io.xconn.deskconn.device.create', args: [deviceName, publicKeyHex])
+          .call(DeskconnProcedures.deviceCreate, args: [deviceName, publicKeyHex])
           .timeout(DeskconnConfig.callTimeout);
 
       if (res.args.isEmpty) {
