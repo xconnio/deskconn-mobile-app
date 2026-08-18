@@ -29,20 +29,14 @@ class PasswordRequirementItem extends StatelessWidget {
               color: Colors.transparent,
               border: Border.all(color: borderColor),
             ),
-            child: Icon(
-              Icons.check,
-              size: 13,
-              color: iconColor,
-            ),
+            child: Icon(Icons.check, size: 13, color: iconColor),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             Validators.passwordRequirement,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurface,
-            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurface),
           ),
         ),
       ],

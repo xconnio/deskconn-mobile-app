@@ -27,11 +27,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
 
-  bool get _passwordMeetsRequirements =>
-      Validators.isPasswordValid(passCtrl.text);
+  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
 
-  bool get _canResetPassword =>
-      Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
+  bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
 
   @override
   void initState() {
@@ -58,19 +56,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Reset password"),
-      ),
+      appBar: AppBar(title: const Text("Reset password")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                DeskconnUI.cardRadius,
-              ),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
             child: SizedBox(
               width: DeskconnUI.cardWidth,
               child: Padding(
@@ -79,24 +71,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Center(
-                      child: DeskconnLogo(),
-                    ),
+                    const Center(child: DeskconnLogo()),
                     const SizedBox(height: 16),
 
                     if (!_otpSent) ...[
-                      const Text(
-                        "Enter your email to receive a reset code",
-                        textAlign: TextAlign.center,
-                      ),
+                      const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
                       const SizedBox(height: 16),
 
                       TextField(
                         controller: emailCtrl,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.done,
-                        onSubmitted: (_) =>
-                            FocusScope.of(context).unfocus(),
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         onChanged: (v) {
                           context.read<AuthProvider>().clearError();
 
@@ -106,10 +92,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             });
                           }
                         },
-                        decoration: InputDecoration(
-                          labelText: 'Email',
-                          errorText: emailError,
-                        ),
+                        decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                       ),
 
                       const SizedBox(height: 16),
@@ -118,65 +101,52 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         onPressed: _loading
                             ? null
                             : () async {
-                          setState(() {
-                            emailError =
-                                Validators.email(emailCtrl.text);
-                          });
+                                setState(() {
+                                  emailError = Validators.email(emailCtrl.text);
+                                });
 
-                          if (emailError != null) {
-                            return;
-                          }
+                                if (emailError != null) {
+                                  return;
+                                }
 
-                          setState(() {
-                            _loading = true;
-                          });
+                                setState(() {
+                                  _loading = true;
+                                });
 
-                          final ok =
-                          await auth.requestPasswordReset(
-                            emailCtrl.text.trim(),
-                          );
+                                final ok = await auth.requestPasswordReset(emailCtrl.text.trim());
 
-                          if (!mounted) return;
+                                if (!mounted) return;
 
-                          setState(() {
-                            _loading = false;
-                          });
+                                setState(() {
+                                  _loading = false;
+                                });
 
-                          if (ok) {
-                            setState(() {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              _otpSent = true;
-                              otpCtrl.clear();
-                              passCtrl.clear();
-                            });
-                          }
-                        },
+                                if (ok) {
+                                  setState(() {
+                                    FocusManager.instance.primaryFocus?.unfocus();
+                                    _otpSent = true;
+                                    otpCtrl.clear();
+                                    passCtrl.clear();
+                                  });
+                                }
+                              },
                         child: const Text("Send reset code"),
                       ),
                     ] else ...[
-                      const Text(
-                        "Enter the code and your new password",
-                        textAlign: TextAlign.center,
-                      ),
+                      const Text("Enter the code and your new password", textAlign: TextAlign.center),
                       const SizedBox(height: 16),
 
                       TextField(
                         controller: otpCtrl,
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.next,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                         onChanged: (_) {
                           context.read<AuthProvider>().clearError();
                           setState(() {});
                         },
                         onSubmitted: (_) => passFocus.requestFocus(),
-                        decoration: InputDecoration(
-                          labelText: "OTP",
-                          suffixText: '${otpCtrl.text.length}/6',
-                        ),
+                        decoration: InputDecoration(labelText: "OTP", suffixText: '${otpCtrl.text.length}/6'),
                       ),
 
                       const SizedBox(height: 12),
@@ -190,20 +160,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           context.read<AuthProvider>().clearError();
                           setState(() {});
                         },
-                        onSubmitted: (_) =>
-                            FocusScope.of(context).unfocus(),
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         decoration: InputDecoration(
                           labelText: "New password",
                           suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
+                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                             onPressed: () {
                               setState(() {
-                                _obscurePassword =
-                                !_obscurePassword;
+                                _obscurePassword = !_obscurePassword;
                               });
                             },
                           ),
@@ -212,38 +176,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                       const SizedBox(height: 12),
 
-                      PasswordRequirementItem(
-                        isMet: _passwordMeetsRequirements,
-                      ),
+                      PasswordRequirementItem(isMet: _passwordMeetsRequirements),
 
                       const SizedBox(height: 16),
 
                       ElevatedButton(
-                        onPressed:
-                        _loading || !_canResetPassword
+                        onPressed: _loading || !_canResetPassword
                             ? null
                             : () async {
-                          setState(() {
-                            _loading = true;
-                          });
+                                setState(() {
+                                  _loading = true;
+                                });
 
-                          final ok =
-                          await auth.resetPassword(
-                            otp: otpCtrl.text.trim(),
-                            newPassword: passCtrl.text,
-                          );
+                                final ok = await auth.resetPassword(
+                                  otp: otpCtrl.text.trim(),
+                                  newPassword: passCtrl.text,
+                                );
 
-                          if (!mounted) return;
+                                if (!mounted) return;
 
-                          setState(() {
-                            _loading = false;
-                          });
+                                setState(() {
+                                  _loading = false;
+                                });
 
-                          if (ok && context.mounted) {
-                            auth.clearError();
-                            Navigator.pop(context);
-                          }
-                        },
+                                if (ok && context.mounted) {
+                                  auth.clearError();
+                                  Navigator.pop(context);
+                                }
+                              },
                         child: const Text("Reset password"),
                       ),
                     ],
@@ -253,11 +213,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       Text(
                         auth.error!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .error,
-                        ),
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
                     ],
                   ],
