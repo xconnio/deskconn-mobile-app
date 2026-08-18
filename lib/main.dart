@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:app_settings/app_settings.dart';
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
@@ -55,11 +56,19 @@ Future<void> main() async {
     }
   });
 
-  await initializeDesktopSessionBackgroundService();
-  await ShareService.instance.initialize();
-  unawaited(FlutterBackgroundService().startService());
-
   runApp(const DeskconnApp());
+
+  unawaited(_initializeAppServices());
+}
+
+Future<void> _initializeAppServices() async {
+  try {
+    await initializeDesktopSessionBackgroundService();
+    await ShareService.instance.initialize();
+    unawaited(FlutterBackgroundService().startService());
+  } catch (e) {
+    debugPrint('App service initialization failed: $e');
+  }
 }
 
 class DeskconnApp extends StatelessWidget {
@@ -156,7 +165,7 @@ class _SplashContent extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const DeskconnLogo(size: 88),
+          const DeskconnLogo(size: 44),
           const SizedBox(height: 16),
           Text('Deskconn', style: DeskconnTypography.title(context)),
           const SizedBox(height: 40),
@@ -195,10 +204,11 @@ class _AppBootstrapState extends State<AppBootstrap> {
         return;
       }
       try {
-        await context.read<SessionProvider>().initialize();
+        await context.read<SessionProvider>().initialize().timeout(DeskconnConfig.callTimeout);
         if (!completer.isCompleted) completer.complete();
-      } catch (e, st) {
-        if (!completer.isCompleted) completer.completeError(e, st);
+      } catch (e) {
+        debugPrint('Session initialization failed: $e');
+        if (!completer.isCompleted) completer.complete();
       }
       unawaited(_checkForUpdate());
     });

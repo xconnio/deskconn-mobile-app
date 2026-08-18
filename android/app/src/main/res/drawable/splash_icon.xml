@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+
+    <group
+        android:name="logoContainer"
+        android:pivotX="64"
+        android:pivotY="64"
+        android:scaleX="0.5"
+        android:scaleY="0.5">
+        <path
+            android:fillColor="#475569"
+            android:pathData="
+            M16,64
+            a48,48 0 1,0 96,0
+            a48,48 0 1,0 -96,0" />
+
+        <group
+            android:name="logo"
+            android:pivotX="64"
+            android:pivotY="64">
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="
+                M40,32
+                H66
+                C82.56,32 96,45.43 96,62
+                C96,78.56 82.56,92 66,92
+                H40
+                Z" />
+
+            <path
+                android:fillColor="#475569"
+                android:pathData="
+                M64,54
+                a8,8 0 1,0 0,16
+                a8,8 0 1,0 0,-16" />
+        </group>
+    </group>
+</vector>
