@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
+import 'package:deskconn_mobile_app/core/file_explorer/file_stream.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
@@ -252,7 +253,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   Future<void> _loadMore() async {
     final current = _currentBrowse;
-    if (current == null || !current.hasMore || _isLoadingMore || _isLoading || _currentCategory != null) return;
+    if (current == null || !current.hasMore || _isLoadingMore || _isLoading || _currentCategory != null) {
+      return;
+    }
     if (_controller == null) return;
 
     setState(() => _isLoadingMore = true);
@@ -1960,7 +1963,12 @@ class _PreviewBodyState extends State<_PreviewBody> {
         size: widget.entry.size,
       );
     }
-    return _AudioPreview(controller: widget.controller, path: widget.path, name: widget.entry.name);
+    return _AudioPreview(
+      controller: widget.controller,
+      path: widget.path,
+      name: widget.entry.name,
+      size: widget.entry.size,
+    );
   }
 
   Widget _buildContent(Uint8List data, String ext) {
@@ -2068,6 +2076,7 @@ class _VideoPreviewState extends State<_VideoPreview> with WidgetsBindingObserve
   VideoPlayerController? _vc;
   ChewieController? _cc;
   File? _tempFile;
+  StreamMediaServer? _streamServer;
   String? _error;
   bool _ready = false;
 
@@ -2080,19 +2089,33 @@ class _VideoPreviewState extends State<_VideoPreview> with WidgetsBindingObserve
 
   Future<void> _init() async {
     try {
-      final bytes = await widget.controller.read(widget.path);
-      if (!mounted) return;
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/${widget.name}');
-      await file.writeAsBytes(bytes);
-      _tempFile = file;
-      _vc = VideoPlayerController.file(file);
-      await _vc!.initialize();
+      if (await _tryInitStreamed()) return;
+      await _initBuffered();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<bool> _tryInitStreamed() async {
+    StreamMediaServer? server;
+    VideoPlayerController? controller;
+    try {
+      server = StreamMediaServer(
+        controller: widget.controller,
+        path: widget.path,
+        name: widget.name,
+        size: widget.size,
+      );
+      final uri = await server.start();
+      controller = VideoPlayerController.networkUrl(uri);
+      await controller.initialize();
       if (!mounted) {
-        _vc!.dispose();
-        file.delete().catchError((Object _) => file);
-        return;
+        await server.close();
+        await controller.dispose();
+        return true;
       }
+      _streamServer = server;
+      _vc = controller;
       _cc = ChewieController(
         videoPlayerController: _vc!,
         autoPlay: true,
@@ -2101,9 +2124,37 @@ class _VideoPreviewState extends State<_VideoPreview> with WidgetsBindingObserve
         allowMuting: true,
       );
       setState(() => _ready = true);
+      return true;
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      debugPrint('Video range stream unavailable, falling back to buffered playback: $e');
+      await controller?.dispose();
+      await server?.close();
+      return false;
     }
+  }
+
+  Future<void> _initBuffered() async {
+    final bytes = await widget.controller.read(widget.path);
+    if (!mounted) return;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/${widget.name}');
+    await file.writeAsBytes(bytes);
+    _tempFile = file;
+    _vc = VideoPlayerController.file(file);
+    await _vc!.initialize();
+    if (!mounted) {
+      _vc!.dispose();
+      file.delete().catchError((Object _) => file);
+      return;
+    }
+    _cc = ChewieController(
+      videoPlayerController: _vc!,
+      autoPlay: true,
+      looping: false,
+      allowFullScreen: true,
+      allowMuting: true,
+    );
+    setState(() => _ready = true);
   }
 
   @override
@@ -2118,6 +2169,7 @@ class _VideoPreviewState extends State<_VideoPreview> with WidgetsBindingObserve
     WidgetsBinding.instance.removeObserver(this);
     _cc?.dispose();
     _vc?.dispose();
+    unawaited(_streamServer?.close());
     _tempFile?.delete().catchError((Object _) => _tempFile!);
     super.dispose();
   }
@@ -2150,7 +2202,8 @@ class _AudioPreview extends StatefulWidget {
   final FileExplorerController controller;
   final String path;
   final String name;
-  const _AudioPreview({required this.controller, required this.path, required this.name});
+  final int size;
+  const _AudioPreview({required this.controller, required this.path, required this.name, required this.size});
 
   @override
   State<_AudioPreview> createState() => _AudioPreviewState();
@@ -2158,6 +2211,7 @@ class _AudioPreview extends StatefulWidget {
 
 class _AudioPreviewState extends State<_AudioPreview> with WidgetsBindingObserver {
   final _player = AudioPlayer();
+  StreamMediaServer? _streamServer;
   PlayerState _state = PlayerState.stopped;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -2182,12 +2236,34 @@ class _AudioPreviewState extends State<_AudioPreview> with WidgetsBindingObserve
 
   Future<void> _load() async {
     try {
-      final bytes = await widget.controller.read(widget.path);
-      if (!mounted) return;
-      await _player.play(BytesSource(bytes));
+      if (!await _tryLoadStreamed()) {
+        final bytes = await widget.controller.read(widget.path);
+        if (!mounted) return;
+        await _player.play(BytesSource(bytes));
+      }
       if (mounted) setState(() => _loaded = true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<bool> _tryLoadStreamed() async {
+    StreamMediaServer? server;
+    try {
+      server = StreamMediaServer(
+        controller: widget.controller,
+        path: widget.path,
+        name: widget.name,
+        size: widget.size,
+      );
+      final uri = await server.start();
+      await _player.play(UrlSource(uri.toString()));
+      _streamServer = server;
+      return true;
+    } catch (e) {
+      debugPrint('Audio range stream unavailable, falling back to buffered playback: $e');
+      await server?.close();
+      return false;
     }
   }
 
@@ -2202,6 +2278,7 @@ class _AudioPreviewState extends State<_AudioPreview> with WidgetsBindingObserve
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _player.dispose();
+    unawaited(_streamServer?.close());
     super.dispose();
   }
 

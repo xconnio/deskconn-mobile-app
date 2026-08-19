@@ -97,6 +97,98 @@ class FileExplorerController {
     return future;
   }
 
+  /// Fetches a byte range of [path] over the existing WAMP session,
+  /// progressively, instead of buffering the whole file. Works over both P2P
+  /// and routed connections — unlike a raw WebRTC data channel per request,
+  /// this rides the WAMP channel that's already open, so it doesn't depend
+  /// on the client's WebRTC stack supporting additional data channels opened
+  /// after the initial connection (unreliable on Android; see file_stream.dart).
+  Future<FileRangeResult> streamRange(String path, int offset, int length) async {
+    final enc = await Encryption.create();
+
+    final List<Result> queue = [];
+    Completer<void>? wakeUp;
+    var done = false;
+    Object? callError;
+
+    void notify() {
+      final w = wakeUp;
+      wakeUp = null;
+      w?.complete();
+    }
+
+    session
+        .callProgress('io.xconn.deskconn.deskconnd.file.stream_range', (result) {
+          queue.add(result);
+          notify();
+        }, args: [path, offset, length, enc.clientPublicKey])
+        .then((_) {
+          done = true;
+          notify();
+        })
+        .catchError((Object e) {
+          callError = e;
+          done = true;
+          notify();
+        });
+
+    final streamController = StreamController<List<int>>(sync: true);
+    final headerCompleter = Completer<_RangeHeader>();
+
+    Future<void> pump() async {
+      var keyReceived = false;
+      try {
+        while (true) {
+          if (queue.isEmpty) {
+            if (done) break;
+            wakeUp = Completer<void>();
+            await wakeUp!.future.timeout(DeskconnConfig.callTimeout);
+            continue;
+          }
+
+          final result = queue.removeAt(0);
+          if (result.args.isEmpty) continue;
+
+          if (!keyReceived) {
+            final raw = _coerceBytes(result.args[0]);
+            final keyPayload = raw.length == 32 ? Uint8List.fromList([...utf8.encode('KEY:'), ...raw]) : raw;
+            await enc.acceptServerKey(keyPayload);
+            keyReceived = true;
+            continue;
+          }
+
+          if (result.args.length < 2) continue;
+          final type = result.args[0];
+          final decrypted = enc.decrypt(_coerceBytes(result.args[1]));
+          if (type == 'H') {
+            if (!headerCompleter.isCompleted) {
+              headerCompleter.complete(_RangeHeader.fromJson(jsonDecode(utf8.decode(decrypted))));
+            }
+          } else if (type == 'D') {
+            streamController.add(decrypted);
+          }
+        }
+
+        if (callError != null) throw callError!;
+      } catch (e) {
+        if (!headerCompleter.isCompleted) headerCompleter.completeError(e);
+        streamController.addError(e);
+      } finally {
+        unawaited(streamController.close());
+      }
+    }
+
+    unawaited(pump());
+
+    final header = await headerCompleter.future;
+    return FileRangeResult(
+      size: header.size,
+      offset: header.offset,
+      length: header.length,
+      stream: streamController.stream,
+    );
+  }
+
   Future<Uint8List> _runReadDownload(String cacheKey, String path) async {
     try {
       final data = await _download(path, false);
@@ -341,5 +433,30 @@ class FileExplorerController {
     if (raw is List<int>) return Uint8List.fromList(raw);
     if (raw is String) return Uint8List.fromList(base64.decode(raw));
     throw FormatException('Unsupported payload type: ${raw.runtimeType}');
+  }
+}
+
+class FileRangeResult {
+  final int size;
+  final int offset;
+  final int length;
+  final Stream<List<int>> stream;
+
+  const FileRangeResult({required this.size, required this.offset, required this.length, required this.stream});
+}
+
+class _RangeHeader {
+  final int size;
+  final int offset;
+  final int length;
+
+  const _RangeHeader({required this.size, required this.offset, required this.length});
+
+  factory _RangeHeader.fromJson(Map<String, dynamic> json) {
+    return _RangeHeader(
+      size: (json['size'] as num).toInt(),
+      offset: (json['offset'] as num).toInt(),
+      length: (json['length'] as num).toInt(),
+    );
   }
 }
