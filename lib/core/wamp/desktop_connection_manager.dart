@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ const bool kForceWebRtcOnly = false;
 class DesktopConnection {
   final Session session;
   final bool isP2P;
+  final web_rtc.WebRTCSession? webRtcSession;
   bool isAgentOnline = false;
 
   // Reused across FileExplorerScreen instances for the same realm so a
@@ -23,11 +25,14 @@ class DesktopConnection {
 
   void Function()? onDisconnected;
 
-  DesktopConnection({required this.session, required this.isP2P});
+  DesktopConnection({required this.session, required this.isP2P, this.webRtcSession});
 
   Future<void> dispose() async {
     try {
       await session.close();
+    } catch (_) {}
+    try {
+      await webRtcSession?.connection.close();
     } catch (_) {}
   }
 }
@@ -169,8 +174,14 @@ class DesktopConnectionManager {
           authenticator: CryptoSignAuthenticator(authId, privateKey),
         );
 
-        finalSession = await web_rtc.connectWAMP(config).timeout(connectTimeout);
+        final connection = await _connectWampWithWebRTC(config).timeout(connectTimeout);
+        finalSession = connection.session;
         isP2P = true;
+        _connections[key] = DesktopConnection(
+          session: finalSession,
+          isP2P: isP2P,
+          webRtcSession: connection.webRtcSession,
+        );
         _log('connect success realm=$realm transport=webrtc');
       } catch (e) {
         lastError = e;
@@ -188,7 +199,7 @@ class DesktopConnectionManager {
       }
     }
 
-    final connection = DesktopConnection(session: finalSession, isP2P: isP2P);
+    final connection = _connections[key] ?? DesktopConnection(session: finalSession, isP2P: isP2P);
     _connections[key] = connection;
     _log('session cached realm=$realm p2p=$isP2P active=${_connections.length}');
 
@@ -223,5 +234,100 @@ class DesktopConnectionManager {
       await release(realm);
     }
     _noWebRtcSupportRealms.clear();
+  }
+}
+
+class _WampWebRTCConnection {
+  final Session session;
+  final web_rtc.WebRTCSession webRtcSession;
+
+  const _WampWebRTCConnection({required this.session, required this.webRtcSession});
+}
+
+class _PendingRemoteCandidate {
+  final String requestID;
+  final RTCIceCandidate candidate;
+
+  const _PendingRemoteCandidate(this.requestID, this.candidate);
+}
+
+Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config) async {
+  config.validate();
+
+  final offerer = web_rtc.Offerer();
+  var requestID = '';
+  final pendingCandidates = <_PendingRemoteCandidate>[];
+
+  final offerConfig = web_rtc.OfferConfig(
+    protocol: 'wamp.2.cbor',
+    iceServers: config.iceServers!,
+    ordered: true,
+    id: 0,
+    topicAnswererOnCandidate: config.topicAnswererOnCandidate,
+  );
+
+  final offerFuture = offerer.offer(offerConfig);
+  final subscription = await config.session.subscribe(config.topicOffererOnCandidate, (Event event) async {
+    if (event.args.length < 2) return;
+
+    final candidateRequestID = event.args[0] as String?;
+    if (candidateRequestID == null) return;
+
+    final candidateMap = jsonDecode(event.args[1] as String) as Map<String, dynamic>;
+    final candidate = RTCIceCandidate(
+      candidateMap['candidate'] as String?,
+      candidateMap['sdpMid'] as String?,
+      candidateMap['sdpMLineIndex'] as int?,
+    );
+
+    if (requestID.isEmpty) {
+      pendingCandidates.add(_PendingRemoteCandidate(candidateRequestID, candidate));
+      return;
+    }
+    if (candidateRequestID != requestID) return;
+
+    try {
+      await offerer.addICECandidate(candidate);
+    } catch (e) {
+      debugPrint('Failed to add WebRTC ICE candidate: $e');
+    }
+  });
+
+  try {
+    final offer = await offerFuture;
+    final callResponse = await config.session.call(config.procedureWebRTCOffer, args: [jsonEncode(offer)]);
+    final offerResponse = web_rtc.OfferResponse.fromJson(jsonDecode(callResponse.args[0] as String));
+
+    if (offerResponse.requestID.isEmpty) {
+      throw Exception('offer response request ID must not be empty');
+    }
+    requestID = offerResponse.requestID;
+
+    final buffered = List<_PendingRemoteCandidate>.from(pendingCandidates);
+    pendingCandidates.clear();
+    for (final pending in buffered) {
+      if (pending.requestID != requestID) continue;
+      try {
+        await offerer.addICECandidate(pending.candidate);
+      } catch (e) {
+        debugPrint('Failed to add buffered WebRTC ICE candidate: $e');
+      }
+    }
+
+    offerer.startICETrickle(config.session, offerConfig.topicAnswererOnCandidate, requestID);
+    await offerer.handleAnswer(offerResponse.answer);
+    final channel = await offerer.waitReady().timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw TimeoutException('WebRTC data channel did not open', const Duration(seconds: 20)),
+    );
+
+    final webRtcSession = web_rtc.WebRTCSession(connection: offerer.connection!, channel: channel);
+    final base = await joinPeer(web_rtc.WebRTCPeer(channel), config.realm, config.serializer!, config.authenticator!);
+    return _WampWebRTCConnection(session: Session(base), webRtcSession: webRtcSession);
+  } catch (_) {
+    await offerer.connection?.close();
+    rethrow;
+  } finally {
+    unawaited(subscription.unsubscribe());
   }
 }
