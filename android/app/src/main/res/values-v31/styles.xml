@@ -6,8 +6,8 @@
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowSplashScreenBackground">#F9FAFB</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#F9FAFB</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/animated_splash_icon</item>
+        <item name="android:windowSplashScreenAnimationDuration">1200</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
