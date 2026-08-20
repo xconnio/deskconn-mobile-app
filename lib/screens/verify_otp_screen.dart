@@ -8,6 +8,7 @@ import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/validators.dart';
 import 'package:deskconn_mobile_app/screens/dashboard_screen.dart';
+import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   const VerifyOtpScreen({super.key});
@@ -22,6 +23,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   String? requiredError;
   String? submitError;
+  String? _postVerifyError;
 
   @override
   void dispose() {
@@ -80,6 +82,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             setState(() {
                               requiredError = Validators.otp(otpCtrl.text);
                               submitError = null;
+                              _postVerifyError = null;
                             });
 
                             if (requiredError != null) return;
@@ -129,11 +132,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                 });
                               }
                             } catch (_) {
-                              if (mounted) {
-                                setState(() {
-                                  _loading = false;
-                                });
-                              }
+                              if (!mounted) return;
+                              setState(() {
+                                _loading = false;
+                                _postVerifyError = 'Email verified, but sign-in failed. Please sign in manually.';
+                              });
                             }
                           },
                     child: _loading
@@ -154,7 +157,26 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     child: const Text("Resend code"),
                   ),
 
-                  if (submitError != null)
+                  if (_postVerifyError != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        _postVerifyError!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SignInScreen()),
+                          (_) => false,
+                        );
+                      },
+                      child: const Text('Go to sign in'),
+                    ),
+                  ] else if (submitError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
