@@ -1968,9 +1968,7 @@ class _PreviewBodyState extends State<_PreviewBody> {
     if (mode != null) {
       if (mode == 'text') return _TextPreview(data: data);
       if (mode == 'image') {
-        return InteractiveViewer(
-          minScale: 1,
-          maxScale: 5,
+        return _ZoomableImage(
           child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
         );
       }
@@ -1978,16 +1976,12 @@ class _PreviewBodyState extends State<_PreviewBody> {
     }
 
     if (kImageExts.contains(ext)) {
-      return InteractiveViewer(
-        minScale: 1,
-        maxScale: 5,
+      return _ZoomableImage(
         child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
       );
     }
     if (ext == 'svg') {
-      return InteractiveViewer(
-        minScale: 1,
-        maxScale: 5,
+      return _ZoomableImage(
         child: SizedBox.expand(child: SvgPicture.memory(data, fit: BoxFit.contain)),
       );
     }
@@ -1998,6 +1992,54 @@ class _PreviewBodyState extends State<_PreviewBody> {
       return _PdfPreview(data: data);
     }
     return _UnknownPreview(entry: widget.entry, ext: ext);
+  }
+}
+
+class _ZoomableImage extends StatefulWidget {
+  final Widget child;
+
+  const _ZoomableImage({required this.child});
+
+  @override
+  State<_ZoomableImage> createState() => _ZoomableImageState();
+}
+
+class _ZoomableImageState extends State<_ZoomableImage> {
+  static const _zoomScale = 3.0;
+
+  final _transformationController = TransformationController();
+  TapDownDetails? _doubleTapDetails;
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _onDoubleTap() {
+    if (_transformationController.value != Matrix4.identity()) {
+      _transformationController.value = Matrix4.identity();
+      return;
+    }
+
+    final position = _doubleTapDetails!.localPosition;
+    _transformationController.value = Matrix4.identity()
+      ..translateByDouble(-position.dx * (_zoomScale - 1), -position.dy * (_zoomScale - 1), 0, 1)
+      ..scaleByDouble(_zoomScale, _zoomScale, _zoomScale, 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onDoubleTapDown: (details) => _doubleTapDetails = details,
+      onDoubleTap: _onDoubleTap,
+      child: InteractiveViewer(
+        transformationController: _transformationController,
+        minScale: 1,
+        maxScale: 5,
+        child: widget.child,
+      ),
+    );
   }
 }
 
