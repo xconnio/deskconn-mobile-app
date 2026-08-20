@@ -24,7 +24,6 @@ class DesktopListScreen extends StatefulWidget {
 }
 
 class _DesktopListScreenState extends State<DesktopListScreen> {
-  final Set<String> _prewarmedRealms = {};
   final Set<String> _connectingRealms = {};
   Timer? _livenessTimer;
 
@@ -46,22 +45,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
   void dispose() {
     _livenessTimer?.cancel();
     super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final desktops = context.read<SessionProvider>().desktops;
-    final toPrewarm = <Map<String, dynamic>>[];
-    for (final d in desktops) {
-      final realm = d['realm']?.toString();
-      if (realm != null && realm.isNotEmpty && _prewarmedRealms.add(realm)) {
-        toPrewarm.add(d);
-      }
-    }
-    if (toPrewarm.isNotEmpty) {
-      unawaited(_prewarmAll(toPrewarm));
-    }
   }
 
   Future<void> _verifyAllLiveness() async {
@@ -92,20 +75,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     }
   }
 
-  static const int _maxConcurrentPrewarms = 2;
-  static const Duration _prewarmBatchGap = Duration(milliseconds: 500);
-
-  Future<void> _prewarmAll(List<Map<String, dynamic>> desktops) async {
-    for (var i = 0; i < desktops.length; i += _maxConcurrentPrewarms) {
-      if (!mounted) return;
-      final batch = desktops.skip(i).take(_maxConcurrentPrewarms);
-      await Future.wait(batch.map(_prewarm));
-      if (i + _maxConcurrentPrewarms < desktops.length) {
-        await Future.delayed(_prewarmBatchGap);
-      }
-    }
-  }
-
   Future<bool> _connect(String realm, bool webRtcEnabled) async {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
@@ -127,18 +96,6 @@ class _DesktopListScreenState extends State<DesktopListScreen> {
     } catch (_) {
       return false;
     }
-  }
-
-  Future<void> _prewarm(Map<String, dynamic> desktop) async {
-    final realm = desktop['realm']?.toString();
-    if (realm == null || realm.isEmpty) return;
-    if (DesktopConnectionManager().get(realm) != null) return;
-
-    if (mounted) setState(() => _connectingRealms.add(realm));
-    final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
-    await _connect(realm, webRtcEnabled);
-    if (mounted) setState(() => _connectingRealms.remove(realm));
   }
 
   Future<bool> _ensureConnected(String realm) async {
