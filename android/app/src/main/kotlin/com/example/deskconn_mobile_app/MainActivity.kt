@@ -28,7 +28,9 @@ class MainActivity : FlutterActivity() {
     private val shareChannel = "deskconn/share"
     private val channelId = "deskconn_session_v2"
     private val notifId = 1107
+    private val storagePermissionRequestId = 1108
     private var pendingSharedFiles: List<Map<String, Any?>> = emptyList()
+    private var pendingSave: Triple<String, ByteArray, MethodChannel.Result>? = null
     // True only when this Activity instance was freshly created (cold start)
     // specifically to handle an incoming share. If the app was already
     // running and received the share via onNewIntent instead, this stays
@@ -102,6 +104,16 @@ class MainActivity : FlutterActivity() {
                         val bytes = call.argument<ByteArray>("bytes") ?: run {
                             result.error("INVALID_ARGS", "bytes required", null); return@setMethodCallHandler
                         }
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            pendingSave = Triple(filename, bytes, result)
+                            requestPermissions(
+                                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                storagePermissionRequestId
+                            )
+                            return@setMethodCallHandler
+                        }
                         try {
                             val path = saveToDownloads(filename, bytes)
                             result.success(path)
@@ -130,6 +142,32 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (requestCode != storagePermissionRequestId) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+            return
+        }
+
+        val (filename, bytes, result) = pendingSave ?: return
+        pendingSave = null
+
+        if (grantResults.isEmpty() || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+            result.error("PERMISSION_DENIED", "Storage permission was denied", null)
+            return
+        }
+
+        try {
+            val path = saveToDownloads(filename, bytes)
+            result.success(path)
+        } catch (e: Exception) {
+            result.error("SAVE_FAILED", e.message, null)
+        }
     }
 
     private fun extractSharedFiles(intent: Intent?): List<Map<String, Any?>> {
