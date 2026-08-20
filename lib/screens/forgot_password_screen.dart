@@ -36,8 +36,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool get _passwordsMatch => confirmPassCtrl.text == passCtrl.text;
 
-  bool get _canResetPassword =>
-      Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements && _passwordsMatch;
+  bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements && _passwordsMatch;
 
   @override
   void dispose() {
