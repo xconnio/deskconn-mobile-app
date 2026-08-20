@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/forgot_password_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_up_screen.dart';
@@ -165,6 +166,15 @@ class _SignInScreenState extends State<SignInScreen> {
                                   return;
                                 }
 
+                                if (!ConnectivityService().hasConnection) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('No internet connection. Check your Wi-Fi or mobile data.'),
+                                    ),
+                                  );
+                                  return;
+                                }
+
                                 final result = await session.login(emailCtrl.text.trim(), passCtrl.text);
 
                                 if (!context.mounted) return;
@@ -176,7 +186,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                   );
                                 } else {
                                   setState(() {
-                                    submitError = 'Invalid email or password';
+                                    submitError = ConnectivityService().hasConnection
+                                        ? 'Invalid email or password'
+                                        : 'No internet connection. Check your Wi-Fi or mobile data.';
                                   });
                                 }
                               },
