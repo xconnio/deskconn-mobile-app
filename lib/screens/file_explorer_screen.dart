@@ -643,6 +643,39 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
   }
 
+  Future<void> _showEntryMenu(BuildContext tileContext, FileEntry entry) async {
+    _enterSelectionMode(entry);
+    final renderBox = tileContext.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(tileContext).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        renderBox.localToGlobal(Offset.zero, ancestor: overlay),
+        renderBox.localToGlobal(renderBox.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+    final hasDir = entry.isDir;
+    final action = await showMenu<String>(
+      context: tileContext,
+      position: position,
+      items: [
+        _menuItem('moveTo', Icons.drive_file_move_outlined, 'Move to'),
+        _menuItem('copyTo', Icons.content_copy, 'Copy to'),
+        if (!hasDir) _menuItem('openWith', Icons.open_in_new_outlined, 'Open with...'),
+        if (!hasDir) _menuItem('download', Icons.download_outlined, 'Download'),
+        if (!hasDir) _menuItem('share', Icons.share_outlined, 'Share'),
+        _menuItem('rename', Icons.edit_outlined, 'Rename'),
+        _menuItem('delete', Icons.delete_outline, 'Delete'),
+        _menuItem('details', Icons.info_outline, 'Details'),
+      ],
+    );
+    if (action != null) {
+      _handleSelectionMenuAction(action, entry);
+    } else {
+      _exitSelectionMode();
+    }
+  }
+
   void _handleSelectionMenuAction(String action, FileEntry? single) {
     switch (action) {
       case 'selectAll':
@@ -841,6 +874,26 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           q.isNotEmpty ? 'No results for "$_searchQuery"' : 'No files found',
           style: TextStyle(color: Theme.of(context).hintColor),
         ),
+      );
+    }
+
+    if (_currentCategory == 'videos') {
+      return ListView.builder(
+        controller: _scrollController,
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          return _MediaListTile(
+            entry: entry,
+            selectionMode: _selectionMode,
+            selected: _selectedPaths.contains(_fullPath(entry)),
+            onTap: () => _selectionMode ? _toggleSelection(entry) : _onGalleryEntryTap(entries, index),
+            onLongPress: () {
+              if (!_selectionMode) _enterSelectionMode(entry);
+            },
+            onMenuTap: (tileContext) => _showEntryMenu(tileContext, entry),
+          );
+        },
       );
     }
 
@@ -1380,6 +1433,26 @@ String _formatEntryDate(int mtime) {
   final now = DateTime.now();
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return dt.year == now.year ? '${months[dt.month - 1]} ${dt.day}' : '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+}
+
+String _formatFullDate(int mtime) {
+  if (mtime <= 0) return '';
+  final dt = DateTime.fromMillisecondsSinceEpoch(mtime * 1000).toLocal();
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
 }
 
 String _formatMtime(int mtime) {
@@ -2546,6 +2619,110 @@ class _FileEntryTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _MediaListTile extends StatelessWidget {
+  final FileEntry entry;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final void Function(BuildContext tileContext) onMenuTap;
+  final bool selectionMode;
+  final bool selected;
+
+  const _MediaListTile({
+    required this.entry,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onMenuTap,
+    this.selectionMode = false,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveName = entry.isSymlink && entry.symlinkTarget != null
+        ? entry.symlinkTarget!.split('/').last
+        : entry.name;
+    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+    final isVideo = kVideoExts.contains(ext);
+    final thumbnail = _decodeThumbnail(entry.thumbnail);
+    final palette = DeskconnPalette.of(context);
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      minVerticalPadding: 12,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      selected: selectionMode && selected,
+      selectedColor: palette.googleBlue,
+      selectedTileColor: palette.googleBlue.withValues(alpha: 0.12),
+      leading: SizedBox(
+        width: 110,
+        height: 78,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ColoredBox(
+            color: palette.fileTilePlaceholder,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (thumbnail != null)
+                  Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+                else
+                  Center(
+                    child: Icon(
+                      isVideo ? Icons.movie_outlined : Icons.image_outlined,
+                      size: 28,
+                      color: palette.fileTextSubtle.withValues(alpha: 0.55),
+                    ),
+                  ),
+                if (isVideo)
+                  const Positioned(
+                    right: 4,
+                    bottom: 4,
+                    child: Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.white,
+                      size: 20,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                    ),
+                  ),
+                if (selected) ColoredBox(color: palette.googleBlue.withValues(alpha: 0.35)),
+                if (selectionMode)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Icon(
+                      selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                      size: 20,
+                      color: selected ? palette.googleBlue : Colors.white70,
+                      shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      title: Text(effectiveName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(_formatFullDate(entry.mtime), style: TextStyle(fontSize: 13, color: palette.fileTextSubtle)),
+      trailing: selectionMode
+          ? null
+          : Builder(
+              builder: (menuContext) =>
+                  IconButton(icon: const Icon(Icons.more_vert), onPressed: () => onMenuTap(menuContext)),
+            ),
+    );
+  }
+
+  Uint8List? _decodeThumbnail(String? value) {
+    if (value == null || value.isEmpty) return null;
+    try {
+      return base64Decode(value);
+    } catch (_) {
+      return null;
+    }
   }
 }
 
