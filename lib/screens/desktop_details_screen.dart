@@ -83,7 +83,9 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       final bytes = _coerceBytes(getResult.args[1]);
       await WallpaperCache.store(realm, bytes, checksum);
       if (mounted) setState(() => _wallpaperBytes = bytes);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Wallpaper refresh failed: $e');
+    }
   }
 
   @override
