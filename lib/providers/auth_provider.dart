@@ -1,32 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
-import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:xconn/xconn.dart';
-
-// The backend raises ApplicationError(uri, "human-readable message") for
-// expected failures (email already registered, OTP invalid, etc.) — the
-// message ends up in args[0] over the wire. Falling back to e.toString()
-// instead leaks the raw wamp.error.* uri to the user.
-String _describeAuthError(Object e) {
-  if (!ConnectivityService().hasConnection) {
-    return 'No internet connection. Check your Wi-Fi or mobile data.';
-  }
-  if (e is ApplicationError) {
-    final args = e.args;
-    if (args != null && args.isNotEmpty && args.first is String && (args.first as String).trim().isNotEmpty) {
-      return args.first as String;
-    }
-  }
-  if (e is TimeoutException) {
-    return 'Request timed out. Please try again.';
-  }
-  return 'Something went wrong. Please try again.';
-}
 
 class AuthProvider extends ChangeNotifier {
   Session? _session;
@@ -68,7 +45,7 @@ class AuthProvider extends ChangeNotifier {
 
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(_describeAuthError(e));
+      return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
     }
@@ -87,7 +64,7 @@ class AuthProvider extends ChangeNotifier {
 
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(_describeAuthError(e));
+      return OperationResult.failure(e.toString());
     }
   }
 
@@ -101,7 +78,7 @@ class AuthProvider extends ChangeNotifier {
       await session.call(DeskconnProcedures.accountOtpResend, args: [pendingEmail]).timeout(DeskconnConfig.callTimeout);
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(_describeAuthError(e));
+      return OperationResult.failure(e.toString());
     }
   }
 
@@ -114,7 +91,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(_describeAuthError(e));
+      return OperationResult.failure(e.toString());
     }
   }
 
@@ -131,7 +108,7 @@ class AuthProvider extends ChangeNotifier {
 
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(_describeAuthError(e));
+      return OperationResult.failure(e.toString());
     }
   }
 

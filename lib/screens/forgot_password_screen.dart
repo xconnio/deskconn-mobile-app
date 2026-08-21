@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/services.dart';
 
 import 'package:deskconn_mobile_app/core/wamp/ui.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
+import 'package:deskconn_mobile_app/screens/reset_password_screen.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
-import 'package:deskconn_mobile_app/widgets/password_requirement_item.dart';
 import 'package:deskconn_mobile_app/widgets/validators.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -17,35 +16,15 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailCtrl = TextEditingController();
-  final otpCtrl = TextEditingController();
-  final passCtrl = TextEditingController();
-  final confirmPassCtrl = TextEditingController();
-  final passFocus = FocusNode();
-  final confirmPassFocus = FocusNode();
 
   String? emailError;
-  String? confirmPasswordError;
   String? submitError;
 
-  bool _otpSent = false;
   bool _loading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-
-  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
-
-  bool get _passwordsMatch => confirmPassCtrl.text == passCtrl.text;
-
-  bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements && _passwordsMatch;
 
   @override
   void dispose() {
     emailCtrl.dispose();
-    otpCtrl.dispose();
-    passCtrl.dispose();
-    confirmPassCtrl.dispose();
-    passFocus.dispose();
-    confirmPassFocus.dispose();
     super.dispose();
   }
 
@@ -54,7 +33,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Reset password")),
+      appBar: AppBar(title: const Text("Forgot password")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
@@ -72,187 +51,67 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     const Center(child: DeskconnLogo()),
                     const SizedBox(height: 16),
 
-                    if (!_otpSent) ...[
-                      const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
+                    const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
 
-                      TextField(
-                        controller: emailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                        onChanged: (v) {
-                          if (emailError != null) {
-                            setState(() {
-                              emailError = null;
-                              submitError = null;
-                            });
-                          } else if (submitError != null) {
-                            setState(() => submitError = null);
-                          }
-                        },
-                        decoration: InputDecoration(labelText: 'Email', errorText: emailError),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      ElevatedButton(
-                        onPressed: _loading
-                            ? null
-                            : () async {
-                                setState(() {
-                                  emailError = Validators.email(emailCtrl.text);
-                                  submitError = null;
-                                });
-
-                                if (emailError != null) {
-                                  return;
-                                }
-
-                                setState(() {
-                                  _loading = true;
-                                });
-
-                                final result = await auth.requestPasswordReset(emailCtrl.text.trim());
-
-                                if (!mounted) return;
-
-                                setState(() {
-                                  _loading = false;
-                                });
-
-                                if (result.isSuccess) {
-                                  setState(() {
-                                    FocusManager.instance.primaryFocus?.unfocus();
-                                    _otpSent = true;
-                                    otpCtrl.clear();
-                                    passCtrl.clear();
-                                    confirmPassCtrl.clear();
-                                  });
-                                } else {
-                                  setState(() {
-                                    submitError = result.error;
-                                  });
-                                }
-                              },
-                        child: const Text("Send reset code"),
-                      ),
-                    ] else ...[
-                      const Text("Enter the code and your new password", textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-
-                      TextField(
-                        controller: otpCtrl,
-                        keyboardType: TextInputType.number,
-                        textInputAction: TextInputAction.next,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                        onChanged: (_) {
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                      onChanged: (v) {
+                        if (emailError != null) {
                           setState(() {
+                            emailError = null;
                             submitError = null;
                           });
-                        },
-                        onSubmitted: (_) => passFocus.requestFocus(),
-                        decoration: InputDecoration(labelText: "OTP", suffixText: '${otpCtrl.text.length}/6'),
-                      ),
+                        } else if (submitError != null) {
+                          setState(() => submitError = null);
+                        }
+                      },
+                      decoration: InputDecoration(labelText: 'Email', errorText: emailError),
+                    ),
 
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
-                      TextField(
-                        controller: passCtrl,
-                        focusNode: passFocus,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.next,
-                        onChanged: (_) {
-                          setState(() {
-                            submitError = null;
-                          });
-                        },
-                        onSubmitted: (_) => confirmPassFocus.requestFocus(),
-                        decoration: InputDecoration(
-                          labelText: "New password",
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () {
+                    ElevatedButton(
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              FocusScope.of(context).unfocus();
+
                               setState(() {
-                                _obscurePassword = !_obscurePassword;
+                                emailError = Validators.email(emailCtrl.text);
+                                submitError = null;
                               });
-                            },
-                          ),
-                        ),
-                      ),
 
-                      const SizedBox(height: 12),
+                              if (emailError != null) {
+                                return;
+                              }
 
-                      PasswordRequirementItem(isMet: _passwordMeetsRequirements),
-
-                      const SizedBox(height: 16),
-
-                      TextField(
-                        controller: confirmPassCtrl,
-                        focusNode: confirmPassFocus,
-                        obscureText: _obscureConfirmPassword,
-                        textInputAction: TextInputAction.done,
-                        onChanged: (_) {
-                          setState(() {
-                            confirmPasswordError = null;
-                            submitError = null;
-                          });
-                        },
-                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                        decoration: InputDecoration(
-                          labelText: "Confirm new password",
-                          errorText: confirmPasswordError,
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () {
                               setState(() {
-                                _obscureConfirmPassword = !_obscureConfirmPassword;
+                                _loading = true;
                               });
+
+                              final navigator = Navigator.of(context);
+                              final result = await auth.requestPasswordReset(emailCtrl.text.trim());
+
+                              if (!mounted) return;
+
+                              setState(() {
+                                _loading = false;
+                              });
+
+                              if (result.isSuccess) {
+                                await navigator.push(MaterialPageRoute(builder: (_) => const ResetPasswordScreen()));
+                              } else {
+                                setState(() {
+                                  submitError = result.error;
+                                });
+                              }
                             },
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      ElevatedButton(
-                        onPressed: _loading || !_canResetPassword
-                            ? null
-                            : () async {
-                                setState(() {
-                                  confirmPasswordError = _passwordsMatch ? null : 'Passwords do not match';
-                                });
-
-                                if (confirmPasswordError != null) {
-                                  return;
-                                }
-
-                                setState(() {
-                                  _loading = true;
-                                });
-
-                                final result = await auth.resetPassword(
-                                  otp: otpCtrl.text.trim(),
-                                  newPassword: passCtrl.text,
-                                );
-
-                                if (!mounted) return;
-
-                                setState(() {
-                                  _loading = false;
-                                });
-
-                                if (result.isSuccess && context.mounted) {
-                                  Navigator.pop(context);
-                                } else {
-                                  setState(() {
-                                    submitError = result.error;
-                                  });
-                                }
-                              },
-                        child: const Text("Reset password"),
-                      ),
-                    ],
+                      child: const Text("Send reset code"),
+                    ),
 
                     if (submitError != null) ...[
                       const SizedBox(height: 12),

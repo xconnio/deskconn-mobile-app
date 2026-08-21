@@ -5,10 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:deskconn_mobile_app/core/wamp/ui.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/validators.dart';
 import 'package:deskconn_mobile_app/screens/dashboard_screen.dart';
-import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   const VerifyOtpScreen({super.key});
