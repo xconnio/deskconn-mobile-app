@@ -39,9 +39,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         child: Center(
           child: Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
             child: SizedBox(
               width: DeskconnUI.cardWidth,
               child: Padding(
@@ -53,10 +51,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     const Center(child: DeskconnLogo()),
                     const SizedBox(height: 16),
 
-                    const Text(
-                      "Enter your email to receive a reset code",
-                      textAlign: TextAlign.center,
-                    ),
+                    const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
 
                     TextField(
@@ -74,10 +69,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           setState(() => submitError = null);
                         }
                       },
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        errorText: emailError,
-                      ),
+                      decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                     ),
 
                     const SizedBox(height: 16),
@@ -102,9 +94,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               });
 
                               final navigator = Navigator.of(context);
-                              final result = await auth.requestPasswordReset(
-                                emailCtrl.text.trim(),
-                              );
+                              final result = await auth.requestPasswordReset(emailCtrl.text.trim());
 
                               if (!mounted) return;
 
@@ -113,11 +103,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               });
 
                               if (result.isSuccess) {
-                                await navigator.push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ResetPasswordScreen(),
-                                  ),
-                                );
+                                await navigator.push(MaterialPageRoute(builder: (_) => const ResetPasswordScreen()));
                               } else {
                                 setState(() {
                                   submitError = result.error;
@@ -132,9 +118,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       Text(
                         submitError!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
                     ],
                   ],

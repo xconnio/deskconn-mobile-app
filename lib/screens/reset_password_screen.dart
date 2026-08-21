@@ -25,11 +25,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
 
-  bool get _passwordMeetsRequirements =>
-      Validators.isPasswordValid(passCtrl.text);
+  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
 
-  bool get _canResetPassword =>
-      Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
+  bool get _canResetPassword => Validators.isOtpValid(otpCtrl.text) && _passwordMeetsRequirements;
 
   @override
   void dispose() {
@@ -50,9 +48,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         child: Center(
           child: Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
             child: SizedBox(
               width: DeskconnUI.cardWidth,
               child: Padding(
@@ -63,30 +59,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   children: [
                     const Center(child: DeskconnLogo()),
                     const SizedBox(height: 16),
-                    const Text(
-                      "Enter the code and your new password",
-                      textAlign: TextAlign.center,
-                    ),
+                    const Text("Enter the code and your new password", textAlign: TextAlign.center),
                     const SizedBox(height: 16),
 
                     TextField(
                       controller: otpCtrl,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                       onChanged: (_) {
                         setState(() {
                           submitError = null;
                         });
                       },
                       onSubmitted: (_) => passFocus.requestFocus(),
-                      decoration: InputDecoration(
-                        labelText: "OTP",
-                        suffixText: '${otpCtrl.text.length}/6',
-                      ),
+                      decoration: InputDecoration(labelText: "OTP", suffixText: '${otpCtrl.text.length}/6'),
                     ),
 
                     const SizedBox(height: 12),
@@ -105,11 +92,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       decoration: InputDecoration(
                         labelText: "New password",
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                           onPressed: () {
                             setState(() {
                               _obscurePassword = !_obscurePassword;
@@ -164,9 +147,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       Text(
                         submitError!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
                     ],
                   ],
