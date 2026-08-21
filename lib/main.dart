@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:app_settings/app_settings.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
-import 'package:flutter/foundation.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
@@ -108,6 +106,8 @@ class DeskconnApp extends StatelessWidget {
   }
 }
 
+// Auto-dismisses itself the moment connectivity comes back, so there's no
+// separate reconnect-tracking logic needed at the call site.
 class _OfflineDialog extends StatefulWidget {
   const _OfflineDialog();
 
@@ -136,20 +136,18 @@ class _OfflineDialogState extends State<_OfflineDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: AlertDialog(
-        title: const Text('No internet connection'),
-        content: const Text(
-          'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
-            child: const Text('Open Settings'),
-          ),
-        ],
+    return AlertDialog(
+      title: const Text('No internet connection'),
+      content: const Text(
+        'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Dismiss')),
+        FilledButton(
+          onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
+          child: const Text('Open Settings'),
+        ),
+      ],
     );
   }
 }
@@ -186,58 +184,34 @@ class AppBootstrap extends StatefulWidget {
 }
 
 class _AppBootstrapState extends State<AppBootstrap> {
-  final Completer<void> _sessionInitCompleter = Completer<void>();
-  late final Future<void> _initialization = _sessionInitCompleter.future;
+  late final Future<void> _initialization;
   bool _notificationActive = false;
   bool _wasOffline = false;
   bool _handlingSharedFiles = false;
-  bool _connectivityChecked = false;
-  bool _launchGatePassed = false;
-  bool _sessionStarted = false;
 
   @override
   void initState() {
     super.initState();
+    _wasOffline = !ConnectivityService().hasConnection;
     ConnectivityService().addListener(_handleConnectivityChange);
     ShareService.instance.pendingFiles.addListener(_handlePendingSharedFiles);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
-  }
-
-  // Waits for the real connectivity reading (ConnectivityService.hasConnection
-  // defaults to true until its async check resolves) before deciding whether
-  // to gate on _NoConnectionGate or start the session, so a cold launch while
-  // offline can't slip through and attempt (and fail) a network session
-  // restore, which used to look like the user had been signed out.
-  Future<void> _bootstrap() async {
-    await ConnectivityService().ready;
-    if (!mounted) {
-      if (!_sessionInitCompleter.isCompleted) _sessionInitCompleter.complete();
-      return;
-    }
-
-    final online = ConnectivityService().hasConnection;
-    _wasOffline = !online;
-    setState(() {
-      _connectivityChecked = true;
-      _launchGatePassed = online;
+    final completer = Completer<void>();
+    _initialization = completer.future;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        if (!completer.isCompleted) completer.complete();
+        return;
+      }
+      try {
+        await context.read<SessionProvider>().initialize().timeout(DeskconnConfig.callTimeout);
+        if (!completer.isCompleted) completer.complete();
+      } catch (e) {
+        debugPrint('Session initialization failed: $e');
+        if (!completer.isCompleted) completer.complete();
+      }
+      unawaited(_checkForUpdate());
     });
-
-    if (online) await _startSession();
-  }
-
-  Future<void> _startSession() async {
-    if (_sessionStarted) return;
-    _sessionStarted = true;
-
-    try {
-      await context.read<SessionProvider>().initialize().timeout(DeskconnConfig.callTimeout);
-      if (!_sessionInitCompleter.isCompleted) _sessionInitCompleter.complete();
-    } catch (e, st) {
-      debugPrint('Session initialization failed: $e');
-      if (!_sessionInitCompleter.isCompleted) _sessionInitCompleter.completeError(e, st);
-    }
-    unawaited(_checkForUpdate());
   }
 
   @override
@@ -247,13 +221,15 @@ class _AppBootstrapState extends State<AppBootstrap> {
     super.dispose();
   }
 
+  // Nothing previously told the user the device had no connectivity at all,
+  // let alone offered a way to fix it, and nothing refreshed after a drop —
+  // the user had to manually pull-to-refresh or reopen a screen. This shows
+  // a dialog (with a shortcut to Wi-Fi settings) on loss, and on restore
+  // re-triggers desktop list loading, which itself reconnects the account
+  // session (see SessionProvider._ensureSession).
   void _handleConnectivityChange() {
     final online = ConnectivityService().hasConnection;
-    if (online && _connectivityChecked && !_launchGatePassed && mounted) {
-      setState(() => _launchGatePassed = true);
-      unawaited(_startSession());
-    }
-    if (!online && !_wasOffline && _launchGatePassed) {
+    if (!online && !_wasOffline) {
       _showOfflineDialog();
     } else if (online && _wasOffline && mounted) {
       final session = context.read<SessionProvider>();
@@ -265,7 +241,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   void _showOfflineDialog() {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
-    unawaited(showDialog<void>(context: ctx, barrierDismissible: false, builder: (_) => const _OfflineDialog()));
+    unawaited(showDialog<void>(context: ctx, barrierDismissible: true, builder: (_) => const _OfflineDialog()));
   }
 
   Future<void> _checkForUpdate() async {
@@ -295,6 +271,11 @@ class _AppBootstrapState extends State<AppBootstrap> {
     if (!session.loggedIn || ShareService.instance.pendingFiles.value.isEmpty) {
       return;
     }
+    // Set synchronously (not via setState) so a call made from build() itself
+    // is reflected in that same build pass without violating Flutter's
+    // no-setState-during-build rule; the deferred setState below only
+    // matters for calls triggered outside of build (e.g. the pendingFiles
+    // listener) and for reverting the flag once the dialog closes.
     _handlingSharedFiles = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -326,12 +307,6 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_connectivityChecked) {
-      return const Scaffold(body: Center(child: _SplashContent()));
-    }
-    if (!_launchGatePassed) {
-      return const _NoConnectionGate();
-    }
     return FutureBuilder<void>(
       future: _initialization,
       builder: (context, snapshot) {
@@ -347,63 +322,6 @@ class _AppBootstrapState extends State<AppBootstrap> {
         }
         return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
       },
-    );
-  }
-}
-
-class _NoConnectionGate extends StatelessWidget {
-  const _NoConnectionGate();
-
-  Future<void> _confirmExit(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Exit Deskconn?'),
-        content: const Text('Deskconn needs an internet connection to work. Do you want to exit the app?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Exit')),
-        ],
-      ),
-    );
-    if (confirmed == true) SystemNavigator.pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const DeskconnLogo(size: 72),
-                const SizedBox(height: 24),
-                const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey),
-                const SizedBox(height: 16),
-                Text('No internet connection', style: DeskconnTypography.title(context), textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                Text(
-                  'Deskconn needs an internet connection to work. Enable Wi-Fi or mobile data to continue.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 32),
-                FilledButton(
-                  onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
-                  child: const Text('Open Settings'),
-                ),
-                if (!kIsWeb && Platform.isAndroid) ...[
-                  const SizedBox(height: 12),
-                  TextButton(onPressed: () => _confirmExit(context), child: const Text('Exit')),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
