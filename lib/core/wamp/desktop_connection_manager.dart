@@ -32,7 +32,7 @@ class DesktopConnection {
       await session.close();
     } catch (_) {}
     try {
-      await webRtcSession?.connection.close();
+      await webRtcSession?.connection.dispose();
     } catch (_) {}
   }
 }
@@ -207,6 +207,7 @@ class DesktopConnectionManager {
       if (_connections[key] == connection) {
         _connections.remove(key);
         connection.isAgentOnline = false;
+        unawaited(connection.dispose());
         _log('session disconnected realm=$realm active=${_connections.length}');
       }
       connection.onDisconnected?.call();
@@ -325,7 +326,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     final base = await joinPeer(web_rtc.WebRTCPeer(channel), config.realm, config.serializer!, config.authenticator!);
     return _WampWebRTCConnection(session: Session(base), webRtcSession: webRtcSession);
   } catch (_) {
-    await offerer.connection?.close();
+    await offerer.connection?.dispose();
     rethrow;
   } finally {
     unawaited(subscription.unsubscribe());
