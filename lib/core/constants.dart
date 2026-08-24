@@ -16,11 +16,14 @@ class DeskconnProcedures {
   static const String accountCreate = 'io.xconn.deskconn.account.create';
   static const String accountDelete = 'io.xconn.deskconn.account.delete';
   static const String accountGet = 'io.xconn.deskconn.account.get';
+  static const String accountLogin = 'io.xconn.deskconn.account.login';
+  static const String accountLoginVerify = 'io.xconn.deskconn.account.login.verify';
   static const String accountPasswordForget = 'io.xconn.deskconn.account.password.forget';
   static const String accountPasswordReset = 'io.xconn.deskconn.account.password.reset';
   static const String accountUpdate = 'io.xconn.deskconn.account.update';
   static const String accountVerify = 'io.xconn.deskconn.account.verify';
   static const String accountOtpResend = 'io.xconn.deskconn.account.otp.resend';
+  static const String accountPrincipalDelete = 'io.xconn.deskconn.account.principal.delete';
 
   static const String desktopList = 'io.xconn.deskconn.desktop.list';
   static const String deviceCreate = 'io.xconn.deskconn.device.create';

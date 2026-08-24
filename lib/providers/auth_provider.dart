@@ -10,11 +10,10 @@ class AuthProvider extends ChangeNotifier {
 
   String? pendingEmail;
   String? _pendingPassword;
+  String? get pendingPassword => _pendingPassword;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-
-  String? get pendingPassword => _pendingPassword;
 
   void _setLoading(bool value) {
     _isLoading = value;

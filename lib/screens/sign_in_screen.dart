@@ -1,5 +1,6 @@
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/forgot_password_screen.dart';
+import 'package:deskconn_mobile_app/screens/login_otp_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_up_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
@@ -9,7 +10,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deskconn_mobile_app/widgets/validators.dart';
-import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -95,7 +95,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             textInputAction: TextInputAction.next,
                             onSubmitted: (_) => passFocus.requestFocus(),
                             onChanged: (v) {
-                              if (emailError != null || passwordError != null) {
+                              if (emailError != null || passwordError != null || submitError != null) {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
@@ -103,7 +103,10 @@ class _SignInScreenState extends State<SignInScreen> {
                                 });
                               }
                             },
-                            decoration: InputDecoration(labelText: 'Email', errorText: emailError),
+                            decoration: InputDecoration(
+                              labelText: 'Email',
+                              errorText: emailError,
+                            ),
                           ),
 
                           const SizedBox(height: 16),
@@ -115,7 +118,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => FocusScope.of(context).unfocus(),
                             onChanged: (v) {
-                              if (emailError != null || passwordError != null) {
+                              if (emailError != null || passwordError != null || submitError != null) {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
@@ -127,17 +130,17 @@ class _SignInScreenState extends State<SignInScreen> {
                               labelText: 'Password',
                               errorText: passwordError,
                               suffixIcon: IconButton(
-                                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                                 onPressed: () {
                                   setState(() {
                                     _obscurePassword = !_obscurePassword;
                                   });
                                 },
+                                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                               ),
                             ),
                           ),
 
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
 
                           if (session.isLoading)
                             const Padding(
@@ -165,18 +168,19 @@ class _SignInScreenState extends State<SignInScreen> {
                                   return;
                                 }
 
-                                final result = await session.login(emailCtrl.text.trim(), passCtrl.text);
+                                final email = emailCtrl.text.trim();
+                                final result = await session.requestLoginOtp(email, passCtrl.text);
 
                                 if (!context.mounted) return;
 
-                                if (result.isSuccess && session.loggedIn) {
-                                  Navigator.pushReplacement(
+                                if (result.isSuccess) {
+                                  Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => const DesktopListScreen()),
+                                    MaterialPageRoute(builder: (_) => LoginOtpScreen(email: email)),
                                   );
                                 } else {
                                   setState(() {
-                                    submitError = 'Invalid email or password';
+                                    submitError = result.error ?? 'Unable to send verification code';
                                   });
                                 }
                               },
