@@ -75,16 +75,10 @@ class SessionProvider extends ChangeNotifier {
 
     try {
       final authSession = await _openLoginSession(email: email, password: password);
-      debugPrint(
-        'Login OTP request: procedure=${DeskconnProcedures.accountLogin}, '
-        'authMethod=wampcra, authId=$email',
-      );
       await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
-      debugPrint('Login OTP request succeeded for email=$email');
 
       return const OperationResult.success();
     } catch (e) {
-      debugPrint('Login OTP request failed for email=$email: $e');
       await _loginSession?.close();
       _loginSession = null;
       return OperationResult.failure(e.toString());
@@ -106,12 +100,6 @@ class SessionProvider extends ChangeNotifier {
 
       final publicKey = keys['publicKey']!;
 
-      debugPrint(
-        'Login OTP verify: procedure=${DeskconnProcedures.accountLoginVerify}, '
-        'authMethod=wampcra, authId=$email, email=$email, '
-        'otpLength=${otp.length}, publicKey=${_shortKey(publicKey)}',
-      );
-
       final principalRes = await authSession
           .call(DeskconnProcedures.accountLoginVerify, args: [email, otp, publicKey])
           .timeout(DeskconnConfig.callTimeout);
@@ -122,7 +110,6 @@ class SessionProvider extends ChangeNotifier {
 
       final principal = Map<String, dynamic>.from(principalRes.args[0] as Map);
       final principalId = principal['id']?.toString();
-      debugPrint('Login OTP verify returned principalId=$principalId for email=$email');
       if (principalId == null || principalId.isEmpty) {
         throw Exception("Principal ID not found in response");
       }
@@ -161,11 +148,9 @@ class SessionProvider extends ChangeNotifier {
       await loadDesktops();
 
       loggedIn = true;
-      debugPrint('Login OTP flow completed for email=$email');
       notifyListeners();
       return const OperationResult.success();
     } catch (e) {
-      debugPrint('Login OTP verify failed for email=$email: $e');
       session = null;
       account = null;
       desktops.clear();
@@ -176,11 +161,6 @@ class SessionProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
-  }
-
-  String _shortKey(String key) {
-    if (key.length <= 12) return key;
-    return '${key.substring(0, 6)}...${key.substring(key.length - 6)}';
   }
 
   Future<void> initialize() async {
