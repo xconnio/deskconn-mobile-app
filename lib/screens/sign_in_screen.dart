@@ -103,10 +103,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 });
                               }
                             },
-                            decoration: InputDecoration(
-                              labelText: 'Email',
-                              errorText: emailError,
-                            ),
+                            decoration: InputDecoration(labelText: 'Email', errorText: emailError),
                           ),
 
                           const SizedBox(height: 16),

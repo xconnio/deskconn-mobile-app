@@ -68,10 +68,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
       widget.length,
       (index) => index == 0 && widget.focusNode != null ? widget.focusNode! : FocusNode(),
     );
-    _ownsFocusNode = List.generate(
-      widget.length,
-      (index) => !(index == 0 && widget.focusNode != null),
-    );
+    _ownsFocusNode = List.generate(widget.length, (index) => !(index == 0 && widget.focusNode != null));
   }
 
   void _disposeFields() {
@@ -127,9 +124,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
 
   void _focusField(int index) {
     _focusNodes[index].requestFocus();
-    _digitControllers[index].selection = TextSelection.collapsed(
-      offset: _digitControllers[index].text.length,
-    );
+    _digitControllers[index].selection = TextSelection.collapsed(offset: _digitControllers[index].text.length);
   }
 
   void _handleInput(int index, String rawValue) {
@@ -184,19 +179,13 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final palette = DeskconnPalette.of(context);
-    final textStyle = theme.textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w600,
-      color: palette.heading,
-    );
+    final textStyle = theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, color: palette.heading);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 6.0;
         final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 320.0;
-        final boxSize = math.min(
-          56.0,
-          (availableWidth - gap * (widget.length - 1)) / widget.length,
-        );
+        final boxSize = math.min(56.0, (availableWidth - gap * (widget.length - 1)) / widget.length);
 
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -212,9 +201,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
                   textStyle: textStyle,
                   colorScheme: colorScheme,
                   palette: palette,
-                  textInputAction: index == widget.length - 1
-                      ? TextInputAction.done
-                      : TextInputAction.next,
+                  textInputAction: index == widget.length - 1 ? TextInputAction.done : TextInputAction.next,
                   onTap: () => _focusField(index),
                   onChanged: (value) => _handleInput(index, value),
                   onBackspace: () => _handleBackspace(index),
@@ -294,10 +281,7 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(12);
-    final colors = _OtpDigitColors.resolve(
-      colorScheme: widget.colorScheme,
-      palette: widget.palette,
-    );
+    final colors = _OtpDigitColors.resolve(colorScheme: widget.colorScheme, palette: widget.palette);
     final isFocused = widget.focusNode.hasFocus;
     final borderColor = isFocused
         ? colors.focusedBorder
@@ -328,17 +312,9 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Text(
-                widget.controller.text,
-                textAlign: TextAlign.center,
-                style: widget.textStyle,
-              ),
+              Text(widget.controller.text, textAlign: TextAlign.center, style: widget.textStyle),
               if (isFocused && widget.enabled)
-                _OtpVisualCursor(
-                  digit: widget.controller.text,
-                  color: colors.cursor,
-                  textStyle: widget.textStyle,
-                ),
+                _OtpVisualCursor(digit: widget.controller.text, color: colors.cursor, textStyle: widget.textStyle),
               Positioned.fill(
                 child: Opacity(
                   opacity: 0,
@@ -354,10 +330,7 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
                     textAlign: TextAlign.center,
                     style: widget.textStyle ?? const TextStyle(),
                     maxLines: 1,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(1),
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(1)],
                     onTapOutside: (_) => FocusScope.of(context).unfocus(),
                     onChanged: widget.onChanged,
                     onSubmitted: (_) => FocusScope.of(context).unfocus(),
@@ -373,11 +346,7 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
 }
 
 class _OtpVisualCursor extends StatelessWidget {
-  const _OtpVisualCursor({
-    required this.digit,
-    required this.color,
-    required this.textStyle,
-  });
+  const _OtpVisualCursor({required this.digit, required this.color, required this.textStyle});
 
   final String digit;
   final Color color;
@@ -404,10 +373,7 @@ class _OtpVisualCursor extends StatelessWidget {
               child: Container(
                 width: 2,
                 height: 24,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(1)),
               ),
             ),
           ],
@@ -434,24 +400,15 @@ class _OtpDigitColors {
   final Color disabledBorder;
   final Color cursor;
 
-  static _OtpDigitColors resolve({
-    required ColorScheme colorScheme,
-    required DeskconnPalette palette,
-  }) {
+  static _OtpDigitColors resolve({required ColorScheme colorScheme, required DeskconnPalette palette}) {
     final isDark = colorScheme.brightness == Brightness.dark;
 
-    final fill = isDark
-        ? Color.lerp(palette.surface, palette.surfaceTint, 0.45)!
-        : palette.surface;
+    final fill = isDark ? Color.lerp(palette.surface, palette.surfaceTint, 0.45)! : palette.surface;
     final border = isDark
         ? Color.lerp(palette.border, palette.text, 0.32)!
         : Color.lerp(palette.border, palette.text, 0.30)!;
-    final disabledFill = isDark
-        ? Color.lerp(palette.surface, palette.background, 0.35)!
-        : palette.surfaceTint;
-    final disabledBorder = isDark
-        ? Color.lerp(palette.border, palette.background, 0.25)!
-        : palette.border;
+    final disabledFill = isDark ? Color.lerp(palette.surface, palette.background, 0.35)! : palette.surfaceTint;
+    final disabledBorder = isDark ? Color.lerp(palette.border, palette.background, 0.25)! : palette.border;
 
     return _OtpDigitColors(
       fill: fill,

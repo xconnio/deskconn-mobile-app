@@ -65,11 +65,7 @@ class SessionProvider extends ChangeNotifier {
 
   Future<Session> _openLoginSession({required String email, required String password}) async {
     await _loginSession?.close();
-    _loginSession = await _client.connectCra(
-      email: email,
-      password: password,
-      realm: DeskconnConfig.realm,
-    );
+    _loginSession = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
     return _loginSession!;
   }
 
@@ -83,9 +79,7 @@ class SessionProvider extends ChangeNotifier {
         'Login OTP request: procedure=${DeskconnProcedures.accountLogin}, '
         'authMethod=wampcra, authId=$email',
       );
-      await authSession
-          .call(DeskconnProcedures.accountLogin, args: [email])
-          .timeout(DeskconnConfig.callTimeout);
+      await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
       debugPrint('Login OTP request succeeded for email=$email');
 
       return const OperationResult.success();
@@ -99,10 +93,7 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  Future<OperationResult> verifyLoginOtp({
-    required String email,
-    required String otp,
-  }) async {
+  Future<OperationResult> verifyLoginOtp({required String email, required String otp}) async {
     error = null;
     _setLoading(true);
 
@@ -122,10 +113,7 @@ class SessionProvider extends ChangeNotifier {
       );
 
       final principalRes = await authSession
-          .call(
-            DeskconnProcedures.accountLoginVerify,
-            args: [email, otp, publicKey],
-          )
+          .call(DeskconnProcedures.accountLoginVerify, args: [email, otp, publicKey])
           .timeout(DeskconnConfig.callTimeout);
 
       if (principalRes.args.isEmpty) {
@@ -162,9 +150,7 @@ class SessionProvider extends ChangeNotifier {
         realm: DeskconnConfig.realm,
       );
 
-      final accountRes = await session!
-          .call(DeskconnProcedures.accountGet)
-          .timeout(DeskconnConfig.callTimeout);
+      final accountRes = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
 
       if (accountRes.args.isEmpty) {
         throw Exception("Empty account response");

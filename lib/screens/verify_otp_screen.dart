@@ -39,9 +39,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       appBar: AppBar(title: const Text("Verify email")),
       body: Center(
         child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
           child: SizedBox(
             width: DeskconnUI.cardWidth,
             child: Padding(
@@ -52,10 +50,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                   const DeskconnLogo(),
                   const SizedBox(height: 16),
 
-                  const Text(
-                    "Enter the 6-digit code sent to your email",
-                    textAlign: TextAlign.center,
-                  ),
+                  const Text("Enter the 6-digit code sent to your email", textAlign: TextAlign.center),
 
                   const SizedBox(height: 16),
 
@@ -63,10 +58,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     controller: otpCtrl,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                     enabled: !_loading,
                     onChanged: (v) {
                       if (requiredError != null) {
@@ -78,10 +70,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                         setState(() => submitError = null);
                       }
                     },
-                    decoration: InputDecoration(
-                      labelText: 'OTP',
-                      errorText: requiredError,
-                    ),
+                    decoration: InputDecoration(labelText: 'OTP', errorText: requiredError),
                   ),
 
                   const SizedBox(height: 12),
@@ -107,9 +96,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             var emailVerified = false;
 
                             try {
-                              final result = await auth.verifyOtp(
-                                otpCtrl.text.trim(),
-                              );
+                              final result = await auth.verifyOtp(otpCtrl.text.trim());
 
                               if (!context.mounted) return;
 
@@ -121,32 +108,28 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                 if (email == null || password == null) {
                                   setState(() {
                                     _loading = false;
-                                    _postVerifyError =
-                                        'Email verified, but sign-in failed. Please sign in manually.';
+                                    _postVerifyError = 'Email verified, but sign-in failed. Please sign in manually.';
                                   });
                                   return;
                                 }
 
-                                final loginResult = await context
-                                    .read<SessionProvider>()
-                                    .requestLoginOtp(email, password);
+                                final loginResult = await context.read<SessionProvider>().requestLoginOtp(
+                                  email,
+                                  password,
+                                );
 
                                 if (!context.mounted) return;
 
                                 if (loginResult.isSuccess) {
                                   Navigator.pushAndRemoveUntil(
                                     context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          LoginOtpScreen(email: email),
-                                    ),
+                                    MaterialPageRoute(builder: (_) => LoginOtpScreen(email: email)),
                                     (_) => false,
                                   );
                                 } else {
                                   setState(() {
                                     _loading = false;
-                                    _postVerifyError =
-                                        'Email verified, but sign-in failed. Please sign in manually.';
+                                    _postVerifyError = 'Email verified, but sign-in failed. Please sign in manually.';
                                   });
                                 }
                               } else {
@@ -160,8 +143,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                               setState(() {
                                 _loading = false;
                                 if (emailVerified) {
-                                  _postVerifyError =
-                                      'Email verified, but sign-in failed. Please sign in manually.';
+                                  _postVerifyError = 'Email verified, but sign-in failed. Please sign in manually.';
                                 } else {
                                   submitError = 'Verification failed. Please try again.';
                                 }
@@ -169,11 +151,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             }
                           },
                     child: _loading
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Text("Verify"),
                   ),
 
@@ -196,18 +174,14 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                       child: Text(
                         _postVerifyError!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
                     ),
                     TextButton(
                       onPressed: () {
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const SignInScreen(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const SignInScreen()),
                           (_) => false,
                         );
                       },
@@ -216,12 +190,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                   ] else if (submitError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        submitError!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                      child: Text(submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ),
                 ],
               ),

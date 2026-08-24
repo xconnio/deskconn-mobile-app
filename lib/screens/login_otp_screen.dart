@@ -37,19 +37,12 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
     setState(() => submitError = null);
 
     final session = context.read<SessionProvider>();
-    final result = await session.verifyLoginOtp(
-      email: widget.email,
-      otp: otpCtrl.text,
-    );
+    final result = await session.verifyLoginOtp(email: widget.email, otp: otpCtrl.text);
 
     if (!mounted) return;
 
     if (result.isSuccess && session.loggedIn) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const DesktopListScreen()),
-        (_) => false,
-      );
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()), (_) => false);
     } else {
       setState(() {
         submitError = result.error ?? 'Invalid or expired code';
@@ -77,9 +70,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                 const SizedBox(height: 32),
                 Card(
                   elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: SizedBox(
                     width: 380,
                     child: Padding(
@@ -87,10 +78,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            'Enter the 6-digit code sent to ${widget.email}',
-                            textAlign: TextAlign.center,
-                          ),
+                          Text('Enter the 6-digit code sent to ${widget.email}', textAlign: TextAlign.center),
                           const SizedBox(height: 24),
                           OtpCodeField(
                             controller: otpCtrl,
@@ -110,25 +98,18 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                                 child: SizedBox(
                                   height: 22,
                                   width: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               ),
                             )
                           else
-                            ElevatedButton(
-                              onPressed: _canVerify ? _verify : null,
-                              child: const Text('Verify'),
-                            ),
+                            ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
                           if (submitError != null) ...[
                             const SizedBox(height: 12),
                             Text(
                               submitError!,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),
                           ],
                         ],
