@@ -18,6 +18,7 @@ import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/screens/image_editor_screen.dart';
+import 'package:deskconn_mobile_app/screens/text_editor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 
 class FileExplorerScreen extends StatefulWidget {
@@ -1620,12 +1621,23 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
 
   String _pathFor(FileEntry entry) => widget.pathBuilder?.call(entry) ?? widget.path;
 
-  bool get _canEditCurrent {
+  String get _currentExt {
     final entry = _currentEntry;
     final effectiveName = entry.isSymlink && entry.symlinkTarget != null
         ? entry.symlinkTarget!.split('/').last
         : entry.name;
-    final ext = effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+    return effectiveName.contains('.') ? effectiveName.split('.').last.toLowerCase() : '';
+  }
+
+  bool get _isCurrentTextMode {
+    if (widget.openAs == 'text') return true;
+    if (widget.openAs != null) return false;
+    return kTextExts.contains(_currentExt);
+  }
+
+  bool get _canEditCurrent {
+    if (_isCurrentTextMode) return true;
+    final ext = _currentExt;
     return kImageExts.contains(ext) && ext != 'svg';
   }
 
@@ -1680,8 +1692,16 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     _showFileProperties(context, _currentEntry);
   }
 
-  Future<void> _editImage() async {
+  Future<void> _edit() async {
     if (_isEditing) return;
+    if (_isCurrentTextMode) {
+      await _editText();
+    } else {
+      await _editImage();
+    }
+  }
+
+  Future<void> _editImage() async {
     final entry = _currentEntry;
     setState(() => _isEditing = true);
     try {
@@ -1693,7 +1713,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
       );
       if (mounted) setState(() => _isEditing = false);
       if (edited == null || !mounted) return;
-      await _saveEditedImage(entry, edited);
+      await _saveEditedBytes(entry, edited, title: 'Save edited photo');
     } catch (e) {
       if (mounted) {
         setState(() => _isEditing = false);
@@ -1704,11 +1724,36 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
     }
   }
 
-  Future<void> _saveEditedImage(FileEntry entry, Uint8List bytes) async {
+  Future<void> _editText() async {
+    final entry = _currentEntry;
+    setState(() => _isEditing = true);
+    try {
+      final bytes = await widget.controller.read(_pathFor(entry));
+      if (!mounted) return;
+      final edited = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TextEditorScreen(bytes: bytes, fileName: entry.name),
+        ),
+      );
+      if (mounted) setState(() => _isEditing = false);
+      if (edited == null || !mounted) return;
+      await _saveEditedBytes(entry, edited, title: 'Save edited text');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isEditing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Edit failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveEditedBytes(FileEntry entry, Uint8List bytes, {required String title}) async {
     final target = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Save edited photo'),
+        title: Text(title),
         children: [
           SimpleDialogOption(onPressed: () => Navigator.pop(context, 'phone'), child: const Text('Save to phone')),
           SimpleDialogOption(
@@ -1835,7 +1880,7 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
           canEdit: _canEditCurrent,
           onShare: _share,
           onInfo: _showInfo,
-          onEdit: _editImage,
+          onEdit: _edit,
           onDownload: _download,
           onDelete: _delete,
         ),
