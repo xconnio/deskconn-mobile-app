@@ -2,7 +2,9 @@ class DeskconnConfig {
   static const String quicAddr = "api.deskconn.com:8081";
   static const String realm = "io.xconn.deskconn";
 
-  static const String serviceAuthId = "deskconn-web-app";
+  static const String mobileAppAuthRole = "xconnio:deskconn:app:mobile";
+  static const String mobileAppAuthID = "deskconn-mobile-app";
+  static const String servicePrivateKey = "e61df0b4337879d70119b7294ba48d12dcf9b2d9dce85da4f40641b1cc4e3b65";
 
   // Most session.call() sites had no timeout at all — a peer that looks
   // "connected" but stopped responding (a common WebRTC/mobile-network

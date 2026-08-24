@@ -25,7 +25,9 @@ class AuthProvider extends ChangeNotifier {
     if (_session == null || !_session!.isConnected()) {
       _session = await QUICConnectionManager().openSession(
         DeskconnConfig.realm,
-        QUICDialerConfig(authenticator: AnonymousAuthenticator(DeskconnConfig.serviceAuthId)),
+        QUICDialerConfig(
+          authenticator: CryptoSignAuthenticator(DeskconnConfig.mobileAppAuthID, DeskconnConfig.servicePrivateKey),
+        ),
       );
     }
     return _session!;
