@@ -52,21 +52,32 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<OperationResult> verifyOtp(String otp) async {
+  Future<AccountVerificationResult> verifyOtp(String otp, {required String publicKey}) async {
     if (pendingEmail == null) {
-      return const OperationResult.failure("No pending verification");
+      return const AccountVerificationResult.failure("No pending verification");
     }
 
     try {
       var session = await _getSession();
-      await session
-          .call(DeskconnProcedures.accountVerify, args: [pendingEmail, otp])
+      final res = await session
+          .call(DeskconnProcedures.accountVerify, args: [pendingEmail, otp, publicKey])
           .timeout(DeskconnConfig.callTimeout);
 
-      return const OperationResult.success();
+      if (res.args.isEmpty) {
+        return const AccountVerificationResult.failure("Empty verification response");
+      }
+
+      final principal = Map<String, dynamic>.from(res.args[0] as Map);
+      return AccountVerificationResult.success(principal);
     } catch (e) {
-      return OperationResult.failure(e.toString());
+      return AccountVerificationResult.failure(e.toString());
     }
+  }
+
+  void clearPendingVerification() {
+    pendingEmail = null;
+    _pendingPassword = null;
+    notifyListeners();
   }
 
   Future<OperationResult> resendOtp() async {
@@ -118,4 +129,14 @@ class AuthProvider extends ChangeNotifier {
     _session?.close();
     super.dispose();
   }
+}
+
+class AccountVerificationResult {
+  final Map<String, dynamic>? principal;
+  final String? error;
+
+  const AccountVerificationResult.success(this.principal) : error = null;
+  const AccountVerificationResult.failure(this.error) : principal = null;
+
+  bool get isSuccess => error == null;
 }

@@ -109,46 +109,11 @@ class SessionProvider extends ChangeNotifier {
       }
 
       final principal = Map<String, dynamic>.from(principalRes.args[0] as Map);
-      final principalId = principal['id']?.toString();
-      if (principalId == null || principalId.isEmpty) {
-        throw Exception("Principal ID not found in response");
-      }
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final randomSuffix = DateTime.now().microsecondsSinceEpoch;
-      final deviceName = 'android-$timestamp-$randomSuffix';
-      final deviceModel = await _getDeviceModel();
-
-      await DeviceIdentity.save(
-        deviceId: principalId,
-        privateKey: keys['privateKey']!,
-        publicKey: keys['publicKey']!,
-        email: email,
-        deviceName: deviceName,
-        deviceModel: deviceModel,
-      );
 
       await _loginSession?.close();
       _loginSession = null;
 
-      session = await _client.connectCryptoSign(
-        authId: email,
-        privateKey: keys['privateKey']!,
-        realm: DeskconnConfig.realm,
-      );
-
-      final accountRes = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
-
-      if (accountRes.args.isEmpty) {
-        throw Exception("Empty account response");
-      }
-
-      account = Map<String, dynamic>.from(accountRes.args[0] as Map);
-
-      await loadDesktops();
-
-      loggedIn = true;
-      notifyListeners();
+      await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
       return const OperationResult.success();
     } catch (e) {
       session = null;
@@ -161,6 +126,74 @@ class SessionProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<OperationResult> completeRegistrationSignIn({
+    required String email,
+    required Map<String, String> keys,
+    required Map<String, dynamic> principal,
+  }) async {
+    error = null;
+    _setLoading(true);
+
+    try {
+      await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
+      return const OperationResult.success();
+    } catch (e) {
+      session = null;
+      account = null;
+      desktops.clear();
+      loggedIn = false;
+
+      notifyListeners();
+      return OperationResult.failure(e.toString());
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> _completePrincipalSignIn({
+    required String email,
+    required Map<String, String> keys,
+    required Map<String, dynamic> principal,
+  }) async {
+    final principalId = principal['id']?.toString();
+    if (principalId == null || principalId.isEmpty) {
+      throw Exception("Principal ID not found in response");
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final randomSuffix = DateTime.now().microsecondsSinceEpoch;
+    final deviceName = 'android-$timestamp-$randomSuffix';
+    final deviceModel = await _getDeviceModel();
+
+    await DeviceIdentity.save(
+      deviceId: principalId,
+      privateKey: keys['privateKey']!,
+      publicKey: keys['publicKey']!,
+      email: email,
+      deviceName: deviceName,
+      deviceModel: deviceModel,
+    );
+
+    session = await _client.connectCryptoSign(
+      authId: email,
+      privateKey: keys['privateKey']!,
+      realm: DeskconnConfig.realm,
+    );
+
+    final accountRes = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
+
+    if (accountRes.args.isEmpty) {
+      throw Exception("Empty account response");
+    }
+
+    account = Map<String, dynamic>.from(accountRes.args[0] as Map);
+
+    await loadDesktops();
+
+    loggedIn = true;
+    notifyListeners();
   }
 
   Future<void> initialize() async {
