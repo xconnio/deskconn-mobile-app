@@ -30,8 +30,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   String? submitError;
 
   bool get _canVerify => !_loading && !_resending && otpCtrl.text.length == 6;
-  bool get _canResend =>
-      !_loading && !_resending && _resendSecondsRemaining == 0;
+  bool get _canResend => !_loading && !_resending && _resendSecondsRemaining == 0;
 
   String get _resendLabel {
     if (_resendSecondsRemaining == 0) return 'Resend code';
@@ -112,8 +111,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (!result.isSuccess) {
         setState(() {
           _loading = false;
-          submitError =
-              result.error ?? 'Verification failed. Please try again.';
+          submitError = result.error ?? 'Verification failed. Please try again.';
         });
         return;
       }
@@ -144,11 +142,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       }
 
       auth.clearPendingVerification();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const DesktopListScreen()),
-        (_) => false,
-      );
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()), (_) => false);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -182,9 +176,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingEmail = context.select<AuthProvider, String?>(
-      (auth) => auth.pendingEmail,
-    );
+    final pendingEmail = context.select<AuthProvider, String?>((auth) => auth.pendingEmail);
     final instruction = pendingEmail == null
         ? 'Enter the 6-digit code sent to your email'
         : 'Enter the 6-digit code sent to $pendingEmail';
@@ -205,9 +197,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 const SizedBox(height: 32),
                 Card(
                   elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: SizedBox(
                     width: 380,
                     child: Padding(
@@ -235,17 +225,12 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                 child: SizedBox(
                                   height: 22,
                                   width: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               ),
                             )
                           else
-                            ElevatedButton(
-                              onPressed: _canVerify ? _verify : null,
-                              child: const Text('Verify'),
-                            ),
+                            ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
                           const SizedBox(height: 12),
                           TextButton(
                             onPressed: _canResend ? _resendCode : null,
@@ -253,9 +238,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                 ? const SizedBox(
                                     height: 18,
                                     width: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
+                                    child: CircularProgressIndicator(strokeWidth: 2),
                                   )
                                 : Text(_resendLabel),
                           ),
@@ -264,9 +247,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                             Text(
                               submitError!,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
                             ),
                           ],
                         ],
