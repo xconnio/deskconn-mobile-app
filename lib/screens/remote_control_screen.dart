@@ -5,6 +5,8 @@ import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart' show saveToDevice;
+import 'package:deskconn_mobile_app/theme/colors.dart';
+import 'package:deskconn_mobile_app/widgets/desktop_status_pill.dart';
 import 'package:flutter/material.dart';
 import 'package:xconn/xconn.dart';
 
@@ -348,52 +350,63 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.config.desktopName)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 4,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            children: [
-              _IconTile(
-                icon: _locking ? null : Icons.lock_outline,
-                label: 'Lock',
-                loading: _locking,
-                onTap: _lockScreen,
-              ),
-              if (_brightnessAvailable)
-                _IconTile(
-                  icon: Icons.brightness_6_outlined,
-                  label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
-                  onTap: _showBrightnessSheet,
-                ),
-              _IconTile(
-                icon: _isMuted == null
-                    ? Icons.volume_up_outlined
-                    : (_isMuted! ? Icons.volume_off_outlined : Icons.volume_up_outlined),
-                label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Unmute' : 'Mute'),
-                onTap: _toggleMute,
-              ),
-              _IconTile(
-                icon: _capturingScreenshot ? null : Icons.photo_camera_outlined,
-                label: 'Screenshot',
-                loading: _capturingScreenshot,
-                onTap: _takeScreenshot,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _MediaCard(
-            player: _primaryPlayer,
-            onPrev: _mprisBusy ? null : () => _mprisCall(_procMprisPrev, playerName: _primaryPlayer?.busName),
-            onPlayPause: _mprisBusy ? null : _togglePlayPause,
-            onNext: _mprisBusy ? null : () => _mprisCall(_procMprisNext, playerName: _primaryPlayer?.busName),
+          Expanded(child: _buildBody(context)),
+          SafeArea(
+            top: false,
+            child: DesktopStatusPill.forSession(
+              name: widget.config.desktopName,
+              isP2P: widget.config.webRtcEnabled,
+              palette: DeskconnPalette.of(context),
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 4,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          children: [
+            _IconTile(icon: _locking ? null : Icons.lock_outline, label: 'Lock', loading: _locking, onTap: _lockScreen),
+            if (_brightnessAvailable)
+              _IconTile(
+                icon: Icons.brightness_6_outlined,
+                label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
+                onTap: _showBrightnessSheet,
+              ),
+            _IconTile(
+              icon: _isMuted == null
+                  ? Icons.volume_up_outlined
+                  : (_isMuted! ? Icons.volume_off_outlined : Icons.volume_up_outlined),
+              label: _isMuted == null ? 'Mute' : (_isMuted! ? 'Unmute' : 'Mute'),
+              onTap: _toggleMute,
+            ),
+            _IconTile(
+              icon: _capturingScreenshot ? null : Icons.photo_camera_outlined,
+              label: 'Screenshot',
+              loading: _capturingScreenshot,
+              onTap: _takeScreenshot,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _MediaCard(
+          player: _primaryPlayer,
+          onPrev: _mprisBusy ? null : () => _mprisCall(_procMprisPrev, playerName: _primaryPlayer?.busName),
+          onPlayPause: _mprisBusy ? null : _togglePlayPause,
+          onNext: _mprisBusy ? null : () => _mprisCall(_procMprisNext, playerName: _primaryPlayer?.busName),
+        ),
+      ],
     );
   }
 }

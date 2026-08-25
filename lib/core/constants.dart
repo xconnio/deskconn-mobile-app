@@ -6,9 +6,6 @@ class DeskconnConfig {
   static const String mobileAppAuthID = "deskconn-mobile-app";
   static const String servicePrivateKey = "e61df0b4337879d70119b7294ba48d12dcf9b2d9dce85da4f40641b1cc4e3b65";
 
-  // Most session.call() sites had no timeout at all — a peer that looks
-  // "connected" but stopped responding (a common WebRTC/mobile-network
-  // failure mode) left the caller awaiting forever with no way out.
   static const Duration callTimeout = Duration(seconds: 10);
 }
 
@@ -26,8 +23,11 @@ class DeskconnProcedures {
   static const String deviceCreate = 'io.xconn.deskconn.device.create';
   static const String deviceDelete = 'io.xconn.deskconn.device.delete';
 
+  static const String deskconndAppIcon = 'io.xconn.deskconn.deskconnd.app.icon';
+  static const String deskconndAppList = 'io.xconn.deskconn.deskconnd.app.list';
   static const String deskconndAudioIsMuted = 'io.xconn.deskconn.deskconnd.audio.ismuted';
   static const String deskconndAudioToggleMute = 'io.xconn.deskconn.deskconnd.audio.togglemute';
+  static const String deskconndDeviceInfo = 'io.xconn.deskconn.deskconnd.device.info';
   static const String deskconndFileBrowse = 'io.xconn.deskconn.deskconnd.file.browse';
   static const String deskconndFileCopy = 'io.xconn.deskconn.deskconnd.file.copy';
   static const String deskconndFileDelete = 'io.xconn.deskconn.deskconnd.file.delete';
@@ -40,6 +40,8 @@ class DeskconnProcedures {
   static const String deskconndMprisPlayers = 'io.xconn.deskconn.deskconnd.mpris.players';
   static const String deskconndMprisPlayPause = 'io.xconn.deskconn.deskconnd.mpris.playpause';
   static const String deskconndMprisPrevious = 'io.xconn.deskconn.deskconnd.mpris.previous';
+  static const String deskconndProcessList = 'io.xconn.deskconn.deskconnd.process.list';
+  static const String deskconndProcessSignal = 'io.xconn.deskconn.deskconnd.process.signal';
   static const String deskconndScreenBrightnessGet = 'io.xconn.deskconn.deskconnd.screen.brightness.get';
   static const String deskconndScreenBrightnessSet = 'io.xconn.deskconn.deskconnd.screen.brightness.set';
   static const String deskconndScreenLock = 'io.xconn.deskconn.deskconnd.screen.lock';
