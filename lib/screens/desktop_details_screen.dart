@@ -11,6 +11,8 @@ import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
+import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
+import 'package:deskconn_mobile_app/widgets/desktop_status_pill.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
@@ -175,6 +177,14 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                               onWallpaper: wallpaper != null,
                               onTap: () => _openFileExplorer(context, category: 'videos'),
                             ),
+                            _LauncherTile(
+                              icon: Icons.speed_outlined,
+                              badgeColor: palette.osUbuntu,
+                              title: "Monitor",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openResourceMonitor(context),
+                            ),
                           ],
                         );
                       },
@@ -309,6 +319,32 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Remote Control: $e")));
+      }
+    }
+  }
+
+  Future<void> _openResourceMonitor(BuildContext context) async {
+    final realm = _realm;
+    if (realm == null ||
+        (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
+      return;
+    }
+
+    try {
+      final authId = await DeviceIdentity.lastEmail();
+      final privateKey = await DeviceIdentity.privateKey();
+      if (authId == null || privateKey == null) {
+        throw Exception("Missing credentials.");
+      }
+
+      if (!context.mounted) return;
+
+      final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => ResourceMonitorScreen(config: config)));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Resource Monitor: $e")));
       }
     }
   }
@@ -520,48 +556,7 @@ class _DesktopLabel extends StatelessWidget {
       _DesktopConnectionStatus.p2p => (palette.statusOnline, 'p2p'),
       _DesktopConnectionStatus.offline => (palette.statusOffline, 'offline'),
     };
-    final textColor = onWallpaper ? Colors.white : colorScheme.onSurface;
 
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: name,
-                style: TextStyle(color: textColor, fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              TextSpan(
-                text: '($statusLabel)',
-                style: TextStyle(color: textColor, fontSize: 15, fontWeight: FontWeight.w400),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16, top: 4),
-      child: Center(
-        child: onWallpaper
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: content,
-              )
-            : content,
-      ),
-    );
+    return DesktopStatusPill(name: name, dotColor: dotColor, statusLabel: statusLabel, onWallpaper: onWallpaper);
   }
 }
