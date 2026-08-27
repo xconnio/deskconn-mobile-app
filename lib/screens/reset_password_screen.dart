@@ -26,10 +26,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  bool get _passwordMeetsRequirements =>
-      Validators.isPasswordValid(passCtrl.text);
-  bool get _passwordsMatch =>
-      passCtrl.text.isNotEmpty && passCtrl.text == confirmPassCtrl.text;
+  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
+  bool get _passwordsMatch => passCtrl.text.isNotEmpty && passCtrl.text == confirmPassCtrl.text;
   bool get _canChangePassword => _passwordMeetsRequirements && _passwordsMatch;
 
   @override
@@ -49,10 +47,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       submitError = null;
     });
 
-    final result = await context.read<AuthProvider>().resetPassword(
-      otp: widget.otp,
-      newPassword: passCtrl.text,
-    );
+    final result = await context.read<AuthProvider>().resetPassword(otp: widget.otp, newPassword: passCtrl.text);
 
     if (!mounted) return;
 
@@ -80,10 +75,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              "Create a new password for your account",
-              textAlign: TextAlign.center,
-            ),
+            const Text("Create a new password for your account", textAlign: TextAlign.center),
             const SizedBox(height: 16),
             TextField(
               controller: passCtrl,
@@ -98,9 +90,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               decoration: InputDecoration(
                 labelText: "Password",
                 suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  ),
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                   onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;
@@ -126,11 +116,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               decoration: InputDecoration(
                 labelText: "Confirm password",
                 suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureConfirmPassword
-                        ? Icons.visibility_off
-                        : Icons.visibility,
-                  ),
+                  icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
                   onPressed: () {
                     setState(() {
                       _obscureConfirmPassword = !_obscureConfirmPassword;
@@ -141,15 +127,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loading || !_canChangePassword
-                  ? null
-                  : _changePassword,
+              onPressed: _loading || !_canChangePassword ? null : _changePassword,
               child: _loading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text("Change password"),
             ),
             if (submitError != null) ...[

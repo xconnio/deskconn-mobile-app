@@ -55,10 +55,7 @@ class AppSnackBar {
               Expanded(
                 child: Text(
                   message,
-                  style: TextStyle(
-                    color: foregroundColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: foregroundColor, fontWeight: FontWeight.w600),
                 ),
               ),
             ],

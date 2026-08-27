@@ -27,12 +27,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen> {
     if (!_canVerify) return;
 
     FocusScope.of(context).unfocus();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ResetPasswordScreen(otp: otpCtrl.text.trim()),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ResetPasswordScreen(otp: otpCtrl.text.trim())));
   }
 
   @override
@@ -43,21 +38,11 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Enter the 6-digit reset code sent to your email',
-              textAlign: TextAlign.center,
-            ),
+            const Text('Enter the 6-digit reset code sent to your email', textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            OtpCodeField(
-              controller: otpCtrl,
-              focusNode: otpFocus,
-              onChanged: (_) => setState(() {}),
-            ),
+            OtpCodeField(controller: otpCtrl, focusNode: otpFocus, onChanged: (_) => setState(() {})),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _canVerify ? _verify : null,
-              child: const Text('Verify'),
-            ),
+            ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
           ],
         ),
       ),

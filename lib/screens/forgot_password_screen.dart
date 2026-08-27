@@ -38,10 +38,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              "Enter your email to receive a reset code",
-              textAlign: TextAlign.center,
-            ),
+            const Text("Enter your email to receive a reset code", textAlign: TextAlign.center),
             const SizedBox(height: 16),
 
             TextField(
@@ -59,10 +56,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   setState(() => submitError = null);
                 }
               },
-              decoration: InputDecoration(
-                labelText: 'Email',
-                errorText: emailError,
-              ),
+              decoration: InputDecoration(labelText: 'Email', errorText: emailError),
             ),
 
             const SizedBox(height: 16),
@@ -87,9 +81,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       });
 
                       final navigator = Navigator.of(context);
-                      final result = await auth.requestPasswordReset(
-                        emailCtrl.text.trim(),
-                      );
+                      final result = await auth.requestPasswordReset(emailCtrl.text.trim());
 
                       if (!mounted) return;
 
@@ -98,11 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       });
 
                       if (result.isSuccess) {
-                        await navigator.push(
-                          MaterialPageRoute(
-                            builder: (_) => const VerifyResetOtpScreen(),
-                          ),
-                        );
+                        await navigator.push(MaterialPageRoute(builder: (_) => const VerifyResetOtpScreen()));
                       } else {
                         setState(() {
                           submitError = result.error;

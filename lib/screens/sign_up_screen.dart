@@ -27,8 +27,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? submitError;
   bool _obscurePassword = true;
 
-  bool get _passwordMeetsRequirements =>
-      Validators.isPasswordValid(passCtrl.text);
+  bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
   bool get _canCreateAccount =>
       Validators.email(emailCtrl.text) == null &&
       Validators.name(nameCtrl.text, label: 'Username') == null &&
@@ -65,10 +64,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   submitError = null;
                 });
               },
-              decoration: InputDecoration(
-                labelText: 'Email',
-                errorText: emailError,
-              ),
+              decoration: InputDecoration(labelText: 'Email', errorText: emailError),
             ),
 
             const SizedBox(height: 16),
@@ -84,10 +80,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   submitError = null;
                 });
               },
-              decoration: InputDecoration(
-                labelText: 'Username',
-                errorText: nameError,
-              ),
+              decoration: InputDecoration(labelText: 'Username', errorText: nameError),
             ),
 
             const SizedBox(height: 16),
@@ -106,9 +99,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  ),
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                   onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;
@@ -126,11 +117,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Center(
-                      child: SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2)),
                     ),
                   )
                 : ElevatedButton(
@@ -140,16 +127,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                             setState(() {
                               emailError = Validators.email(emailCtrl.text);
-                              nameError = Validators.name(
-                                nameCtrl.text,
-                                label: 'Username',
-                              );
+                              nameError = Validators.name(nameCtrl.text, label: 'Username');
                               submitError = null;
                             });
 
-                            if (emailError != null ||
-                                nameError != null ||
-                                !_passwordMeetsRequirements) {
+                            if (emailError != null || nameError != null || !_passwordMeetsRequirements) {
                               return;
                             }
 
@@ -162,12 +144,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             if (!context.mounted) return;
 
                             if (result.isSuccess) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const VerifyOtpScreen(),
-                                ),
-                              );
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const VerifyOtpScreen()));
                             } else {
                               setState(() {
                                 submitError = result.error;
@@ -197,10 +174,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         return;
                       }
 
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SignInScreen()),
-                      );
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
                     },
               child: const Text('Already have an account? Sign in'),
             ),

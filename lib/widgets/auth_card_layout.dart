@@ -3,11 +3,7 @@ import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:flutter/material.dart';
 
 class AuthCardLayout extends StatelessWidget {
-  const AuthCardLayout({
-    super.key,
-    required this.child,
-    this.alignment = const Alignment(0, -0.2),
-  });
+  const AuthCardLayout({super.key, required this.child, this.alignment = const Alignment(0, -0.2)});
 
   final Widget child;
   final Alignment alignment;
@@ -26,15 +22,10 @@ class AuthCardLayout extends StatelessWidget {
               const SizedBox(height: 32),
               Card(
                 elevation: 1,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(DeskconnUI.cardRadius),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DeskconnUI.cardRadius)),
                 child: SizedBox(
                   width: DeskconnUI.cardWidth,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: child,
-                  ),
+                  child: Padding(padding: const EdgeInsets.all(24), child: child),
                 ),
               ),
             ],

@@ -29,8 +29,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   String? submitError;
 
   bool get _canVerify => !_loading && !_resending && otpCtrl.text.length == 6;
-  bool get _canResend =>
-      !_loading && !_resending && _resendSecondsRemaining == 0;
+  bool get _canResend => !_loading && !_resending && _resendSecondsRemaining == 0;
 
   String get _resendLabel {
     if (_resendSecondsRemaining == 0) return 'Resend code';
@@ -98,25 +97,20 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (email == null) {
         setState(() {
           _loading = false;
-          submitError =
-              'Verification session expired. Please create your account again.';
+          submitError = 'Verification session expired. Please create your account again.';
         });
         return;
       }
 
       final keys = await DeviceIdentity.ensureKeyPair();
-      final result = await auth.verifyOtp(
-        otpCtrl.text.trim(),
-        publicKey: keys['publicKey']!,
-      );
+      final result = await auth.verifyOtp(otpCtrl.text.trim(), publicKey: keys['publicKey']!);
 
       if (!mounted) return;
 
       if (!result.isSuccess) {
         setState(() {
           _loading = false;
-          submitError =
-              result.error ?? 'Verification failed. Please try again.';
+          submitError = result.error ?? 'Verification failed. Please try again.';
         });
         return;
       }
@@ -125,38 +119,29 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (principal == null) {
         setState(() {
           _loading = false;
-          submitError =
-              'Verification completed, but sign-in could not be initialized.';
+          submitError = 'Verification completed, but sign-in could not be initialized.';
         });
         return;
       }
 
-      final signInResult = await context
-          .read<SessionProvider>()
-          .completeRegistrationSignIn(
-            email: email,
-            keys: keys,
-            principal: principal,
-          );
+      final signInResult = await context.read<SessionProvider>().completeRegistrationSignIn(
+        email: email,
+        keys: keys,
+        principal: principal,
+      );
 
       if (!mounted) return;
 
       if (!signInResult.isSuccess) {
         setState(() {
           _loading = false;
-          submitError =
-              signInResult.error ??
-              'Verification completed, but sign-in failed.';
+          submitError = signInResult.error ?? 'Verification completed, but sign-in failed.';
         });
         return;
       }
 
       auth.clearPendingVerification();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const DesktopListScreen()),
-        (_) => false,
-      );
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()), (_) => false);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -190,9 +175,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingEmail = context.select<AuthProvider, String?>(
-      (auth) => auth.pendingEmail,
-    );
+    final pendingEmail = context.select<AuthProvider, String?>((auth) => auth.pendingEmail);
     final instruction = pendingEmail == null
         ? 'Enter the 6-digit code sent to your email'
         : 'Enter the 6-digit code sent to $pendingEmail';
@@ -219,28 +202,15 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
-                child: Center(
-                  child: SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
+                child: Center(child: SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))),
               )
             else
-              ElevatedButton(
-                onPressed: _canVerify ? _verify : null,
-                child: const Text('Verify'),
-              ),
+              ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
             const SizedBox(height: 12),
             TextButton(
               onPressed: _canResend ? _resendCode : null,
               child: _resending
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : Text(_resendLabel),
             ),
             if (submitError != null) ...[
