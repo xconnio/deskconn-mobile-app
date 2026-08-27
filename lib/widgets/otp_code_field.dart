@@ -208,10 +208,10 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
   String? _extractOtpCode(String? value) {
     if (value == null) return null;
 
-    final match = RegExp(r'\d+').allMatches(value).map((match) => match.group(0)!).firstWhere(
-          (digits) => digits.length == widget.length,
-          orElse: () => '',
-        );
+    final match = RegExp(r'\d+')
+        .allMatches(value)
+        .map((match) => match.group(0)!)
+        .firstWhere((digits) => digits.length == widget.length, orElse: () => '');
 
     return match.isEmpty ? null : match;
   }
@@ -219,10 +219,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
   void _fillCode(String code) {
     _updating = true;
     for (var i = 0; i < widget.length; i++) {
-      _digitControllers[i].value = TextEditingValue(
-        text: code[i],
-        selection: const TextSelection.collapsed(offset: 1),
-      );
+      _digitControllers[i].value = TextEditingValue(text: code[i], selection: const TextSelection.collapsed(offset: 1));
     }
     _updating = false;
 
@@ -240,16 +237,8 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final selected = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromRect(
-        details.globalPosition & const Size(1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: const [
-        PopupMenuItem(
-          value: 'paste',
-          child: Text('Paste code'),
-        ),
-      ],
+      position: RelativeRect.fromRect(details.globalPosition & const Size(1, 1), Offset.zero & overlay.size),
+      items: const [PopupMenuItem(value: 'paste', child: Text('Paste code'))],
     );
 
     if (selected == 'paste' && mounted) {
