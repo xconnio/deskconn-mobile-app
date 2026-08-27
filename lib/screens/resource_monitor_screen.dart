@@ -8,6 +8,7 @@ import 'package:deskconn_mobile_app/core/resource_monitor/models.dart';
 import 'package:deskconn_mobile_app/core/resource_monitor/resource_monitor_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/widgets/desktop_status_pill.dart';
 import 'package:deskconn_mobile_app/widgets/ring_gauge.dart';
@@ -340,6 +341,7 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
               name: widget.config.desktopName,
               isP2P: widget.config.webRtcEnabled,
               palette: DeskconnPalette.of(context),
+              onTap: () => switchMachine(context, currentRealm: widget.config.realm),
             ),
           ),
         ],

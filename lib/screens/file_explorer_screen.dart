@@ -13,6 +13,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
@@ -567,6 +568,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 name: widget.config.desktopName,
                 isP2P: widget.config.webRtcEnabled,
                 palette: DeskconnPalette.of(context),
+                onTap: () => switchMachine(context, currentRealm: widget.config.realm),
               ),
             ),
           ],

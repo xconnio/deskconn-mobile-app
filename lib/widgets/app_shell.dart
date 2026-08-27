@@ -1,5 +1,4 @@
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
-import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:flutter/foundation.dart';
@@ -161,17 +160,6 @@ class _AppSidebar extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                _NavTile(
-                  icon: Icons.desktop_windows_outlined,
-                  label: 'Desktops',
-                  selected: currentSection == AppShellSection.desktops,
-                  onTap: () => openSection(
-                    context,
-                    section: AppShellSection.desktops,
-                    builder: (_) => const DesktopListScreen(),
-                    closeDrawer: closeDrawerOnTap,
-                  ),
-                ),
                 _NavTile(
                   icon: Icons.settings_outlined,
                   label: 'Settings',
