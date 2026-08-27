@@ -6,16 +6,16 @@ import 'package:deskconn_mobile_app/widgets/otp_code_field.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class LoginOtpScreen extends StatefulWidget {
-  const LoginOtpScreen({super.key, required this.email});
+class SignInOtpScreen extends StatefulWidget {
+  const SignInOtpScreen({super.key, required this.email});
 
   final String email;
 
   @override
-  State<LoginOtpScreen> createState() => _LoginOtpScreenState();
+  State<SignInOtpScreen> createState() => _SignInOtpScreenState();
 }
 
-class _LoginOtpScreenState extends State<LoginOtpScreen> {
+class _SignInOtpScreenState extends State<SignInOtpScreen> {
   final otpCtrl = TextEditingController();
   final otpFocus = FocusNode();
 
@@ -37,7 +37,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
     setState(() => submitError = null);
 
     final session = context.read<SessionProvider>();
-    final result = await session.verifyLoginOtp(email: widget.email, otp: otpCtrl.text);
+    final result = await session.verifySignInOtp(email: widget.email, otp: otpCtrl.text);
 
     if (!mounted) return;
 

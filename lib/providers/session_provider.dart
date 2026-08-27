@@ -16,7 +16,7 @@ class SessionProvider extends ChangeNotifier {
   final _client = WampClient();
 
   Session? session;
-  Session? _loginSession;
+  Session? _signInSession;
   Map<String, dynamic>? account;
   String? error;
 
@@ -63,37 +63,64 @@ class SessionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> desktops = [];
   bool desktopsLoading = false;
 
-  Future<Session> _openLoginSession({required String email, required String password}) async {
-    await _loginSession?.close();
-    _loginSession = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
-    return _loginSession!;
+  Future<void> _closeSignInSession() async {
+    final current = _signInSession;
+    _signInSession = null;
+
+    try {
+      await current?.close();
+    } catch (_) {}
   }
 
-  Future<OperationResult> requestLoginOtp(String email, String password) async {
+  Future<void> _resetSignedInState({bool clearIdentity = false}) async {
+    try {
+      await session?.close();
+    } catch (_) {}
+
+    if (clearIdentity) {
+      try {
+        await DeviceIdentity.clear();
+      } catch (_) {}
+    }
+
+    session = null;
+    account = null;
+    desktops.clear();
+    loggedIn = false;
+    notifyListeners();
+  }
+
+  Future<Session> _openSignInSession({required String email, required String password}) async {
+    await _closeSignInSession();
+    final nextSession = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
+    _signInSession = nextSession;
+    return nextSession;
+  }
+
+  Future<OperationResult> requestSignInOtp(String email, String password) async {
     error = null;
     _setLoading(true);
 
     try {
-      final authSession = await _openLoginSession(email: email, password: password);
+      final authSession = await _openSignInSession(email: email, password: password);
       await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
 
       return const OperationResult.success();
     } catch (e) {
-      await _loginSession?.close();
-      _loginSession = null;
+      await _closeSignInSession();
       return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<OperationResult> verifyLoginOtp({required String email, required String otp}) async {
+  Future<OperationResult> verifySignInOtp({required String email, required String otp}) async {
     error = null;
     _setLoading(true);
 
     try {
       final keys = await DeviceIdentity.ensureKeyPair();
-      final authSession = _loginSession;
+      final authSession = _signInSession;
       if (authSession == null || !authSession.isConnected()) {
         throw Exception('Sign-in session expired. Please sign in again.');
       }
@@ -110,18 +137,12 @@ class SessionProvider extends ChangeNotifier {
 
       final principal = Map<String, dynamic>.from(principalRes.args[0] as Map);
 
-      await _loginSession?.close();
-      _loginSession = null;
+      await _closeSignInSession();
 
       await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
       return const OperationResult.success();
     } catch (e) {
-      session = null;
-      account = null;
-      desktops.clear();
-      loggedIn = false;
-
-      notifyListeners();
+      await _resetSignedInState();
       return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
@@ -140,12 +161,7 @@ class SessionProvider extends ChangeNotifier {
       await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
       return const OperationResult.success();
     } catch (e) {
-      session = null;
-      account = null;
-      desktops.clear();
-      loggedIn = false;
-
-      notifyListeners();
+      await _resetSignedInState(clearIdentity: true);
       return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
@@ -166,34 +182,46 @@ class SessionProvider extends ChangeNotifier {
     final randomSuffix = DateTime.now().microsecondsSinceEpoch;
     final deviceName = 'android-$timestamp-$randomSuffix';
     final deviceModel = await _getDeviceModel();
+    var identitySaveStarted = false;
 
-    await DeviceIdentity.save(
-      deviceId: principalId,
-      privateKey: keys['privateKey']!,
-      publicKey: keys['publicKey']!,
-      email: email,
-      deviceName: deviceName,
-      deviceModel: deviceModel,
-    );
+    try {
+      final newSession = await _client.connectCryptoSign(
+        authId: email,
+        privateKey: keys['privateKey']!,
+        realm: DeskconnConfig.realm,
+      );
 
-    session = await _client.connectCryptoSign(
-      authId: email,
-      privateKey: keys['privateKey']!,
-      realm: DeskconnConfig.realm,
-    );
+      final accountRes = await newSession.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
 
-    final accountRes = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
+      if (accountRes.args.isEmpty) {
+        throw Exception("Empty account response");
+      }
 
-    if (accountRes.args.isEmpty) {
-      throw Exception("Empty account response");
+      session = newSession;
+      account = Map<String, dynamic>.from(accountRes.args[0] as Map);
+
+      identitySaveStarted = true;
+      await DeviceIdentity.save(
+        deviceId: principalId,
+        privateKey: keys['privateKey']!,
+        publicKey: keys['publicKey']!,
+        email: email,
+        deviceName: deviceName,
+        deviceModel: deviceModel,
+      );
+
+      await loadDesktops();
+
+      loggedIn = true;
+      notifyListeners();
+    } catch (_) {
+      if (identitySaveStarted) {
+        try {
+          await DeviceIdentity.clear();
+        } catch (_) {}
+      }
+      rethrow;
     }
-
-    account = Map<String, dynamic>.from(accountRes.args[0] as Map);
-
-    await loadDesktops();
-
-    loggedIn = true;
-    notifyListeners();
   }
 
   Future<void> initialize() async {
@@ -268,7 +296,7 @@ class SessionProvider extends ChangeNotifier {
         } catch (_) {}
       }
       await session?.close();
-      await _loginSession?.close();
+      await _closeSignInSession();
     } catch (_) {}
 
     try {
@@ -285,7 +313,7 @@ class SessionProvider extends ChangeNotifier {
     } catch (_) {}
 
     session = null;
-    _loginSession = null;
+    _signInSession = null;
     account = null;
     desktops.clear();
 

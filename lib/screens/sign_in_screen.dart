@@ -1,6 +1,6 @@
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/forgot_password_screen.dart';
-import 'package:deskconn_mobile_app/screens/login_otp_screen.dart';
+import 'package:deskconn_mobile_app/screens/sign_in_otp_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_up_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
@@ -166,14 +166,14 @@ class _SignInScreenState extends State<SignInScreen> {
                                 }
 
                                 final email = emailCtrl.text.trim();
-                                final result = await session.requestLoginOtp(email, passCtrl.text);
+                                final result = await session.requestSignInOtp(email, passCtrl.text);
 
                                 if (!context.mounted) return;
 
                                 if (result.isSuccess) {
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => LoginOtpScreen(email: email)),
+                                    MaterialPageRoute(builder: (_) => SignInOtpScreen(email: email)),
                                   );
                                 } else {
                                   setState(() {

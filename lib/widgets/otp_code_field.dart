@@ -131,10 +131,41 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
     if (_updating) return;
 
     final digits = _onlyDigits(rawValue);
+    final previousValue = widget.controller.text;
 
     if (digits.isEmpty) {
       _digitControllers[index].clear();
       _publish();
+      return;
+    }
+
+    if (digits.length == 1) {
+      _digitControllers[index].value = TextEditingValue(
+        text: digits,
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+      _publish();
+
+      if (index < widget.length - 1) {
+        _focusField(index + 1);
+      } else {
+        _focusNodes[index].unfocus();
+      }
+      return;
+    }
+
+    if (digits.length == 2 && index < previousValue.length && digits[0] == previousValue[index]) {
+      _digitControllers[index].value = TextEditingValue(
+        text: digits[1],
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+      _publish();
+
+      if (index < widget.length - 1) {
+        _focusField(index + 1);
+      } else {
+        _focusNodes[index].unfocus();
+      }
       return;
     }
 
@@ -174,6 +205,58 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
     _focusField(previousIndex);
   }
 
+  String? _extractOtpCode(String? value) {
+    if (value == null) return null;
+
+    final match = RegExp(r'\d+').allMatches(value).map((match) => match.group(0)!).firstWhere(
+          (digits) => digits.length == widget.length,
+          orElse: () => '',
+        );
+
+    return match.isEmpty ? null : match;
+  }
+
+  void _fillCode(String code) {
+    _updating = true;
+    for (var i = 0; i < widget.length; i++) {
+      _digitControllers[i].value = TextEditingValue(
+        text: code[i],
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+    }
+    _updating = false;
+
+    _publish();
+    _focusNodes.last.unfocus();
+  }
+
+  Future<void> _handlePasteMenu(LongPressStartDetails details) async {
+    if (!widget.enabled) return;
+
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final code = _extractOtpCode(clipboard?.text);
+    if (code == null || !mounted) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        details.globalPosition & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: const [
+        PopupMenuItem(
+          value: 'paste',
+          child: Text('Paste code'),
+        ),
+      ],
+    );
+
+    if (selected == 'paste' && mounted) {
+      _fillCode(code);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -203,6 +286,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
                   palette: palette,
                   textInputAction: index == widget.length - 1 ? TextInputAction.done : TextInputAction.next,
                   onTap: () => _focusField(index),
+                  onLongPressStart: _handlePasteMenu,
                   onChanged: (value) => _handleInput(index, value),
                   onBackspace: () => _handleBackspace(index),
                 ),
@@ -225,6 +309,7 @@ class _OtpDigitField extends StatefulWidget {
     required this.palette,
     required this.textInputAction,
     required this.onTap,
+    required this.onLongPressStart,
     required this.onChanged,
     required this.onBackspace,
   });
@@ -237,6 +322,7 @@ class _OtpDigitField extends StatefulWidget {
   final DeskconnPalette palette;
   final TextInputAction textInputAction;
   final VoidCallback onTap;
+  final GestureLongPressStartCallback onLongPressStart;
   final ValueChanged<String> onChanged;
   final VoidCallback onBackspace;
 
@@ -301,6 +387,7 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.enabled ? widget.onTap : null,
+        onLongPressStart: widget.enabled ? widget.onLongPressStart : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           alignment: Alignment.center,
@@ -316,24 +403,25 @@ class _OtpDigitFieldState extends State<_OtpDigitField> {
               if (isFocused && widget.enabled)
                 _OtpVisualCursor(digit: widget.controller.text, color: colors.cursor, textStyle: widget.textStyle),
               Positioned.fill(
-                child: Opacity(
-                  opacity: 0,
-                  child: EditableText(
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    readOnly: !widget.enabled,
-                    showCursor: false,
-                    cursorColor: colors.cursor,
-                    backgroundCursorColor: colors.disabledBorder,
-                    keyboardType: TextInputType.number,
-                    textInputAction: widget.textInputAction,
-                    textAlign: TextAlign.center,
-                    style: widget.textStyle ?? const TextStyle(),
-                    maxLines: 1,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(1)],
-                    onTapOutside: (_) => FocusScope.of(context).unfocus(),
-                    onChanged: widget.onChanged,
-                    onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0,
+                    child: EditableText(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      readOnly: !widget.enabled,
+                      showCursor: false,
+                      cursorColor: colors.cursor,
+                      backgroundCursorColor: colors.disabledBorder,
+                      keyboardType: TextInputType.number,
+                      textInputAction: widget.textInputAction,
+                      textAlign: TextAlign.center,
+                      style: widget.textStyle ?? const TextStyle(),
+                      maxLines: 1,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: widget.onChanged,
+                      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                    ),
                   ),
                 ),
               ),
