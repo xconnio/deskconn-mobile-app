@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart' show saveToDevice;
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/widgets/desktop_status_pill.dart';
@@ -359,6 +360,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               name: widget.config.desktopName,
               isP2P: widget.config.webRtcEnabled,
               palette: DeskconnPalette.of(context),
+              onTap: () => switchMachine(context, currentRealm: widget.config.realm),
             ),
           ),
         ],

@@ -9,6 +9,7 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
 import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
@@ -191,7 +192,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     ),
                   ),
                 ),
-                _DesktopLabel(name: displayName, status: _connectionStatus, onWallpaper: wallpaper != null),
+                _DesktopLabel(
+                  name: displayName,
+                  status: _connectionStatus,
+                  onWallpaper: wallpaper != null,
+                  onTap: () => switchMachine(context, currentRealm: _realm),
+                ),
               ],
             ),
           ),
@@ -202,6 +208,19 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   Future<void> _probeDesktopConnection() async {
     final realm = _realm;
+
+    final cached = realm == null ? null : DesktopConnectionManager().get(realm);
+    if (cached != null && cached.isAgentOnline) {
+      cached.onDisconnected = _handleConnectionDisconnected;
+      if (mounted) {
+        setState(
+          () => _connectionStatus = cached.isP2P ? _DesktopConnectionStatus.p2p : _DesktopConnectionStatus.routed,
+        );
+      }
+      unawaited(_refreshWallpaper(cached.session));
+      return;
+    }
+
     if (mounted) {
       setState(() => _connectionStatus = _DesktopConnectionStatus.checking);
     }
@@ -543,8 +562,9 @@ class _DesktopLabel extends StatelessWidget {
   final String name;
   final _DesktopConnectionStatus status;
   final bool onWallpaper;
+  final VoidCallback? onTap;
 
-  const _DesktopLabel({required this.name, required this.status, this.onWallpaper = false});
+  const _DesktopLabel({required this.name, required this.status, this.onWallpaper = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -557,6 +577,12 @@ class _DesktopLabel extends StatelessWidget {
       _DesktopConnectionStatus.offline => (palette.statusOffline, 'offline'),
     };
 
-    return DesktopStatusPill(name: name, dotColor: dotColor, statusLabel: statusLabel, onWallpaper: onWallpaper);
+    return DesktopStatusPill(
+      name: name,
+      dotColor: dotColor,
+      statusLabel: statusLabel,
+      onWallpaper: onWallpaper,
+      onTap: onTap,
+    );
   }
 }

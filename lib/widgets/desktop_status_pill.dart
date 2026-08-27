@@ -7,6 +7,7 @@ class DesktopStatusPill extends StatelessWidget {
   final Color dotColor;
   final String statusLabel;
   final bool onWallpaper;
+  final VoidCallback? onTap;
 
   const DesktopStatusPill({
     super.key,
@@ -14,6 +15,7 @@ class DesktopStatusPill extends StatelessWidget {
     required this.dotColor,
     required this.statusLabel,
     this.onWallpaper = false,
+    this.onTap,
   });
 
   factory DesktopStatusPill.forSession({
@@ -22,6 +24,7 @@ class DesktopStatusPill extends StatelessWidget {
     required bool isP2P,
     required DeskconnPalette palette,
     bool onWallpaper = false,
+    VoidCallback? onTap,
   }) {
     return DesktopStatusPill(
       key: key,
@@ -29,6 +32,7 @@ class DesktopStatusPill extends StatelessWidget {
       dotColor: isP2P ? palette.statusOnline : palette.statusRouted,
       statusLabel: isP2P ? 'p2p' : 'routed',
       onWallpaper: onWallpaper,
+      onTap: onTap,
     );
   }
 
@@ -59,22 +63,30 @@ class DesktopStatusPill extends StatelessWidget {
             ],
           ),
         ),
+        if (onTap != null) ...[const SizedBox(width: 4), Icon(Icons.expand_more, size: 18, color: textColor)],
       ],
     );
+
+    final pill = onWallpaper
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: content,
+          )
+        : Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), child: content);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16, top: 4),
       child: Center(
-        child: onWallpaper
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: content,
-              )
-            : content,
+        child: onTap == null
+            ? pill
+            : Material(
+                color: Colors.transparent,
+                child: InkWell(borderRadius: BorderRadius.circular(20), onTap: onTap, child: pill),
+              ),
       ),
     );
   }

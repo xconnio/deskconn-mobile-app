@@ -8,9 +8,11 @@ import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
+import 'package:deskconn_mobile_app/core/wamp/last_used_realm_store.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
+import 'package:deskconn_mobile_app/screens/desktop_details_screen.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/screens/share_upload_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
@@ -188,6 +190,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   bool _notificationActive = false;
   bool _wasOffline = false;
   bool _handlingSharedFiles = false;
+  Map<String, dynamic>? _autoOpenDesktop;
 
   @override
   void initState() {
@@ -204,8 +207,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
         return;
       }
       try {
-        final sessionProvider = context.read<SessionProvider>();
-        await sessionProvider.initialize().timeout(DeskconnConfig.callTimeout);
+        final session = context.read<SessionProvider>();
+        await session.initialize().timeout(DeskconnConfig.callTimeout);
+        await _resolveAutoOpenDesktop(session);
         if (!completer.isCompleted) completer.complete();
       } catch (e) {
         debugPrint('Session initialization failed: $e');
@@ -213,6 +217,24 @@ class _AppBootstrapState extends State<AppBootstrap> {
       }
       unawaited(_checkForUpdate());
     });
+  }
+
+  // Mirrors the web app: skip the machine picker on launch when a
+  // previously-used desktop is known, and land directly on it instead.
+  // The list stays reachable afterwards via the status pill's "switch
+  // machine" action, which forgets this value.
+  Future<void> _resolveAutoOpenDesktop(SessionProvider session) async {
+    if (!session.loggedIn || session.desktops.isEmpty) return;
+
+    final lastRealm = await LastUsedRealmStore.get();
+    if (lastRealm == null) return;
+
+    for (final desktop in session.desktops) {
+      if (desktop['realm']?.toString() == lastRealm) {
+        _autoOpenDesktop = desktop;
+        return;
+      }
+    }
   }
 
   @override
@@ -321,7 +343,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
         if (_handlingSharedFiles) {
           return const Scaffold(body: Center(child: _SplashContent()));
         }
-        return session.loggedIn ? const DesktopListScreen() : const SignInScreen();
+        if (!session.loggedIn) return const SignInScreen();
+        final autoOpen = _autoOpenDesktop;
+        return autoOpen != null ? DesktopDetailsScreen(desktop: autoOpen) : const DesktopListScreen();
       },
     );
   }

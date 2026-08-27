@@ -1,5 +1,8 @@
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
+import 'package:deskconn_mobile_app/screens/account_screen.dart';
+import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -94,6 +97,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
+  Future<void> _logout(BuildContext context) async {
+    final session = context.read<SessionProvider>();
+    await session.logout();
+    if (context.mounted) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const SignInScreen()), (_) => false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
@@ -103,6 +114,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       currentSection: AppShellSection.settings,
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Account'),
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
+          ),
+          const Divider(),
           SwitchListTile(
             secondary: const Icon(Icons.settings_ethernet),
             title: const Text('Use WebRTC (P2P)'),
@@ -128,6 +146,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             onTap: () => _chooseTheme(context),
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            title: Text('Logout', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            onTap: () => _logout(context),
           ),
         ],
       ),
