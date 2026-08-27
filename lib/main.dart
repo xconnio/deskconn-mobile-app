@@ -204,7 +204,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
         return;
       }
       try {
-        await context.read<SessionProvider>().initialize().timeout(DeskconnConfig.callTimeout);
+        final sessionProvider = context.read<SessionProvider>();
+        await sessionProvider.initialize().timeout(DeskconnConfig.callTimeout);
         if (!completer.isCompleted) completer.complete();
       } catch (e) {
         debugPrint('Session initialization failed: $e');

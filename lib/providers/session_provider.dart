@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
-import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
@@ -17,6 +16,7 @@ class SessionProvider extends ChangeNotifier {
   final _client = WampClient();
 
   Session? session;
+  Session? _signInSession;
   Map<String, dynamic>? account;
   String? error;
 
@@ -63,36 +63,164 @@ class SessionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> desktops = [];
   bool desktopsLoading = false;
 
-  Future<OperationResult> login(String email, String password) async {
+  Future<void> _closeSignInSession() async {
+    final current = _signInSession;
+    _signInSession = null;
+
+    try {
+      await current?.close();
+    } catch (_) {}
+  }
+
+  Future<void> _resetSignedInState({bool clearIdentity = false}) async {
+    try {
+      await session?.close();
+    } catch (_) {}
+
+    if (clearIdentity) {
+      try {
+        await DeviceIdentity.clear();
+      } catch (_) {}
+    }
+
+    session = null;
+    account = null;
+    desktops.clear();
+    loggedIn = false;
+    notifyListeners();
+  }
+
+  Future<Session> _openSignInSession({required String email, required String password}) async {
+    await _closeSignInSession();
+    final nextSession = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
+    _signInSession = nextSession;
+    return nextSession;
+  }
+
+  Future<OperationResult> requestSignInOtp(String email, String password) async {
     error = null;
     _setLoading(true);
 
     try {
-      session = await _client.connectCra(email: email, password: password, realm: DeskconnConfig.realm);
+      final authSession = await _openSignInSession(email: email, password: password);
+      await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
 
-      final res = await session!.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
-
-      if (res.args.isEmpty) {
-        throw Exception("Empty account response");
-      }
-
-      account = Map<String, dynamic>.from(res.args[0] as Map);
-
-      await Future.wait([loadDesktops(), _registerDevice(email)]);
-
-      loggedIn = true;
-      notifyListeners();
       return const OperationResult.success();
     } catch (e) {
-      session = null;
-      account = null;
-      desktops.clear();
-      loggedIn = false;
-
-      notifyListeners();
+      await _closeSignInSession();
       return OperationResult.failure(e.toString());
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<OperationResult> verifySignInOtp({required String email, required String otp}) async {
+    error = null;
+    _setLoading(true);
+
+    try {
+      final keys = await DeviceIdentity.ensureKeyPair();
+      final authSession = _signInSession;
+      if (authSession == null || !authSession.isConnected()) {
+        throw Exception('Sign-in session expired. Please sign in again.');
+      }
+
+      final publicKey = keys['publicKey']!;
+
+      final principalRes = await authSession
+          .call(DeskconnProcedures.accountLoginVerify, args: [email, otp, publicKey])
+          .timeout(DeskconnConfig.callTimeout);
+
+      if (principalRes.args.isEmpty) {
+        throw Exception("Empty login verification response");
+      }
+
+      final principal = Map<String, dynamic>.from(principalRes.args[0] as Map);
+
+      await _closeSignInSession();
+
+      await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
+      return const OperationResult.success();
+    } catch (e) {
+      await _resetSignedInState();
+      return OperationResult.failure(e.toString());
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<OperationResult> completeRegistrationSignIn({
+    required String email,
+    required Map<String, String> keys,
+    required Map<String, dynamic> principal,
+  }) async {
+    error = null;
+    _setLoading(true);
+
+    try {
+      await _completePrincipalSignIn(email: email, keys: keys, principal: principal);
+      return const OperationResult.success();
+    } catch (e) {
+      await _resetSignedInState(clearIdentity: true);
+      return OperationResult.failure(e.toString());
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> _completePrincipalSignIn({
+    required String email,
+    required Map<String, String> keys,
+    required Map<String, dynamic> principal,
+  }) async {
+    final principalId = principal['id']?.toString();
+    if (principalId == null || principalId.isEmpty) {
+      throw Exception("Principal ID not found in response");
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final randomSuffix = DateTime.now().microsecondsSinceEpoch;
+    final deviceName = 'android-$timestamp-$randomSuffix';
+    final deviceModel = await _getDeviceModel();
+    var identitySaveStarted = false;
+
+    try {
+      final newSession = await _client.connectCryptoSign(
+        authId: email,
+        privateKey: keys['privateKey']!,
+        realm: DeskconnConfig.realm,
+      );
+
+      final accountRes = await newSession.call(DeskconnProcedures.accountGet).timeout(DeskconnConfig.callTimeout);
+
+      if (accountRes.args.isEmpty) {
+        throw Exception("Empty account response");
+      }
+
+      session = newSession;
+      account = Map<String, dynamic>.from(accountRes.args[0] as Map);
+
+      identitySaveStarted = true;
+      await DeviceIdentity.save(
+        deviceId: principalId,
+        privateKey: keys['privateKey']!,
+        publicKey: keys['publicKey']!,
+        email: email,
+        deviceName: deviceName,
+        deviceModel: deviceModel,
+      );
+
+      await loadDesktops();
+
+      loggedIn = true;
+      notifyListeners();
+    } catch (_) {
+      if (identitySaveStarted) {
+        try {
+          await DeviceIdentity.clear();
+        } catch (_) {}
+      }
+      rethrow;
     }
   }
 
@@ -100,6 +228,7 @@ class SessionProvider extends ChangeNotifier {
     _setLoading(true);
 
     try {
+      await DeviceIdentity.ensureKeyPair();
       final hasIdentity = await DeviceIdentity.exists();
 
       if (!hasIdentity) {
@@ -158,13 +287,16 @@ class SessionProvider extends ChangeNotifier {
     } catch (_) {}
 
     try {
-      final identity = await DeviceIdentity.deviceId();
-      if (identity != null) {
+      final publicKey = await DeviceIdentity.publicKey();
+      if (publicKey != null) {
         try {
-          await session?.call(DeskconnProcedures.deviceDelete, args: [identity]).timeout(DeskconnConfig.callTimeout);
+          await session
+              ?.call(DeskconnProcedures.accountPrincipalDelete, args: [publicKey])
+              .timeout(DeskconnConfig.callTimeout);
         } catch (_) {}
       }
       await session?.close();
+      await _closeSignInSession();
     } catch (_) {}
 
     try {
@@ -181,6 +313,7 @@ class SessionProvider extends ChangeNotifier {
     } catch (_) {}
 
     session = null;
+    _signInSession = null;
     account = null;
     desktops.clear();
 
@@ -188,58 +321,6 @@ class SessionProvider extends ChangeNotifier {
     _setLoading(false);
 
     notifyListeners();
-  }
-
-  Future<void> _registerDevice(String email) async {
-    if (session == null) {
-      throw Exception('Session is not initialized');
-    }
-
-    try {
-      final hasIdentity = await DeviceIdentity.exists();
-      if (hasIdentity) {
-        final lastEmail = await DeviceIdentity.lastEmail();
-        if (lastEmail == email) {
-          return;
-        }
-      }
-
-      final privateKeyHex = await CryptoSignKeys.generatePrivateKey();
-      final publicKeyHex = await CryptoSignKeys.derivePublicKey(privateKeyHex);
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final randomSuffix = DateTime.now().microsecondsSinceEpoch;
-      final deviceName = 'android-$timestamp-$randomSuffix';
-      final deviceModel = await _getDeviceModel();
-
-      final res = await session!
-          .call(DeskconnProcedures.deviceCreate, args: [deviceName, publicKeyHex])
-          .timeout(DeskconnConfig.callTimeout);
-
-      if (res.args.isEmpty) {
-        throw Exception('Device registration failed: empty response');
-      }
-
-      final resultData = Map<String, dynamic>.from(res.args[0] as Map);
-      final deviceId = resultData['device_id'] ?? resultData['id'];
-
-      if (deviceId == null) {
-        throw Exception('Device ID not found in response');
-      }
-
-      await DeviceIdentity.clear();
-
-      await DeviceIdentity.save(
-        deviceId: deviceId,
-        privateKey: privateKeyHex,
-        publicKey: publicKeyHex,
-        email: email,
-        deviceName: deviceName,
-        deviceModel: deviceModel,
-      );
-    } catch (e) {
-      error = 'Device registration failed: $e';
-    }
   }
 
   Future<String> _getDeviceModel() async {

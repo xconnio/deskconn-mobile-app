@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
+
 class DeviceIdentity {
   static const _deviceIdKey = 'device_id';
   static const _privateKey = 'private_key';
@@ -47,6 +49,30 @@ class DeviceIdentity {
   static Future<String?> publicKey() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_publicKey);
+  }
+
+  static Future<bool> hasKeyPair() async {
+    final privateKey = await DeviceIdentity.privateKey();
+    final publicKey = await DeviceIdentity.publicKey();
+    return privateKey != null && publicKey != null;
+  }
+
+  static Future<Map<String, String>> ensureKeyPair() async {
+    final privateKey = await DeviceIdentity.privateKey();
+    final publicKey = await DeviceIdentity.publicKey();
+
+    if (privateKey != null && publicKey != null) {
+      return {'privateKey': privateKey, 'publicKey': publicKey};
+    }
+
+    final privateKeyHex = await CryptoSignKeys.generatePrivateKey();
+    final publicKeyHex = await CryptoSignKeys.derivePublicKey(privateKeyHex);
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(_publicKey, publicKeyHex);
+    await _secure.write(key: _privateKey, value: privateKeyHex);
+
+    return {'privateKey': privateKeyHex, 'publicKey': publicKeyHex};
   }
 
   static Future<String?> deviceName() async {
