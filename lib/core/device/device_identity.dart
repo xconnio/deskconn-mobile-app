@@ -25,15 +25,9 @@ class DeviceIdentity {
     await prefs.setString(_deviceIdKey, deviceId);
     await prefs.setString(_publicKey, publicKey);
 
-    if (email != null) {
-      await prefs.setString(_lastEmail, email);
-    }
-    if (deviceName != null) {
-      await prefs.setString(_deviceNameKey, deviceName);
-    }
-    if (deviceModel != null) {
-      await prefs.setString(_deviceModelKey, deviceModel);
-    }
+    if (email != null) await prefs.setString(_lastEmail, email);
+    if (deviceName != null) await prefs.setString(_deviceNameKey, deviceName);
+    if (deviceModel != null) await prefs.setString(_deviceModelKey, deviceModel);
 
     await _secure.write(key: _privateKey, value: privateKey);
   }
