@@ -312,7 +312,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         return false;
       }
       if (e is TimeoutException) return false;
-      return true;
+      return false;
     }
   }
 
