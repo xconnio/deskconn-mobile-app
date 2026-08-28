@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:xconn/xconn.dart';
 
 class QUICConnectionManager {
@@ -36,7 +37,11 @@ class QUICConnectionManager {
             _root = null;
           }
         });
+        ConnectivityService().reportBackendReachable();
         return newRoot;
+      } catch (e) {
+        ConnectivityService().reportBackendUnreachable();
+        rethrow;
       } finally {
         _connecting = null;
       }

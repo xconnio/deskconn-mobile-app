@@ -18,6 +18,27 @@ class ConnectivityService extends ChangeNotifier {
 
   bool hasConnection = true;
 
+  // hasConnection only reflects OS radio state (an interface is
+  // associated) — a captive portal, a VPN with no route, or the backend
+  // simply being down all still read as "connected". Connect attempts
+  // (QUICConnectionManager) report their real outcome here so the app can
+  // tell "network up, backend unreachable" apart from genuine offline.
+  bool backendReachable = true;
+
+  bool get isOnline => hasConnection && backendReachable;
+
+  void reportBackendReachable() {
+    if (backendReachable) return;
+    backendReachable = true;
+    notifyListeners();
+  }
+
+  void reportBackendUnreachable() {
+    if (!backendReachable) return;
+    backendReachable = false;
+    notifyListeners();
+  }
+
   Future<void> _init() async {
     try {
       hasConnection = _hasAny(await Connectivity().checkConnectivity());
