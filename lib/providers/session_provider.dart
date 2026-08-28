@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_mapper.dart';
 import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
@@ -108,7 +110,39 @@ class SessionProvider extends ChangeNotifier {
       return const OperationResult.success();
     } catch (e) {
       await _closeSignInSession();
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.signIn,
+          fallback: DeskconnErrorMessages.signInFailed,
+        ),
+      );
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<OperationResult> resendSignInOtp(String email) async {
+    error = null;
+    _setLoading(true);
+
+    try {
+      final authSession = _signInSession;
+      if (authSession == null || !authSession.isConnected()) {
+        return const OperationResult.failure(DeskconnErrorMessages.signInSessionExpired);
+      }
+
+      await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
+
+      return const OperationResult.success();
+    } catch (e) {
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.signInOtp,
+          fallback: DeskconnErrorMessages.resendVerificationCodeFailed,
+        ),
+      );
     } finally {
       _setLoading(false);
     }
@@ -143,7 +177,13 @@ class SessionProvider extends ChangeNotifier {
       return const OperationResult.success();
     } catch (e) {
       await _resetSignedInState();
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.signInOtp,
+          fallback: DeskconnErrorMessages.invalidSignInCode,
+        ),
+      );
     } finally {
       _setLoading(false);
     }
@@ -162,7 +202,13 @@ class SessionProvider extends ChangeNotifier {
       return const OperationResult.success();
     } catch (e) {
       await _resetSignedInState(clearIdentity: true);
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.accountVerification,
+          fallback: DeskconnErrorMessages.verificationSignInFailed,
+        ),
+      );
     } finally {
       _setLoading(false);
     }

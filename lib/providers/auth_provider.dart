@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_mapper.dart';
 import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
 import 'package:xconn/xconn.dart';
@@ -46,7 +48,13 @@ class AuthProvider extends ChangeNotifier {
 
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.signUp,
+          fallback: DeskconnErrorMessages.signUpFailed,
+        ),
+      );
     } finally {
       _setLoading(false);
     }
@@ -54,7 +62,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<AccountVerificationResult> verifyOtp(String otp, {required String publicKey}) async {
     if (pendingEmail == null) {
-      return const AccountVerificationResult.failure("No pending verification");
+      return const AccountVerificationResult.failure(DeskconnErrorMessages.pendingVerificationMissing);
     }
 
     try {
@@ -64,13 +72,19 @@ class AuthProvider extends ChangeNotifier {
           .timeout(DeskconnConfig.callTimeout);
 
       if (res.args.isEmpty) {
-        return const AccountVerificationResult.failure("Empty verification response");
+        return const AccountVerificationResult.failure(DeskconnErrorMessages.emptyVerificationResponse);
       }
 
       final principal = Map<String, dynamic>.from(res.args[0] as Map);
       return AccountVerificationResult.success(principal);
     } catch (e) {
-      return AccountVerificationResult.failure(e.toString());
+      return AccountVerificationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.accountVerification,
+          fallback: DeskconnErrorMessages.verificationFailed,
+        ),
+      );
     }
   }
 
@@ -82,7 +96,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<OperationResult> resendOtp() async {
     if (pendingEmail == null) {
-      return const OperationResult.failure("No pending verification");
+      return const OperationResult.failure(DeskconnErrorMessages.pendingVerificationMissing);
     }
 
     try {
@@ -90,7 +104,13 @@ class AuthProvider extends ChangeNotifier {
       await session.call(DeskconnProcedures.accountOtpResend, args: [pendingEmail]).timeout(DeskconnConfig.callTimeout);
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.accountVerification,
+          fallback: DeskconnErrorMessages.resendVerificationCodeFailed,
+        ),
+      );
     }
   }
 
@@ -103,13 +123,19 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.forgotPassword,
+          fallback: DeskconnErrorMessages.resetCodeSendFailed,
+        ),
+      );
     }
   }
 
   Future<OperationResult> resetPassword({required String otp, required String newPassword}) async {
     if (pendingEmail == null) {
-      return const OperationResult.failure("No pending password reset");
+      return const OperationResult.failure(DeskconnErrorMessages.pendingPasswordResetMissing);
     }
 
     try {
@@ -120,7 +146,13 @@ class AuthProvider extends ChangeNotifier {
 
       return const OperationResult.success();
     } catch (e) {
-      return OperationResult.failure(e.toString());
+      return OperationResult.failure(
+        DeskconnErrorMapper.messageFor(
+          e,
+          context: DeskconnErrorContext.resetPassword,
+          fallback: DeskconnErrorMessages.passwordChangeFailed,
+        ),
+      );
     }
   }
 

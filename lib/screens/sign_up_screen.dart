@@ -1,6 +1,8 @@
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/screens/verify_otp_screen.dart';
+import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/auth_card_layout.dart';
 import 'package:deskconn_mobile_app/widgets/password_requirement_item.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +26,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   String? emailError;
   String? nameError;
-  String? submitError;
   bool _obscurePassword = true;
 
   bool get _passwordMeetsRequirements => Validators.isPasswordValid(passCtrl.text);
@@ -61,7 +62,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
               onChanged: (v) {
                 setState(() {
                   emailError = null;
-                  submitError = null;
                 });
               },
               decoration: InputDecoration(labelText: 'Email', errorText: emailError),
@@ -77,7 +77,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
               onChanged: (v) {
                 setState(() {
                   nameError = null;
-                  submitError = null;
                 });
               },
               decoration: InputDecoration(labelText: 'Username', errorText: nameError),
@@ -91,11 +90,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
-              onChanged: (v) {
-                setState(() {
-                  submitError = null;
-                });
-              },
+              onChanged: (v) => setState(() {}),
               decoration: InputDecoration(
                 labelText: 'Password',
                 suffixIcon: IconButton(
@@ -128,7 +123,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             setState(() {
                               emailError = Validators.email(emailCtrl.text);
                               nameError = Validators.name(nameCtrl.text, label: 'Username');
-                              submitError = null;
                             });
 
                             if (emailError != null || nameError != null || !_passwordMeetsRequirements) {
@@ -146,23 +140,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             if (result.isSuccess) {
                               Navigator.push(context, MaterialPageRoute(builder: (_) => const VerifyOtpScreen()));
                             } else {
-                              setState(() {
-                                submitError = result.error;
-                              });
+                              AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.signUpFailed);
                             }
                           }
                         : null,
                     child: const Text('Create account'),
                   ),
-
-            if (submitError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                submitError!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
 
             const Divider(),
             TextButton(
