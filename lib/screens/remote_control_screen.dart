@@ -144,6 +144,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   bool _mprisBusy = false;
   List<_MprisPlayer> _players = [];
   bool? _isMuted;
+  bool _reconnecting = false;
 
   _MprisPlayer? get _primaryPlayer {
     if (_players.isEmpty) return null;
@@ -162,11 +163,34 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
+  // The cached session goes null forever once the connection dies mid-screen
+  // (no reconnect hook here previously), so every action after that point
+  // failed immediately against a stale null instead of trying to reacquire
+  // the connection first, the way DesktopConnectionManager's own callers do.
+  Future<Session?> _ensureSession() async {
+    final cached = _session;
+    if (cached != null) return cached;
+    if (mounted) setState(() => _reconnecting = true);
+    try {
+      final connection = await DesktopConnectionManager().acquire(
+        realm: widget.config.realm,
+        authId: widget.config.authId,
+        privateKey: widget.config.privateKey,
+        webRtcEnabled: widget.config.webRtcEnabled,
+      );
+      return connection.session;
+    } catch (_) {
+      return null;
+    } finally {
+      if (mounted) setState(() => _reconnecting = false);
+    }
+  }
+
   // User-initiated actions were previously calling _session?.call(...) and
   // silently doing nothing when the connection was gone — no feedback at
   // all. This routes them through one place that reports the failure.
   Future<void> _run(Future<void> Function(Session session) action) async {
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) {
       _showOffline();
       return;
@@ -174,9 +198,17 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     try {
       await action(session);
     } catch (_) {
+      // DesktopConnectionManager doesn't always evict a dead connection
+      // right away (WebRTC's own failure detection can take well over a
+      // minute) — without releasing here, _ensureSession() keeps handing
+      // back the same stale session and every action fails silently until
+      // something else happens to evict it.
+      await _releaseStaleSession();
       if (mounted) _showOffline();
     }
   }
+
+  Future<void> _releaseStaleSession() => DesktopConnectionManager().release(widget.config.realm);
 
   void _showOffline() {
     if (!mounted) return;
@@ -192,7 +224,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Future<void> _loadBrightness() async {
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) return;
     try {
       final result = await session.call(_procBrightnessGet).timeout(DeskconnConfig.callTimeout);
@@ -204,14 +236,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         });
       }
     } catch (e) {
-      if (mounted && e.toString().toLowerCase().contains('brightness device not available')) {
-        setState(() => _brightnessAvailable = false);
+      if (e.toString().toLowerCase().contains('brightness device not available')) {
+        if (mounted) setState(() => _brightnessAvailable = false);
+      } else {
+        await _releaseStaleSession();
       }
     }
   }
 
   Future<void> _loadPlayers() async {
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) return;
     try {
       final result = await session.call(_procMprisPlayers).timeout(DeskconnConfig.callTimeout);
@@ -225,18 +259,22 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           }).toList();
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      await _releaseStaleSession();
+    }
   }
 
   Future<void> _loadMuteState() async {
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) return;
     try {
       final result = await session.call(_procAudioIsMuted).timeout(DeskconnConfig.callTimeout);
       if (mounted && result.args.isNotEmpty) {
         setState(() => _isMuted = result.args[0] as bool);
       }
-    } catch (_) {}
+    } catch (_) {
+      await _releaseStaleSession();
+    }
   }
 
   Future<void> _toggleMute() async {
@@ -264,7 +302,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   Future<void> _takeScreenshot() async {
     if (_capturingScreenshot) return;
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) {
       _showOffline();
       return;
@@ -277,11 +315,11 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ScreenshotPreviewScreen(bytes: bytes)));
       }
     } catch (e) {
-      if (!mounted) return;
       if (e.toString().toLowerCase().contains('screenshot not enabled')) {
-        _showScreenshotDisabledDialog();
+        if (mounted) _showScreenshotDisabledDialog();
       } else {
-        _showOffline();
+        await _releaseStaleSession();
+        if (mounted) _showOffline();
       }
     } finally {
       if (mounted) setState(() => _capturingScreenshot = false);
@@ -301,7 +339,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   Future<void> _mprisCall(String proc, {String? playerName}) async {
     if (_mprisBusy) return;
-    final session = _session;
+    final session = await _ensureSession();
     if (session == null) return;
 
     setState(() => _mprisBusy = true);
@@ -350,7 +388,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.config.desktopName)),
+      appBar: AppBar(
+        title: Text(widget.config.desktopName),
+        bottom: _reconnecting
+            ? const PreferredSize(preferredSize: Size.fromHeight(2), child: LinearProgressIndicator(minHeight: 2))
+            : null,
+      ),
       body: Column(
         children: [
           Expanded(child: _buildBody(context)),
