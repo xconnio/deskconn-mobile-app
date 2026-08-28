@@ -9,6 +9,7 @@ class QUICConnectionManager {
   QUICConnectionManager._();
 
   QUICSession? _root;
+  Future<QUICSession>? _connecting;
 
   Future<Session> openSession(String realm, QUICDialerConfig config) async {
     final root = _root;
@@ -16,15 +17,28 @@ class QUICConnectionManager {
       return root.openSession(realm, config);
     }
 
-    final newRoot = await connectQUIC(DeskconnConfig.quicAddr, realm, config);
-    _root = newRoot;
-    newRoot.onDisconnect(() {
-      if (_root == newRoot) {
-        _root = null;
-      }
-    });
-
+    final newRoot = await _connectRoot(realm, config);
     return newRoot.openSession(realm, config);
+  }
+
+  // Coalesces concurrent callers into a single in-flight connect instead of
+  // racing separate connectQUIC() calls, whose last-writer-wins assignment
+  // to _root would silently orphan whichever session lost the race.
+  Future<QUICSession> _connectRoot(String realm, QUICDialerConfig config) {
+    return _connecting ??= () async {
+      try {
+        final newRoot = await connectQUIC(DeskconnConfig.quicAddr, realm, config);
+        _root = newRoot;
+        newRoot.onDisconnect(() {
+          if (_root == newRoot) {
+            _root = null;
+          }
+        });
+        return newRoot;
+      } finally {
+        _connecting = null;
+      }
+    }();
   }
 
   Future<void> close() async {
