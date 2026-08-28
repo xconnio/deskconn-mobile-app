@@ -46,6 +46,29 @@ class DesktopConnectionManager {
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
   final Set<String> _noWebRtcSupportRealms = {};
 
+  // A dropped connection immediately followed by a fresh WebRTC offer for
+  // the same realm has been observed to hard-crash the app (native "Callback
+  // invoked after it has been deleted" abort — see
+  // xconn-webrtc-dart/BUG_REPORT_dispose_native_callback_abort.md), most
+  // likely a lifecycle race between the old RTCPeerConnection's native
+  // teardown and the new one's setup. This is a mitigation, not a verified
+  // fix — it narrows the overlap window, it doesn't prove it's closed.
+  static const _webRtcDisposeCooldown = Duration(milliseconds: 500);
+  final Map<String, DateTime> _lastWebRtcDisposeAt = {};
+
+  void _markWebRtcDisposed(String realm) {
+    _lastWebRtcDisposeAt[realm] = DateTime.now();
+  }
+
+  Future<void> _awaitWebRtcDisposeCooldown(String realm) async {
+    final lastDispose = _lastWebRtcDisposeAt[realm];
+    if (lastDispose == null) return;
+    final remaining = _webRtcDisposeCooldown - DateTime.now().difference(lastDispose);
+    if (remaining > Duration.zero) {
+      await Future.delayed(remaining);
+    }
+  }
+
   void _log(String message) {
     debugPrint('[DesktopSession ${DateTime.now().toIso8601String()}] $message');
   }
@@ -140,6 +163,7 @@ class DesktopConnectionManager {
     bool isP2P = false;
 
     if (willUseWebRtc) {
+      await _awaitWebRtcDisposeCooldown(realm);
       if (!kIsWeb) {
         try {
           if (Platform.isAndroid) {
@@ -214,6 +238,7 @@ class DesktopConnectionManager {
       if (_connections[key] == connection) {
         _connections.remove(key);
         connection.isAgentOnline = false;
+        if (connection.isP2P) _markWebRtcDisposed(realm);
         unawaited(connection.dispose());
         _log('session disconnected realm=$realm active=${_connections.length}');
         connection.onDisconnected?.call();
@@ -228,6 +253,7 @@ class DesktopConnectionManager {
     final connection = _connections.remove(key);
     if (connection != null) {
       _log('release realm=$realm p2p=${connection.isP2P} remaining=${_connections.length}');
+      if (connection.isP2P) _markWebRtcDisposed(realm);
       await connection.dispose();
     } else {
       _log('release realm=$realm skipped=no_session');
