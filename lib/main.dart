@@ -131,7 +131,7 @@ class _OfflineDialogState extends State<_OfflineDialog> {
   }
 
   void _maybeClose() {
-    if (mounted && ConnectivityService().hasConnection) {
+    if (mounted && ConnectivityService().isOnline) {
       Navigator.of(context).pop();
     }
   }
@@ -195,7 +195,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   void initState() {
     super.initState();
-    _wasOffline = !ConnectivityService().hasConnection;
+    _wasOffline = !ConnectivityService().isOnline;
     ConnectivityService().addListener(_handleConnectivityChange);
     ShareService.instance.pendingFiles.addListener(_handlePendingSharedFiles);
 
@@ -251,7 +251,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   // re-triggers desktop list loading, which itself reconnects the account
   // session (see SessionProvider._ensureSession).
   void _handleConnectivityChange() {
-    final online = ConnectivityService().hasConnection;
+    final online = ConnectivityService().isOnline;
     if (!online && !_wasOffline) {
       _showOfflineDialog();
     } else if (online && _wasOffline && mounted) {
