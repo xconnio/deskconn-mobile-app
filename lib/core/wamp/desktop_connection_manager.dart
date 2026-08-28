@@ -204,13 +204,20 @@ class DesktopConnectionManager {
     _log('session cached realm=$realm p2p=$isP2P active=${_connections.length}');
 
     finalSession.onDisconnect(() {
+      // Only treat this as an unexpected drop (and notify the listening
+      // screen) if the connection was still the manager's active entry.
+      // A deliberate release() already removed it from the cache before
+      // closing the session, so this fires from that close() call too —
+      // without this guard, that self-triggered "disconnect" would race
+      // the caller's own reconnect (e.g. release() -> switching to routed)
+      // with a second, independent reconnect using stale preferences.
       if (_connections[key] == connection) {
         _connections.remove(key);
         connection.isAgentOnline = false;
         unawaited(connection.dispose());
         _log('session disconnected realm=$realm active=${_connections.length}');
+        connection.onDisconnected?.call();
       }
-      connection.onDisconnected?.call();
     });
 
     return connection;
