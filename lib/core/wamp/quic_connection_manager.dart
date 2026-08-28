@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:xconn/xconn.dart';
 
@@ -27,7 +29,7 @@ class QUICConnectionManager {
   Future<QUICSession> _connectRoot(String realm, QUICDialerConfig config) {
     return _connecting ??= () async {
       try {
-        final newRoot = await connectQUIC(DeskconnConfig.quicAddr, realm, config);
+        final newRoot = await _withRetry(() => connectQUIC(DeskconnConfig.quicAddr, realm, config));
         _root = newRoot;
         newRoot.onDisconnect(() {
           if (_root == newRoot) {
@@ -46,4 +48,26 @@ class QUICConnectionManager {
     _root = null;
     await root?.close();
   }
+}
+
+// A single transient hiccup (e.g. a brief handshake timeout during a cell
+// tower handoff) previously required a manual user action (pull-to-refresh,
+// leaving/reopening a screen) to recover. Retrying here, inside the
+// deduped in-flight future, means concurrent callers share one retry
+// sequence instead of each independently retrying against a struggling
+// backend.
+Future<T> _withRetry<T>(
+  Future<T> Function() attempt, {
+  int maxAttempts = 3,
+  Duration delay = const Duration(milliseconds: 300),
+}) async {
+  for (var i = 0; i < maxAttempts; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      if (i == maxAttempts - 1) rethrow;
+      await Future.delayed(delay);
+    }
+  }
+  throw StateError('unreachable');
 }
