@@ -132,6 +132,40 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
     }
   }
 
+  bool _reconnecting = false;
+
+  // Polling had no onDisconnected hook and never checked isConnected(), so
+  // a mid-session drop just kept re-failing every tick forever with the
+  // same "Request timed out" message until the user backed out and
+  // reopened the screen. Mirrors the reconnect DesktopConnectionManager
+  // already does the acquire() half of in _initialize().
+  Future<void> _reconnect() async {
+    if (_reconnecting) return;
+    _reconnecting = true;
+    if (mounted) setState(() => _actionError = 'Reconnecting…');
+    try {
+      final connection = await DesktopConnectionManager().reacquire(
+        realm: widget.config.realm,
+        authId: widget.config.authId,
+        privateKey: widget.config.privateKey,
+        webRtcEnabled: widget.config.webRtcEnabled,
+      );
+      connection.isAgentOnline = true;
+      if (!mounted) {
+        _reconnecting = false;
+        return;
+      }
+      _controller = ResourceMonitorController(connection.session);
+      setState(() {
+        _actionError = null;
+        _reconnecting = false;
+      });
+    } catch (e) {
+      _reconnecting = false;
+      if (mounted) setState(() => _actionError = _friendlyError(e));
+    }
+  }
+
   void _startPolling() {
     _timer?.cancel();
     unawaited(_pollTick());
@@ -166,6 +200,7 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
       });
     } catch (e) {
       if (!mounted) return;
+      final sessionAlive = !DesktopConnectionManager().isDeadSessionError(controller.session, e);
       final message = _friendlyError(e);
       setState(() {
         _loading = false;
@@ -175,6 +210,9 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
           _actionError = message;
         }
       });
+      if (!sessionAlive && !_reconnecting) {
+        unawaited(_reconnect());
+      }
     }
   }
 
@@ -293,21 +331,40 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
                       if (_actionError != null)
                         Container(
                           width: double.infinity,
-                          color: Colors.red.withValues(alpha: 0.08),
+                          color: _reconnecting
+                              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+                              : Colors.red.withValues(alpha: 0.08),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, color: Colors.red, size: 18),
+                              if (_reconnecting)
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                )
+                              else
+                                const Icon(Icons.error_outline, color: Colors.red, size: 18),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(_actionError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                                child: Text(
+                                  _actionError!,
+                                  style: TextStyle(
+                                    color: _reconnecting ? Theme.of(context).colorScheme.primary : Colors.red,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 16),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () => setState(() => _actionError = null),
-                              ),
+                              if (!_reconnecting)
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 16),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => setState(() => _actionError = null),
+                                ),
                             ],
                           ),
                         ),

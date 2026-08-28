@@ -260,6 +260,29 @@ class DesktopConnectionManager {
     }
   }
 
+  // get()'s own isConnected() check can lag well behind a connection
+  // actually being unusable (WebRTC's failure detection can take over a
+  // minute — see webrtc-dispose-cooldown's bug report), so a screen can
+  // still be handed a cached session that fails every call. A timed-out
+  // call is treated as just as dead as a closed one, otherwise every
+  // retry on this realm keeps reusing the same zombie session forever.
+  bool isDeadSessionError(Session session, Object error) {
+    return !(session.isConnected() && error is! TimeoutException);
+  }
+
+  // Screens hitting a dead cached session (see isDeadSessionError) call
+  // this instead of release()+acquire() separately, so the recovery step
+  // is one call site instead of duplicated per screen.
+  Future<DesktopConnection> reacquire({
+    required String realm,
+    required String authId,
+    required String privateKey,
+    required bool webRtcEnabled,
+  }) async {
+    await release(realm);
+    return acquire(realm: realm, authId: authId, privateKey: privateKey, webRtcEnabled: webRtcEnabled);
+  }
+
   Future<void> invalidateAll() async {
     final realms = _connections.keys
         .map((key) => key.startsWith('session:') ? key.substring('session:'.length) : key)

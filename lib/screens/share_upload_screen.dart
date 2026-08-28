@@ -11,6 +11,7 @@ import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:xconn/xconn.dart';
 
 class ShareUploadScreen extends StatefulWidget {
   final List<SharedUploadFile> files;
@@ -59,25 +60,8 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     });
 
     try {
-      final authId = await DeviceIdentity.lastEmail();
-      final privateKey = await DeviceIdentity.privateKey();
-      if (authId == null || privateKey == null) {
-        throw Exception('Missing credentials');
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
-      final existing = DesktopConnectionManager().get(realm);
-      final connection =
-          existing ??
-          await DesktopConnectionManager().acquire(
-            realm: realm,
-            authId: authId,
-            privateKey: privateKey,
-            webRtcEnabled: webRtcEnabled,
-          );
-
-      final controller = FileExplorerController(connection.session, realm);
+      final session = await _connectTo(realm);
+      final controller = FileExplorerController(session, realm);
       final browse = await controller.browse('');
       if (!mounted) return;
       setState(() {
@@ -94,9 +78,51 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     }
   }
 
+  Future<Session> _connectTo(String realm) async {
+    final authId = await DeviceIdentity.lastEmail();
+    final privateKey = await DeviceIdentity.privateKey();
+    if (authId == null || privateKey == null) {
+      throw Exception('Missing credentials');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final existing = DesktopConnectionManager().get(realm);
+    final connection =
+        existing ??
+        await DesktopConnectionManager().acquire(
+          realm: realm,
+          authId: authId,
+          privateKey: privateKey,
+          webRtcEnabled: webRtcEnabled,
+        );
+    return connection.session;
+  }
+
+  Future<void> _reconnectTo(String realm) async {
+    final authId = await DeviceIdentity.lastEmail();
+    final privateKey = await DeviceIdentity.privateKey();
+    if (authId == null || privateKey == null) {
+      throw Exception('Missing credentials');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final connection = await DesktopConnectionManager().reacquire(
+      realm: realm,
+      authId: authId,
+      privateKey: privateKey,
+      webRtcEnabled: webRtcEnabled,
+    );
+    _controller = FileExplorerController(connection.session, realm);
+  }
+
+  // Mirrors the reconnect-on-drop pattern used elsewhere (FileExplorerScreen,
+  // ResourceMonitorScreen) — without it, a dead cached session fails every
+  // browse forever until the user backs all the way out and reopens this
+  // dialog from scratch.
   Future<void> _loadPath(String path) async {
     final controller = _controller;
-    if (controller == null) return;
+    final realm = _desktop?['realm']?.toString();
+    if (controller == null || realm == null) return;
     setState(() {
       _loadingPath = true;
       _error = null;
@@ -110,10 +136,28 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loadingPath = false;
-        _error = 'Could not open folder: $e';
-      });
+      if (!DesktopConnectionManager().isDeadSessionError(controller.session, e)) {
+        setState(() {
+          _loadingPath = false;
+          _error = 'Could not open folder: $e';
+        });
+        return;
+      }
+      try {
+        await _reconnectTo(realm);
+        final browse = await _controller!.browse(path);
+        if (!mounted) return;
+        setState(() {
+          _browse = browse;
+          _loadingPath = false;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _loadingPath = false;
+          _error = 'Could not open folder: $e';
+        });
+      }
     }
   }
 
@@ -169,6 +213,16 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       );
       Navigator.of(context).pop();
     } catch (e) {
+      // Doesn't auto-retry the upload itself (partial-transfer state makes
+      // that unsafe to resume blindly), but a dead session otherwise leaves
+      // every subsequent manual retry failing the same way forever — so at
+      // least get the connection healthy again for the next tap.
+      final realm = _desktop?['realm']?.toString();
+      if (realm != null && DesktopConnectionManager().isDeadSessionError(controller.session, e)) {
+        try {
+          await _reconnectTo(realm);
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         _uploading = false;
