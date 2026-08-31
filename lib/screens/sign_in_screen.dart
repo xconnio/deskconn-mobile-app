@@ -1,8 +1,10 @@
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/screens/forgot_password_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_otp_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_up_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
+import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/theme_toggle.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +26,6 @@ class _SignInScreenState extends State<SignInScreen> {
   final passFocus = FocusNode();
   String? emailError;
   String? passwordError;
-  String? submitError;
   bool _obscurePassword = true;
 
   void _clearForm() {
@@ -32,7 +33,6 @@ class _SignInScreenState extends State<SignInScreen> {
     passCtrl.clear();
     emailError = null;
     passwordError = null;
-    submitError = null;
   }
 
   @override
@@ -95,11 +95,10 @@ class _SignInScreenState extends State<SignInScreen> {
                             textInputAction: TextInputAction.next,
                             onSubmitted: (_) => passFocus.requestFocus(),
                             onChanged: (v) {
-                              if (emailError != null || passwordError != null || submitError != null) {
+                              if (emailError != null || passwordError != null) {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
-                                  submitError = null;
                                 });
                               }
                             },
@@ -115,11 +114,10 @@ class _SignInScreenState extends State<SignInScreen> {
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => FocusScope.of(context).unfocus(),
                             onChanged: (v) {
-                              if (emailError != null || passwordError != null || submitError != null) {
+                              if (emailError != null || passwordError != null) {
                                 setState(() {
                                   emailError = null;
                                   passwordError = null;
-                                  submitError = null;
                                 });
                               }
                             },
@@ -158,7 +156,6 @@ class _SignInScreenState extends State<SignInScreen> {
                                 setState(() {
                                   emailError = Validators.email(emailCtrl.text);
                                   passwordError = Validators.required(passCtrl.text, label: 'Password');
-                                  submitError = null;
                                 });
 
                                 if (emailError != null || passwordError != null) {
@@ -176,22 +173,11 @@ class _SignInScreenState extends State<SignInScreen> {
                                     MaterialPageRoute(builder: (_) => SignInOtpScreen(email: email)),
                                   );
                                 } else {
-                                  setState(() {
-                                    submitError = result.error ?? 'Unable to send verification code';
-                                  });
+                                  AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.signInFailed);
                                 }
                               },
                               child: const Text('Sign in'),
                             ),
-
-                          if (submitError != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              submitError!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Theme.of(context).colorScheme.error),
-                            ),
-                          ],
 
                           const SizedBox(height: 12),
                           Align(

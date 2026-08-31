@@ -1,8 +1,12 @@
+import 'package:deskconn_mobile_app/core/auth/otp_resend_cooldown.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
+import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:deskconn_mobile_app/widgets/otp_code_field.dart';
+import 'package:deskconn_mobile_app/widgets/otp_resend_button.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,23 +22,35 @@ class SignInOtpScreen extends StatefulWidget {
 class _SignInOtpScreenState extends State<SignInOtpScreen> {
   final otpCtrl = TextEditingController();
   final otpFocus = FocusNode();
+  final _resendCooldown = OtpResendCooldown();
 
-  String? submitError;
+  bool _resending = false;
 
   bool get _canVerify => otpCtrl.text.length == 6;
+  bool get _canResend => !_resending && _resendCooldown.canResend;
+
+  @override
+  void initState() {
+    super.initState();
+    _resendCooldown.start(onChanged: _refreshCooldown, notifyImmediately: false);
+  }
 
   @override
   void dispose() {
+    _resendCooldown.dispose();
     otpCtrl.dispose();
     otpFocus.dispose();
     super.dispose();
+  }
+
+  void _refreshCooldown() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _verify() async {
     if (!_canVerify) return;
 
     FocusScope.of(context).unfocus();
-    setState(() => submitError = null);
 
     final session = context.read<SessionProvider>();
     final result = await session.verifySignInOtp(email: widget.email, otp: otpCtrl.text);
@@ -44,9 +60,30 @@ class _SignInOtpScreenState extends State<SignInOtpScreen> {
     if (result.isSuccess && session.loggedIn) {
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DesktopListScreen()), (_) => false);
     } else {
-      setState(() {
-        submitError = result.error ?? 'Invalid or expired code';
-      });
+      AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.invalidSignInCode);
+    }
+  }
+
+  Future<void> _resendCode() async {
+    if (!_canResend) return;
+
+    setState(() {
+      _resending = true;
+    });
+
+    final result = await context.read<SessionProvider>().resendSignInOtp(widget.email);
+
+    if (!mounted) return;
+
+    setState(() {
+      _resending = false;
+    });
+
+    if (result.isSuccess) {
+      otpCtrl.clear();
+      _resendCooldown.start(onChanged: _refreshCooldown);
+    } else {
+      AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.resendVerificationCodeFailed);
     }
   }
 
@@ -84,11 +121,7 @@ class _SignInOtpScreenState extends State<SignInOtpScreen> {
                             controller: otpCtrl,
                             focusNode: otpFocus,
                             enabled: !session.isLoading,
-                            onChanged: (_) {
-                              setState(() {
-                                submitError = null;
-                              });
-                            },
+                            onChanged: (_) => setState(() {}),
                           ),
                           const SizedBox(height: 24),
                           if (session.isLoading)
@@ -104,14 +137,12 @@ class _SignInOtpScreenState extends State<SignInOtpScreen> {
                             )
                           else
                             ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
-                          if (submitError != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              submitError!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Theme.of(context).colorScheme.error),
-                            ),
-                          ],
+                          const SizedBox(height: 12),
+                          OtpResendButton(
+                            label: _resendCooldown.label,
+                            isLoading: _resending,
+                            onPressed: session.isLoading || !_canResend ? null : _resendCode,
+                          ),
                         ],
                       ),
                     ),

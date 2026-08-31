@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/screens/verify_reset_otp_screen.dart';
+import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/auth_card_layout.dart';
 import 'package:deskconn_mobile_app/widgets/validators.dart';
 
@@ -17,7 +19,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailCtrl = TextEditingController();
 
   String? emailError;
-  String? submitError;
 
   bool _loading = false;
 
@@ -50,10 +51,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 if (emailError != null) {
                   setState(() {
                     emailError = null;
-                    submitError = null;
                   });
-                } else if (submitError != null) {
-                  setState(() => submitError = null);
                 }
               },
               decoration: InputDecoration(labelText: 'Email', errorText: emailError),
@@ -69,7 +67,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                       setState(() {
                         emailError = Validators.email(emailCtrl.text);
-                        submitError = null;
                       });
 
                       if (emailError != null) {
@@ -83,7 +80,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       final navigator = Navigator.of(context);
                       final result = await auth.requestPasswordReset(emailCtrl.text.trim());
 
-                      if (!mounted) return;
+                      if (!context.mounted) return;
 
                       setState(() {
                         _loading = false;
@@ -92,22 +89,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       if (result.isSuccess) {
                         await navigator.push(MaterialPageRoute(builder: (_) => const VerifyResetOtpScreen()));
                       } else {
-                        setState(() {
-                          submitError = result.error;
-                        });
+                        AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.resetCodeSendFailed);
                       }
                     },
               child: const Text("Send reset code"),
             ),
-
-            if (submitError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                submitError!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
           ],
         ),
       ),

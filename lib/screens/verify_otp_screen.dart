@@ -1,11 +1,13 @@
-import 'dart:async';
-
+import 'package:deskconn_mobile_app/core/auth/otp_resend_cooldown.dart';
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/screens/desktop_list_screen.dart';
+import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/auth_card_layout.dart';
 import 'package:deskconn_mobile_app/widgets/otp_code_field.dart';
+import 'package:deskconn_mobile_app/widgets/otp_resend_button.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,69 +19,32 @@ class VerifyOtpScreen extends StatefulWidget {
 }
 
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
-  static const _resendCooldown = Duration(minutes: 1);
-
   final otpCtrl = TextEditingController();
   final otpFocus = FocusNode();
+  final _resendCooldown = OtpResendCooldown();
 
-  Timer? _resendTimer;
-  int _resendSecondsRemaining = _resendCooldown.inSeconds;
   bool _loading = false;
   bool _resending = false;
-  String? submitError;
 
   bool get _canVerify => !_loading && !_resending && otpCtrl.text.length == 6;
-  bool get _canResend => !_loading && !_resending && _resendSecondsRemaining == 0;
-
-  String get _resendLabel {
-    if (_resendSecondsRemaining == 0) return 'Resend code';
-
-    final minutes = _resendSecondsRemaining ~/ 60;
-    final seconds = (_resendSecondsRemaining % 60).toString().padLeft(2, '0');
-    return 'Resend code in $minutes:$seconds';
-  }
+  bool get _canResend => !_loading && !_resending && _resendCooldown.canResend;
 
   @override
   void initState() {
     super.initState();
-    _startResendCooldown(notify: false);
+    _resendCooldown.start(onChanged: _refreshCooldown, notifyImmediately: false);
   }
 
   @override
   void dispose() {
-    _resendTimer?.cancel();
+    _resendCooldown.dispose();
     otpCtrl.dispose();
     otpFocus.dispose();
     super.dispose();
   }
 
-  void _startResendCooldown({bool notify = true}) {
-    _resendTimer?.cancel();
-    void resetCooldown() {
-      _resendSecondsRemaining = _resendCooldown.inSeconds;
-    }
-
-    if (notify) {
-      setState(resetCooldown);
-    } else {
-      resetCooldown();
-    }
-
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-
-      if (_resendSecondsRemaining <= 1) {
-        timer.cancel();
-        setState(() {
-          _resendSecondsRemaining = 0;
-        });
-        return;
-      }
-
-      setState(() {
-        _resendSecondsRemaining--;
-      });
-    });
+  void _refreshCooldown() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _verify() async {
@@ -88,7 +53,6 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
-      submitError = null;
     });
 
     try {
@@ -97,8 +61,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (email == null) {
         setState(() {
           _loading = false;
-          submitError = 'Verification session expired. Please create your account again.';
         });
+        AppSnackBar.showError(context, DeskconnErrorMessages.verificationSessionExpired);
         return;
       }
 
@@ -110,8 +74,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (!result.isSuccess) {
         setState(() {
           _loading = false;
-          submitError = result.error ?? 'Verification failed. Please try again.';
         });
+        AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.verificationFailed);
         return;
       }
 
@@ -119,8 +83,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (principal == null) {
         setState(() {
           _loading = false;
-          submitError = 'Verification completed, but sign-in could not be initialized.';
         });
+        AppSnackBar.showError(context, DeskconnErrorMessages.verificationSignInNotInitialized);
         return;
       }
 
@@ -135,8 +99,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (!signInResult.isSuccess) {
         setState(() {
           _loading = false;
-          submitError = signInResult.error ?? 'Verification completed, but sign-in failed.';
         });
+        AppSnackBar.showError(context, signInResult.error ?? DeskconnErrorMessages.verificationSignInFailed);
         return;
       }
 
@@ -146,8 +110,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        submitError = 'Verification failed. Please try again.';
       });
+      AppSnackBar.showError(context, DeskconnErrorMessages.verificationFailed);
     }
   }
 
@@ -156,7 +120,6 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
     setState(() {
       _resending = true;
-      submitError = null;
     });
 
     final result = await context.read<AuthProvider>().resendOtp();
@@ -165,11 +128,13 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
     setState(() {
       _resending = false;
-      submitError = result.isSuccess ? null : result.error;
     });
 
     if (result.isSuccess) {
-      _startResendCooldown();
+      otpCtrl.clear();
+      _resendCooldown.start(onChanged: _refreshCooldown);
+    } else {
+      AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.resendVerificationCodeFailed);
     }
   }
 
@@ -192,11 +157,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
               controller: otpCtrl,
               focusNode: otpFocus,
               enabled: !_loading && !_resending,
-              onChanged: (_) {
-                setState(() {
-                  submitError = null;
-                });
-              },
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 24),
             if (_loading)
@@ -207,20 +168,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
             else
               ElevatedButton(onPressed: _canVerify ? _verify : null, child: const Text('Verify')),
             const SizedBox(height: 12),
-            TextButton(
+            OtpResendButton(
+              label: _resendCooldown.label,
+              isLoading: _resending,
               onPressed: _canResend ? _resendCode : null,
-              child: _resending
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(_resendLabel),
             ),
-            if (submitError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                submitError!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
           ],
         ),
       ),

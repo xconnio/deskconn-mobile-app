@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/widgets/app_snack_bar.dart';
 import 'package:deskconn_mobile_app/widgets/auth_card_layout.dart';
@@ -19,8 +20,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final passCtrl = TextEditingController();
   final confirmPassCtrl = TextEditingController();
   final confirmPassFocus = FocusNode();
-
-  String? submitError;
 
   bool _loading = false;
   bool _obscurePassword = true;
@@ -44,7 +43,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
-      submitError = null;
     });
 
     final result = await context.read<AuthProvider>().resetPassword(otp: widget.otp, newPassword: passCtrl.text);
@@ -56,14 +54,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     if (result.isSuccess) {
-      AppSnackBar.showSuccess(context, 'Password changed successfully');
+      AppSnackBar.showSuccess(context, DeskconnErrorMessages.passwordChanged);
       Navigator.popUntil(context, (route) => route.isFirst);
       return;
     }
 
-    setState(() {
-      submitError = result.error;
-    });
+    AppSnackBar.showError(context, result.error ?? DeskconnErrorMessages.passwordChangeFailed);
   }
 
   @override
@@ -81,11 +77,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               controller: passCtrl,
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.next,
-              onChanged: (_) {
-                setState(() {
-                  submitError = null;
-                });
-              },
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) => confirmPassFocus.requestFocus(),
               decoration: InputDecoration(
                 labelText: "Password",
@@ -107,11 +99,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               focusNode: confirmPassFocus,
               obscureText: _obscureConfirmPassword,
               textInputAction: TextInputAction.done,
-              onChanged: (_) {
-                setState(() {
-                  submitError = null;
-                });
-              },
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
               decoration: InputDecoration(
                 labelText: "Confirm password",
@@ -132,14 +120,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text("Change password"),
             ),
-            if (submitError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                submitError!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
           ],
         ),
       ),
