@@ -56,6 +56,27 @@ const kTextExts = {
 const kVideoExts = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'm4v', 'wmv', '3gp', 'ogv'};
 const kAudioExts = {'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'};
 
+const kMediaMimeTypes = {
+  'mp4': 'video/mp4',
+  'm4v': 'video/mp4',
+  'mkv': 'video/x-matroska',
+  'avi': 'video/x-msvideo',
+  'mov': 'video/quicktime',
+  'webm': 'video/webm',
+  'flv': 'video/x-flv',
+  'wmv': 'video/x-ms-wmv',
+  '3gp': 'video/3gpp',
+  'ogv': 'video/ogg',
+  'mp3': 'audio/mpeg',
+  'wav': 'audio/wav',
+  'ogg': 'audio/ogg',
+  'flac': 'audio/flac',
+  'aac': 'audio/aac',
+  'm4a': 'audio/mp4',
+  'wma': 'audio/x-ms-wma',
+  'opus': 'audio/opus',
+};
+
 bool isPreviewSupported(String ext) =>
     kImageExts.contains(ext) ||
     kTextExts.contains(ext) ||

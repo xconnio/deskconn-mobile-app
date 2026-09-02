@@ -8,6 +8,8 @@ import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
+import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
+import 'package:deskconn_mobile_app/core/wamp/file_stream_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
 
 const bool kForceWebRtcOnly = false;
@@ -25,6 +27,16 @@ class DesktopConnection {
 
   void Function()? onDisconnected;
 
+  FileStreamServer? _fileStreamServer;
+
+  // Only available when this connection is P2P (webRtcSession != null); lazily
+  // created so a connection that never previews media never opens the server.
+  FileStreamServer? get fileStreamServer {
+    final rtc = webRtcSession;
+    if (rtc == null) return null;
+    return _fileStreamServer ??= FileStreamServer(FileStreamService(rtc));
+  }
+
   DesktopConnection({required this.session, required this.isP2P, this.webRtcSession});
 
   Future<void> dispose() async {
@@ -34,6 +46,7 @@ class DesktopConnection {
     try {
       await webRtcSession?.connection.dispose();
     } catch (_) {}
+    await _fileStreamServer?.dispose();
   }
 }
 
@@ -321,6 +334,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     ordered: true,
     id: 0,
     topicAnswererOnCandidate: config.topicAnswererOnCandidate,
+    additionalChannels: fileStreamChannelLabels(),
   );
 
   final offerFuture = offerer.offer(offerConfig);
@@ -378,7 +392,12 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
       onTimeout: () => throw TimeoutException('WebRTC data channel did not open', const Duration(seconds: 20)),
     );
 
-    final webRtcSession = web_rtc.WebRTCSession(connection: offerer.connection!, channel: channel);
+    final webRtcSession = web_rtc.WebRTCSession(
+      connection: offerer.connection!,
+      channel: channel,
+      incomingChannels: offerer.incomingChannels,
+      extraChannel: offerer.extraChannel,
+    );
     final base = await joinPeer(web_rtc.WebRTCPeer(channel), config.realm, config.serializer!, config.authenticator!);
     return _WampWebRTCConnection(session: Session(base), webRtcSession: webRtcSession);
   } catch (_) {
