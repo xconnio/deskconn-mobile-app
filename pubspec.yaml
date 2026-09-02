@@ -51,7 +51,9 @@ dependencies:
   xconn:
     git: https://github.com/xconnio/xconn-dart
   xconn_webrtc_dart:
-    git: https://github.com/xconnio/xconn-webrtc-dart.git
+    git:
+      url: https://github.com/xconnio/xconn-webrtc-dart.git
+      ref: webrtc-extra-data-channels
   flutter_webrtc: ^1.4.1
 
 
@@ -67,6 +69,7 @@ dependencies:
   open_filex: ^4.7.0
   pro_image_editor: 11.23.0
   share_plus: 12.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
