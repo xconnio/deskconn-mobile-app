@@ -8,6 +8,7 @@ import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
@@ -46,18 +47,34 @@ class DesktopConnection {
     try {
       await webRtcSession?.connection.dispose();
     } catch (_) {}
-    await _fileStreamServer?.dispose();
+    try {
+      await _fileStreamServer?.dispose();
+    } catch (_) {}
   }
 }
 
 class DesktopConnectionManager {
   static final DesktopConnectionManager _instance = DesktopConnectionManager._();
   factory DesktopConnectionManager() => _instance;
-  DesktopConnectionManager._();
+  DesktopConnectionManager._() {
+    ConnectivityService().onNetworkChanged.listen((_) => _handleNetworkChanged());
+    Timer.periodic(_heartbeatInterval, (_) => unawaited(_runHeartbeat()));
+  }
 
   final Map<String, DesktopConnection> _connections = {};
   final Map<String, Future<DesktopConnection>> _pendingConnections = {};
   final Set<String> _noWebRtcSupportRealms = {};
+  final Set<String> _everConnectedRealms = {};
+  final Map<String, int> _webRtcFailureCount = {};
+
+  final ValueNotifier<bool> isReconnecting = ValueNotifier(false);
+
+  static const _webRtcFailureFallbackThreshold = 2;
+  static const _heartbeatInterval = Duration(seconds: 20);
+
+  void _recomputeReconnecting() {
+    isReconnecting.value = _pendingConnections.keys.any(_everConnectedRealms.contains);
+  }
 
   // A dropped connection immediately followed by a fresh WebRTC offer for
   // the same realm has been observed to hard-crash the app (native "Callback
@@ -125,12 +142,14 @@ class DesktopConnectionManager {
 
     final future = _connectInternal(realm: realm, authId: authId, webRtcEnabled: webRtcEnabled, privateKey: privateKey);
     _pendingConnections[pendingKey] = future;
+    _recomputeReconnecting();
 
     try {
       return await future;
     } finally {
       if (_pendingConnections[pendingKey] == future) {
         _pendingConnections.remove(pendingKey);
+        _recomputeReconnecting();
       }
     }
   }
@@ -195,7 +214,6 @@ class DesktopConnectionManager {
           debugPrint('Failed to configure WebRTC audio: $e');
         }
       }
-      const connectTimeout = Duration(seconds: 20);
       Object? lastError;
       try {
         final config = web_rtc.ClientConfig(
@@ -211,7 +229,7 @@ class DesktopConnectionManager {
           authenticator: CryptoSignAuthenticator(authId, privateKey),
         );
 
-        final connection = await _connectWampWithWebRTC(config).timeout(connectTimeout);
+        final connection = await _connectWampWithWebRTC(config);
         finalSession = connection.session;
         isP2P = true;
         _connections[key] = DesktopConnection(
@@ -219,6 +237,7 @@ class DesktopConnectionManager {
           isP2P: isP2P,
           webRtcSession: connection.webRtcSession,
         );
+        _webRtcFailureCount.remove(realm);
         _log('connect success realm=$realm transport=webrtc');
       } catch (e) {
         lastError = e;
@@ -228,37 +247,70 @@ class DesktopConnectionManager {
       }
 
       if (lastError != null) {
-        _log('connect failed realm=$realm webrtc_failed=$lastError (routed fallback requires explicit retry)');
+        _log('connect failed realm=$realm webrtc_failed=$lastError');
         try {
           await signalingSession.close();
         } catch (_) {}
+
+        if (!kForceWebRtcOnly) {
+          final failures = (_webRtcFailureCount[realm] ?? 0) + 1;
+          _webRtcFailureCount[realm] = failures;
+          if (failures >= _webRtcFailureFallbackThreshold) {
+            _log('falling back to routed realm=$realm after $failures consecutive webrtc failures');
+            return _connectInternal(realm: realm, authId: authId, webRtcEnabled: false, privateKey: privateKey);
+          }
+        }
         throw lastError;
       }
     }
 
     final connection = _connections[key] ?? DesktopConnection(session: finalSession, isP2P: isP2P);
     _connections[key] = connection;
+    _everConnectedRealms.add(key);
     _log('session cached realm=$realm p2p=$isP2P active=${_connections.length}');
 
     finalSession.onDisconnect(() {
-      // Only treat this as an unexpected drop (and notify the listening
-      // screen) if the connection was still the manager's active entry.
-      // A deliberate release() already removed it from the cache before
-      // closing the session, so this fires from that close() call too —
-      // without this guard, that self-triggered "disconnect" would race
-      // the caller's own reconnect (e.g. release() -> switching to routed)
-      // with a second, independent reconnect using stale preferences.
-      if (_connections[key] == connection) {
-        _connections.remove(key);
-        connection.isAgentOnline = false;
-        if (connection.isP2P) _markWebRtcDisposed(realm);
-        unawaited(connection.dispose());
-        _log('session disconnected realm=$realm active=${_connections.length}');
-        connection.onDisconnected?.call();
-      }
+      unawaited(_dropConnection(key, connection, reason: 'session disconnected'));
     });
 
     return connection;
+  }
+
+  Future<void> _handleNetworkChanged() async {
+    _webRtcFailureCount.clear();
+    final keys = _connections.keys.toList(growable: false);
+    for (final key in keys) {
+      final connection = _connections[key];
+      if (connection == null) continue;
+      await _dropConnection(key, connection, reason: 'network changed');
+    }
+  }
+
+  Future<void> _runHeartbeat() async {
+    final entries = _connections.entries.toList(growable: false);
+    for (final entry in entries) {
+      final key = entry.key;
+      final connection = entry.value;
+      if (_connections[key] != connection) continue;
+      try {
+        await connection.session.call(DeskconnProcedures.deskconndDeviceInfo).timeout(DeskconnConfig.callTimeout);
+      } catch (e) {
+        if (_connections[key] != connection) continue;
+        _log('heartbeat failed key=$key error=$e');
+        await _dropConnection(key, connection, reason: 'heartbeat failed');
+      }
+    }
+  }
+
+  Future<void> _dropConnection(String key, DesktopConnection connection, {required String reason}) async {
+    if (_connections[key] != connection) return;
+    _connections.remove(key);
+    final realm = key.startsWith('session:') ? key.substring('session:'.length) : key;
+    _log('$reason realm=$realm p2p=${connection.isP2P} active=${_connections.length}');
+    connection.isAgentOnline = false;
+    if (connection.isP2P) _markWebRtcDisposed(realm);
+    await connection.dispose();
+    connection.onDisconnected?.call();
   }
 
   Future<void> release(String realm) async {
@@ -268,9 +320,23 @@ class DesktopConnectionManager {
       _log('release realm=$realm p2p=${connection.isP2P} remaining=${_connections.length}');
       if (connection.isP2P) _markWebRtcDisposed(realm);
       await connection.dispose();
-    } else {
-      _log('release realm=$realm skipped=no_session');
+      return;
     }
+
+    final pending = _pendingConnections[key];
+    if (pending != null) {
+      _log('release realm=$realm pending=true');
+      unawaited(
+        pending.then((pendingConnection) async {
+          if (_connections[key] == pendingConnection) _connections.remove(key);
+          if (pendingConnection.isP2P) _markWebRtcDisposed(realm);
+          await pendingConnection.dispose();
+        }, onError: (_) {}),
+      );
+      return;
+    }
+
+    _log('release realm=$realm skipped=no_session');
   }
 
   // get()'s own isConnected() check can lag well behind a connection
@@ -304,6 +370,8 @@ class DesktopConnectionManager {
       await release(realm);
     }
     _noWebRtcSupportRealms.clear();
+    _webRtcFailureCount.clear();
+    _everConnectedRealms.clear();
   }
 }
 
@@ -364,7 +432,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     }
   });
 
-  try {
+  Future<_WampWebRTCConnection> negotiate() async {
     final offer = await offerFuture;
     final callResponse = await config.session.call(config.procedureWebRTCOffer, args: [jsonEncode(offer)]);
     final offerResponse = web_rtc.OfferResponse.fromJson(jsonDecode(callResponse.args[0] as String));
@@ -387,10 +455,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
 
     offerer.startICETrickle(config.session, offerConfig.topicAnswererOnCandidate, requestID);
     await offerer.handleAnswer(offerResponse.answer);
-    final channel = await offerer.waitReady().timeout(
-      const Duration(seconds: 20),
-      onTimeout: () => throw TimeoutException('WebRTC data channel did not open', const Duration(seconds: 20)),
-    );
+    final channel = await offerer.waitReady();
 
     final webRtcSession = web_rtc.WebRTCSession(
       connection: offerer.connection!,
@@ -400,10 +465,17 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     );
     final base = await joinPeer(web_rtc.WebRTCPeer(channel), config.realm, config.serializer!, config.authenticator!);
     return _WampWebRTCConnection(session: Session(base), webRtcSession: webRtcSession);
+  }
+
+  try {
+    return await negotiate().timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw TimeoutException('WebRTC connect did not complete', const Duration(seconds: 20)),
+    );
   } catch (_) {
     await offerer.connection?.dispose();
     rethrow;
   } finally {
-    unawaited(subscription.unsubscribe());
+    unawaited(subscription.unsubscribe().catchError((_) {}));
   }
 }

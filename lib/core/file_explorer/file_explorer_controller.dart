@@ -295,6 +295,7 @@ class FileExplorerController {
           seq++;
           sentBytes += chunk.length;
           onProgress?.call(sentBytes, stat.size);
+          await Future.delayed(Duration.zero);
         }
       } finally {
         await raf.close();

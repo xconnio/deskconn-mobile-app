@@ -10,6 +10,7 @@ import 'blocking_queue.dart';
 import 'terminal_background_service.dart';
 import 'terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 
 class TerminalController {
@@ -21,6 +22,8 @@ class TerminalController {
   void Function()? onClosed;
   void Function()? onModifierChanged;
   void Function(Object error)? onError;
+  void Function()? onReconnecting;
+  void Function()? onReconnected;
 
   bool ctrl = false;
   bool alt = false;
@@ -28,10 +31,14 @@ class TerminalController {
   bool _keyReceived = false;
   bool _clientKeySent = false;
   bool _disposed = false;
+  bool _shellExited = false;
+  bool _reconnecting = false;
   Timer? _resizeTimer;
   Encryption? _encryption;
   bool _closeFrameSent = false;
   bool _exitFired = false;
+
+  static const _reconnectDelay = Duration(seconds: 2);
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
@@ -55,7 +62,10 @@ class TerminalController {
   Future<void> start() async {
     if (_running) return;
     _log('start requested');
+    await _connectAndRun();
+  }
 
+  Future<void> _connectAndRun() async {
     final DesktopConnection connection;
     try {
       connection =
@@ -73,7 +83,11 @@ class TerminalController {
     }
     _log('session ready p2p=${connection.isP2P}');
 
+    _outgoingQueue.clear();
     _encryption = await Encryption.create();
+    _keyReceived = false;
+    _clientKeySent = false;
+    _closeFrameSent = false;
     _running = true;
     _sendSize();
 
@@ -87,17 +101,57 @@ class TerminalController {
       await connection.session.callProgressiveProgress(DeskconnProcedures.deskconndShell, _sender, _receiver);
     } catch (e) {
       // Mirrors what a real ssh client prints on a dropped connection —
-      // a clean disconnect notice, not a raw exception dump — then exits
-      // the session the same way a normal shell exit does.
+      // a clean disconnect notice, not a raw exception dump.
       if (!_disposed) terminal.write('\r\nConnection to ${config.desktopName} closed.\r\n');
       _log('shell stream error=$e');
     } finally {
       _running = false;
       _cleanup();
-      _log('shell stream finished disposed=$_disposed');
-      onClosed?.call();
-      _fireExit();
+      final exiting = _disposed || _shellExited;
+      _log('shell stream finished disposed=$_disposed shellExited=$_shellExited exiting=$exiting');
+      if (exiting) {
+        onClosed?.call();
+        _fireExit();
+      } else {
+        unawaited(_attemptReconnect());
+      }
     }
+  }
+
+  Future<void> _attemptReconnect() async {
+    if (_disposed || _reconnecting) return;
+    _reconnecting = true;
+    onReconnecting?.call();
+    terminal.write('\r\n[Reconnecting…]\r\n');
+
+    while (!_disposed) {
+      if (!ConnectivityService().hasConnection) {
+        await Future.delayed(_reconnectDelay);
+        continue;
+      }
+      try {
+        final connection = await DesktopConnectionManager().reacquire(
+          realm: config.realm,
+          authId: config.authId,
+          privateKey: config.privateKey,
+          webRtcEnabled: config.webRtcEnabled,
+        );
+        connection.isAgentOnline = true;
+        break;
+      } catch (e) {
+        _log('reconnect failed error=$e');
+        if (_disposed) {
+          _reconnecting = false;
+          return;
+        }
+        await Future.delayed(_reconnectDelay);
+      }
+    }
+
+    _reconnecting = false;
+    if (_disposed) return;
+    onReconnected?.call();
+    unawaited(_connectAndRun());
   }
 
   void _sendSize() {
@@ -149,6 +203,7 @@ class TerminalController {
   Future<void> _receiver(Result result) async {
     if (result.args.isEmpty) {
       _log('shell process exited (empty frame)');
+      _shellExited = true;
       _fireExit();
       return;
     }

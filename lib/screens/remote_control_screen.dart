@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
@@ -170,6 +171,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   Future<Session?> _ensureSession() async {
     final cached = _session;
     if (cached != null) return cached;
+    if (!ConnectivityService().hasConnection) return null;
     if (mounted) setState(() => _reconnecting = true);
     try {
       final connection = await DesktopConnectionManager().acquire(
@@ -218,6 +220,20 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   void initState() {
     super.initState();
+    _loadBrightness();
+    _loadPlayers();
+    _loadMuteState();
+    ConnectivityService().addListener(_handleConnectivityChanged);
+  }
+
+  @override
+  void dispose() {
+    ConnectivityService().removeListener(_handleConnectivityChanged);
+    super.dispose();
+  }
+
+  void _handleConnectivityChanged() {
+    if (!mounted || !ConnectivityService().hasConnection || _session != null) return;
     _loadBrightness();
     _loadPlayers();
     _loadMuteState();

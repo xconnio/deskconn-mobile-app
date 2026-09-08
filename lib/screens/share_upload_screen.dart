@@ -4,6 +4,7 @@ import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/utils.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -79,6 +80,9 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
   }
 
   Future<Session> _connectTo(String realm) async {
+    if (!ConnectivityService().hasConnection) {
+      throw Exception('No internet connection');
+    }
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     if (authId == null || privateKey == null) {
@@ -99,6 +103,9 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
   }
 
   Future<void> _reconnectTo(String realm) async {
+    if (!ConnectivityService().hasConnection) {
+      throw Exception('No internet connection');
+    }
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     if (authId == null || privateKey == null) {
@@ -182,6 +189,11 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     final controller = _controller;
     final remoteDir = _browse?.path;
     if (controller == null || remoteDir == null || _uploading) return;
+
+    if (!ConnectivityService().hasConnection) {
+      setState(() => _error = 'No internet connection');
+      return;
+    }
 
     setState(() {
       _uploading = true;
