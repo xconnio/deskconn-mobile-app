@@ -56,7 +56,9 @@ class FileStreamServer {
 
   Future<void> dispose() async {
     _sessions.clear();
-    await _server?.close(force: true);
+    try {
+      await _server?.close(force: true);
+    } catch (_) {}
     _server = null;
   }
 

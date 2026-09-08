@@ -8,7 +8,9 @@ import 'package:deskconn_mobile_app/core/share/share_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_screen.dart';
+import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/last_used_realm_store.dart';
+import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/providers/auth_provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -97,13 +99,81 @@ class DeskconnApp extends StatelessWidget {
 
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: DeskconnSystemUi.overlayStyle(brightness),
-                child: child ?? const SizedBox.shrink(),
+                child: _ReconnectingOverlay(child: child ?? const SizedBox.shrink()),
               );
             },
             home: const AppBootstrap(),
           );
         },
       ),
+    );
+  }
+}
+
+class _ReconnectingOverlay extends StatelessWidget {
+  final Widget child;
+
+  const _ReconnectingOverlay({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([DesktopConnectionManager().isReconnecting, ConnectivityService()]),
+      builder: (context, _) {
+        final show = DesktopConnectionManager().isReconnecting.value && ConnectivityService().hasConnection;
+        final colorScheme = Theme.of(context).colorScheme;
+        return Stack(
+          children: [
+            AnimatedOpacity(
+              opacity: show ? 0.4 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: AbsorbPointer(absorbing: show, child: child),
+            ),
+            if (show)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Material(
+                    color: colorScheme.secondaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSecondaryContainer),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Reconnecting…',
+                              style: TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 13),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              final ctx = navigatorKey.currentContext;
+                              if (ctx != null) unawaited(switchMachine(ctx));
+                            },
+                            child: Text(
+                              'Switch Machine',
+                              style: TextStyle(color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -131,25 +201,27 @@ class _OfflineDialogState extends State<_OfflineDialog> {
   }
 
   void _maybeClose() {
-    if (mounted && ConnectivityService().isOnline) {
+    if (mounted && ConnectivityService().hasConnection) {
       Navigator.of(context).pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('No internet connection'),
-      content: const Text(
-        'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Dismiss')),
-        FilledButton(
-          onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
-          child: const Text('Open Settings'),
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: const Text('No internet connection'),
+        content: const Text(
+          'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
         ),
-      ],
+        actions: [
+          FilledButton(
+            onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -195,7 +267,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   void initState() {
     super.initState();
-    _wasOffline = !ConnectivityService().isOnline;
+    _wasOffline = !ConnectivityService().hasConnection;
     ConnectivityService().addListener(_handleConnectivityChange);
     ShareService.instance.pendingFiles.addListener(_handlePendingSharedFiles);
 
@@ -251,20 +323,20 @@ class _AppBootstrapState extends State<AppBootstrap> {
   // re-triggers desktop list loading, which itself reconnects the account
   // session (see SessionProvider._ensureSession).
   void _handleConnectivityChange() {
-    final online = ConnectivityService().isOnline;
-    if (!online && !_wasOffline) {
+    final hasConnection = ConnectivityService().hasConnection;
+    if (!hasConnection && !_wasOffline) {
       _showOfflineDialog();
-    } else if (online && _wasOffline && mounted) {
+    } else if (hasConnection && _wasOffline && mounted) {
       final session = context.read<SessionProvider>();
       if (session.loggedIn) unawaited(session.loadDesktops());
     }
-    _wasOffline = !online;
+    _wasOffline = !hasConnection;
   }
 
   void _showOfflineDialog() {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
-    unawaited(showDialog<void>(context: ctx, barrierDismissible: true, builder: (_) => const _OfflineDialog()));
+    unawaited(showDialog<void>(context: ctx, barrierDismissible: false, builder: (_) => const _OfflineDialog()));
   }
 
   Future<void> _checkForUpdate() async {

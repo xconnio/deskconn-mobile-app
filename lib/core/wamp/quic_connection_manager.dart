@@ -9,19 +9,37 @@ class QUICConnectionManager {
 
   factory QUICConnectionManager() => _instance;
 
-  QUICConnectionManager._();
+  QUICConnectionManager._() {
+    ConnectivityService().onNetworkChanged.listen((_) => _handleNetworkChanged());
+  }
 
   QUICSession? _root;
   Future<QUICSession>? _connecting;
 
+  void _handleNetworkChanged() {
+    final root = _root;
+    if (root == null) return;
+    _root = null;
+    unawaited(root.close());
+  }
+
   Future<Session> openSession(String realm, QUICDialerConfig config) async {
     final root = _root;
     if (root != null && root.isConnected()) {
-      return root.openSession(realm, config);
+      return _openRealmSession(root, realm, config);
     }
 
     final newRoot = await _connectRoot(realm, config);
-    return newRoot.openSession(realm, config);
+    return _openRealmSession(newRoot, realm, config);
+  }
+
+  Future<Session> _openRealmSession(QUICSession root, String realm, QUICDialerConfig config) {
+    return root
+        .openSession(realm, config)
+        .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => throw TimeoutException('WAMP session open did not complete', const Duration(seconds: 15)),
+        );
   }
 
   // Coalesces concurrent callers into a single in-flight connect instead of
@@ -30,7 +48,12 @@ class QUICConnectionManager {
   Future<QUICSession> _connectRoot(String realm, QUICDialerConfig config) {
     return _connecting ??= () async {
       try {
-        final newRoot = await _withRetry(() => connectQUIC(DeskconnConfig.quicAddr, realm, config));
+        final newRoot = await _withRetry(
+          () => connectQUIC(DeskconnConfig.quicAddr, realm, config).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw TimeoutException('QUIC root connect did not complete', const Duration(seconds: 15)),
+          ),
+        );
         _root = newRoot;
         newRoot.onDisconnect(() {
           if (_root == newRoot) {

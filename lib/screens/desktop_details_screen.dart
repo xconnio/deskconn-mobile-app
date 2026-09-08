@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:xconn/xconn.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
@@ -54,6 +55,22 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     super.initState();
     unawaited(_probeDesktopConnection());
     unawaited(_loadCachedWallpaper());
+    ConnectivityService().addListener(_handleConnectivityChanged);
+  }
+
+  @override
+  void dispose() {
+    ConnectivityService().removeListener(_handleConnectivityChanged);
+    final realm = _realm;
+    if (realm != null) DesktopConnectionManager().get(realm)?.onDisconnected = null;
+    super.dispose();
+  }
+
+  void _handleConnectivityChanged() {
+    if (!mounted) return;
+    if (!ConnectivityService().hasConnection && _connectionStatus != _DesktopConnectionStatus.offline) {
+      setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+    }
   }
 
   Future<void> _loadCachedWallpaper() async {
@@ -296,7 +313,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   void _handleConnectionDisconnected() {
     if (!mounted) return;
-    setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+    setState(() => _connectionStatus = _DesktopConnectionStatus.checking);
     unawaited(_probeDesktopConnection());
   }
 

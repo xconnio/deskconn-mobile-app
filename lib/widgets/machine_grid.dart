@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
@@ -41,6 +42,7 @@ class _MachineGridState extends State<MachineGrid> {
   }
 
   _RowStatus _statusFor(String realm) {
+    if (!ConnectivityService().hasConnection) return _RowStatus.offline;
     final connection = DesktopConnectionManager().get(realm);
     if (connection != null) {
       return connection.isP2P ? _RowStatus.p2p : _RowStatus.routed;
@@ -52,16 +54,23 @@ class _MachineGridState extends State<MachineGrid> {
   void initState() {
     super.initState();
     _livenessTimer = Timer.periodic(const Duration(seconds: 15), (_) => _verifyAllLiveness());
+    ConnectivityService().addListener(_handleConnectivityChanged);
   }
 
   @override
   void dispose() {
     _livenessTimer?.cancel();
+    ConnectivityService().removeListener(_handleConnectivityChanged);
     super.dispose();
+  }
+
+  void _handleConnectivityChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _verifyAllLiveness() async {
     if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    if (!ConnectivityService().hasConnection) return;
 
     final desktops = context.read<SessionProvider>().desktops;
     await Future.wait(
@@ -211,6 +220,13 @@ class _MachineGridState extends State<MachineGrid> {
 
     return RefreshIndicator(
       onRefresh: () async {
+        if (!ConnectivityService().hasConnection) {
+          if (mounted) setState(() {});
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No internet connection')));
+          }
+          return;
+        }
         await context.read<SessionProvider>().loadDesktops();
         await _verifyAllLiveness();
       },

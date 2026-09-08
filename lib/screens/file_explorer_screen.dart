@@ -12,6 +12,7 @@ import 'package:chewie/chewie.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
@@ -72,6 +73,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     super.initState();
     _initialize();
     _scrollController.addListener(_onScroll);
+    ConnectivityService().addListener(_handleConnectivityChanged);
   }
 
   @override
@@ -79,7 +81,13 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
+    ConnectivityService().removeListener(_handleConnectivityChanged);
     super.dispose();
+  }
+
+  void _handleConnectivityChanged() {
+    if (!mounted || !ConnectivityService().hasConnection || _controller != null) return;
+    _initialize();
   }
 
   void _onScroll() {
@@ -109,6 +117,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         await _loadInitial();
         return;
       }
+    }
+
+    if (!ConnectivityService().hasConnection) {
+      if (mounted) {
+        setState(() {
+          _error = 'No internet connection';
+          _isLoading = false;
+        });
+      }
+      return;
     }
 
     if (mounted) {

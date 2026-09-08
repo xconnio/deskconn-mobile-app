@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/resource_monitor/models.dart';
 import 'package:deskconn_mobile_app/core/resource_monitor/resource_monitor_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_background_service.dart';
@@ -90,6 +91,7 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
     unawaited(_initialize());
+    ConnectivityService().addListener(_handleConnectivityChanged);
   }
 
   @override
@@ -97,7 +99,21 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
     _timer?.cancel();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    ConnectivityService().removeListener(_handleConnectivityChanged);
     super.dispose();
+  }
+
+  void _handleConnectivityChanged() {
+    if (!mounted) return;
+    if (!ConnectivityService().hasConnection) {
+      setState(() => _actionError = 'No internet connection');
+      return;
+    }
+    if (_controller == null) {
+      unawaited(_initialize());
+    } else {
+      unawaited(_pollTick());
+    }
   }
 
   void _onTabChanged() {
@@ -110,6 +126,15 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
   }
 
   Future<void> _initialize() async {
+    if (!ConnectivityService().hasConnection) {
+      if (mounted) {
+        setState(() {
+          _error = 'No internet connection';
+          _loading = false;
+        });
+      }
+      return;
+    }
     try {
       final existing = DesktopConnectionManager().get(widget.config.realm);
       final connection =
@@ -141,6 +166,10 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
   // already does the acquire() half of in _initialize().
   Future<void> _reconnect() async {
     if (_reconnecting) return;
+    if (!ConnectivityService().hasConnection) {
+      if (mounted) setState(() => _actionError = 'No internet connection');
+      return;
+    }
     _reconnecting = true;
     if (mounted) setState(() => _actionError = 'Reconnecting…');
     try {
@@ -173,6 +202,10 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
   }
 
   Future<void> _pollTick() async {
+    if (!ConnectivityService().hasConnection) {
+      if (mounted) setState(() => _actionError = 'No internet connection');
+      return;
+    }
     await _fetchInfo();
     if (_tabController.index == 1) {
       await _fetchProcesses();
@@ -195,6 +228,7 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
       setState(() {
         _info = info;
         _error = null;
+        _actionError = null;
         _loading = false;
         _pushHistory(_netHistory, info.networkTotalBps);
       });
@@ -222,7 +256,10 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
     try {
       final processes = await controller.fetchProcesses();
       if (!mounted) return;
-      setState(() => _processes = processes);
+      setState(() {
+        _processes = processes;
+        _actionError = null;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _actionError = _friendlyError(e));
@@ -235,7 +272,10 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
     try {
       final apps = await controller.fetchApps();
       if (!mounted) return;
-      setState(() => _apps = apps);
+      setState(() {
+        _apps = apps;
+        _actionError = null;
+      });
       for (final app in apps) {
         if (app.iconName.isNotEmpty) unawaited(_ensureIcon(app.iconName));
       }
