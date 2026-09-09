@@ -68,8 +68,14 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
   void _handleConnectivityChanged() {
     if (!mounted) return;
-    if (!ConnectivityService().hasConnection && _connectionStatus != _DesktopConnectionStatus.offline) {
-      setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+    if (!ConnectivityService().hasConnection) {
+      if (_connectionStatus != _DesktopConnectionStatus.offline) {
+        setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+      }
+      return;
+    }
+    if (_connectionStatus == _DesktopConnectionStatus.offline) {
+      unawaited(_probeDesktopConnection());
     }
   }
 
@@ -235,6 +241,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         );
       }
       unawaited(_refreshWallpaper(cached.session));
+      return;
+    }
+
+    if (!ConnectivityService().hasConnection) {
+      if (mounted) {
+        setState(() => _connectionStatus = _DesktopConnectionStatus.offline);
+      }
       return;
     }
 

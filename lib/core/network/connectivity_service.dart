@@ -3,14 +3,6 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
-// App-wide network reachability signal. Nothing in this app previously knew
-// whether the device had any connectivity at all — every failure (no signal,
-// Wi-Fi with no internet, server down, desktop offline) looked identical to
-// the user, and nothing reconnected automatically when connectivity came back.
-//
-// Lives for the app's lifetime like the other singletons in core/ (e.g.
-// DesktopConnectionManager), so the underlying stream subscription is never
-// cancelled — that's intentional, not a leak.
 class ConnectivityService extends ChangeNotifier {
   static final ConnectivityService _instance = ConnectivityService._();
   factory ConnectivityService() => _instance;
@@ -20,17 +12,15 @@ class ConnectivityService extends ChangeNotifier {
 
   bool hasConnection = true;
 
-  // hasConnection only reflects OS radio state (an interface is
-  // associated) — a captive portal, a VPN with no route, or the backend
-  // simply being down all still read as "connected". Connect attempts
-  // (QUICConnectionManager) report their real outcome here so the app can
-  // tell "network up, backend unreachable" apart from genuine offline.
   bool backendReachable = true;
 
   bool get isOnline => hasConnection && backendReachable;
 
   final _networkChangedController = StreamController<void>.broadcast();
   Stream<void> get onNetworkChanged => _networkChangedController.stream;
+
+  final _connectivityProbeController = StreamController<void>.broadcast();
+  Stream<void> get onConnectivityProbe => _connectivityProbeController.stream;
 
   Set<ConnectivityResult> _lastResults = {};
   Timer? _debounce;
@@ -55,6 +45,7 @@ class ConnectivityService extends ChangeNotifier {
       hasConnection = _hasAny(results);
     } catch (_) {}
     Connectivity().onConnectivityChanged.listen((results) {
+      if (_hasAny(results)) _connectivityProbeController.add(null);
       _debounce?.cancel();
       _debounce = Timer(_debounceDelay, () => _applyResults(results));
     });

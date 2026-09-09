@@ -110,70 +110,113 @@ class DeskconnApp extends StatelessWidget {
   }
 }
 
-class _ReconnectingOverlay extends StatelessWidget {
+class _ReconnectingOverlay extends StatefulWidget {
   final Widget child;
 
   const _ReconnectingOverlay({required this.child});
 
   @override
+  State<_ReconnectingOverlay> createState() => _ReconnectingOverlayState();
+}
+
+class _ReconnectingOverlayState extends State<_ReconnectingOverlay> {
+  OverlayEntry? _entry;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    DesktopConnectionManager().isReconnecting.addListener(_sync);
+    ConnectivityService().addListener(_sync);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
+  }
+
+  @override
+  void dispose() {
+    DesktopConnectionManager().isReconnecting.removeListener(_sync);
+    ConnectivityService().removeListener(_sync);
+    _entry?.remove();
+    super.dispose();
+  }
+
+  void _sync() => _apply(DesktopConnectionManager().isReconnecting.value && ConnectivityService().hasConnection);
+
+  void _apply(bool show) {
+    if (show == _visible) return;
+    _visible = show;
+
+    if (show) {
+      final overlay = navigatorKey.currentState?.overlay;
+      if (overlay == null) return;
+      _entry = OverlayEntry(builder: (_) => _ReconnectingBanner(onSwitchMachine: _openSwitcher));
+      overlay.insert(_entry!);
+    } else {
+      _entry?.remove();
+      _entry = null;
+    }
+  }
+
+  Future<void> _openSwitcher() async {
+    _apply(false);
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null) await switchMachine(ctx);
+    _sync();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+class _ReconnectingBanner extends StatelessWidget {
+  final VoidCallback onSwitchMachine;
+
+  const _ReconnectingBanner({required this.onSwitchMachine});
+
+  @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([DesktopConnectionManager().isReconnecting, ConnectivityService()]),
-      builder: (context, _) {
-        final show = DesktopConnectionManager().isReconnecting.value && ConnectivityService().hasConnection;
-        final colorScheme = Theme.of(context).colorScheme;
-        return Stack(
-          children: [
-            AnimatedOpacity(
-              opacity: show ? 0.4 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              child: AbsorbPointer(absorbing: show, child: child),
-            ),
-            if (show)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Material(
-                    color: colorScheme.secondaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSecondaryContainer),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Reconnecting…',
-                              style: TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 13),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              final ctx = navigatorKey.currentContext;
-                              if (ctx != null) unawaited(switchMachine(ctx));
-                            },
-                            child: Text(
-                              'Switch Machine',
-                              style: TextStyle(color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
+    final colorScheme = Theme.of(context).colorScheme;
+    return Stack(
+      children: [
+        Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.35))),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Material(
+              color: colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSecondaryContainer),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Reconnecting…',
+                        style: TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 13),
                       ),
                     ),
-                  ),
+                    TextButton(
+                      onPressed: onSwitchMachine,
+                      child: Text(
+                        'Switch Machine',
+                        style: TextStyle(color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        );
-      },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

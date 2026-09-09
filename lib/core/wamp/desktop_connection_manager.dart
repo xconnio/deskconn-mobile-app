@@ -21,17 +21,12 @@ class DesktopConnection {
   final web_rtc.WebRTCSession? webRtcSession;
   bool isAgentOnline = false;
 
-  // Reused across FileExplorerScreen instances for the same realm so a
-  // screen reopen doesn't force a redundant key-exchange RPC on an already
-  // key-exchanged, still-healthy session.
   FileExplorerController? explorerController;
 
   void Function()? onDisconnected;
 
   FileStreamServer? _fileStreamServer;
 
-  // Only available when this connection is P2P (webRtcSession != null); lazily
-  // created so a connection that never previews media never opens the server.
   FileStreamServer? get fileStreamServer {
     final rtc = webRtcSession;
     if (rtc == null) return null;
@@ -58,6 +53,7 @@ class DesktopConnectionManager {
   factory DesktopConnectionManager() => _instance;
   DesktopConnectionManager._() {
     ConnectivityService().onNetworkChanged.listen((_) => _handleNetworkChanged());
+    ConnectivityService().onConnectivityProbe.listen((_) => unawaited(_runHeartbeat()));
     Timer.periodic(_heartbeatInterval, (_) => unawaited(_runHeartbeat()));
   }
 
@@ -70,27 +66,27 @@ class DesktopConnectionManager {
   final ValueNotifier<bool> isReconnecting = ValueNotifier(false);
 
   static const _webRtcFailureFallbackThreshold = 2;
-  static const _heartbeatInterval = Duration(seconds: 20);
+  static const _heartbeatInterval = Duration(seconds: 8);
+  static const _heartbeatTimeout = Duration(seconds: 5);
 
   void _recomputeReconnecting() {
     isReconnecting.value = _pendingConnections.keys.any(_everConnectedRealms.contains);
   }
 
-  // A dropped connection immediately followed by a fresh WebRTC offer for
-  // the same realm has been observed to hard-crash the app (native "Callback
-  // invoked after it has been deleted" abort — see
-  // xconn-webrtc-dart/BUG_REPORT_dispose_native_callback_abort.md), most
-  // likely a lifecycle race between the old RTCPeerConnection's native
-  // teardown and the new one's setup. This is a mitigation, not a verified
-  // fix — it narrows the overlap window, it doesn't prove it's closed.
   static const _webRtcDisposeCooldown = Duration(milliseconds: 500);
   final Map<String, DateTime> _lastWebRtcDisposeAt = {};
+  final Map<String, Future<void>> _pendingWebRtcDispose = {};
 
-  void _markWebRtcDisposed(String realm) {
+  void _markWebRtcDisposed(String realm, Future<void> disposeFuture) {
     _lastWebRtcDisposeAt[realm] = DateTime.now();
+    _pendingWebRtcDispose[realm] = disposeFuture;
   }
 
   Future<void> _awaitWebRtcDisposeCooldown(String realm) async {
+    final pending = _pendingWebRtcDispose[realm];
+    if (pending != null) {
+      await pending.catchError((_) {});
+    }
     final lastDispose = _lastWebRtcDisposeAt[realm];
     if (lastDispose == null) return;
     final remaining = _webRtcDisposeCooldown - DateTime.now().difference(lastDispose);
@@ -286,19 +282,27 @@ class DesktopConnectionManager {
     }
   }
 
+  bool _heartbeatRunning = false;
+
   Future<void> _runHeartbeat() async {
-    final entries = _connections.entries.toList(growable: false);
-    for (final entry in entries) {
-      final key = entry.key;
-      final connection = entry.value;
-      if (_connections[key] != connection) continue;
-      try {
-        await connection.session.call(DeskconnProcedures.deskconndDeviceInfo).timeout(DeskconnConfig.callTimeout);
-      } catch (e) {
+    if (_heartbeatRunning) return;
+    _heartbeatRunning = true;
+    try {
+      final entries = _connections.entries.toList(growable: false);
+      for (final entry in entries) {
+        final key = entry.key;
+        final connection = entry.value;
         if (_connections[key] != connection) continue;
-        _log('heartbeat failed key=$key error=$e');
-        await _dropConnection(key, connection, reason: 'heartbeat failed');
+        try {
+          await connection.session.call(DeskconnProcedures.deskconndDeviceInfo).timeout(_heartbeatTimeout);
+        } catch (e) {
+          if (_connections[key] != connection) continue;
+          _log('heartbeat failed key=$key error=$e');
+          await _dropConnection(key, connection, reason: 'heartbeat failed');
+        }
       }
+    } finally {
+      _heartbeatRunning = false;
     }
   }
 
@@ -308,8 +312,9 @@ class DesktopConnectionManager {
     final realm = key.startsWith('session:') ? key.substring('session:'.length) : key;
     _log('$reason realm=$realm p2p=${connection.isP2P} active=${_connections.length}');
     connection.isAgentOnline = false;
-    if (connection.isP2P) _markWebRtcDisposed(realm);
-    await connection.dispose();
+    final disposeFuture = connection.dispose();
+    if (connection.isP2P) _markWebRtcDisposed(realm, disposeFuture);
+    unawaited(disposeFuture);
     connection.onDisconnected?.call();
   }
 
@@ -318,8 +323,9 @@ class DesktopConnectionManager {
     final connection = _connections.remove(key);
     if (connection != null) {
       _log('release realm=$realm p2p=${connection.isP2P} remaining=${_connections.length}');
-      if (connection.isP2P) _markWebRtcDisposed(realm);
-      await connection.dispose();
+      final disposeFuture = connection.dispose();
+      if (connection.isP2P) _markWebRtcDisposed(realm, disposeFuture);
+      unawaited(disposeFuture);
       return;
     }
 
@@ -329,8 +335,9 @@ class DesktopConnectionManager {
       unawaited(
         pending.then((pendingConnection) async {
           if (_connections[key] == pendingConnection) _connections.remove(key);
-          if (pendingConnection.isP2P) _markWebRtcDisposed(realm);
-          await pendingConnection.dispose();
+          final disposeFuture = pendingConnection.dispose();
+          if (pendingConnection.isP2P) _markWebRtcDisposed(realm, disposeFuture);
+          unawaited(disposeFuture);
         }, onError: (_) {}),
       );
       return;
@@ -339,19 +346,10 @@ class DesktopConnectionManager {
     _log('release realm=$realm skipped=no_session');
   }
 
-  // get()'s own isConnected() check can lag well behind a connection
-  // actually being unusable (WebRTC's failure detection can take over a
-  // minute — see webrtc-dispose-cooldown's bug report), so a screen can
-  // still be handed a cached session that fails every call. A timed-out
-  // call is treated as just as dead as a closed one, otherwise every
-  // retry on this realm keeps reusing the same zombie session forever.
   bool isDeadSessionError(Session session, Object error) {
     return !(session.isConnected() && error is! TimeoutException);
   }
 
-  // Screens hitting a dead cached session (see isDeadSessionError) call
-  // this instead of release()+acquire() separately, so the recovery step
-  // is one call site instead of duplicated per screen.
   Future<DesktopConnection> reacquire({
     required String realm,
     required String authId,
