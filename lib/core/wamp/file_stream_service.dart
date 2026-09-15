@@ -221,6 +221,9 @@ class FileStreamService {
 
   final web_rtc.WebRTCSession _session;
   int _nextChannel = 0;
+  int _activeTransfers = 0;
+
+  bool get isBusy => _activeTransfers > 0;
 
   String _claimLabel() {
     if (_nextChannel >= kFileStreamChannelPoolSize) {
@@ -257,55 +260,60 @@ class FileStreamService {
     int numWorkers = _defaultParallelWorkers,
     void Function(int received, int total)? onProgress,
   }) async {
-    final listChannel = await _openChannel();
-    final Map<String, dynamic> listResp;
+    _activeTransfers++;
     try {
-      listResp = await listChannel.request({'op': 'list', 'path': path, 'recursive': false});
-    } finally {
-      await listChannel.close();
-    }
-
-    final entries = listResp['entries'] as List<dynamic>?;
-    if (entries == null || entries.isEmpty) {
-      throw Exception('$path: no such file or directory');
-    }
-    final entry = entries.first as Map<String, dynamic>;
-    final relPath = entry['rel_path'] as String;
-    final size = entry['size'] as int;
-
-    if (size == 0) {
-      onProgress?.call(0, 0);
-      return;
-    }
-
-    final offsets = <int>[for (var off = 0; off < size; off += _parallelChunkSize) off];
-    var nextIndex = 0;
-    var totalReceived = 0;
-    Object? workerError;
-
-    Future<void> runWorker() async {
-      final worker = await _openChannel();
+      final listChannel = await _openChannel();
+      final Map<String, dynamic> listResp;
       try {
-        while (workerError == null) {
-          if (nextIndex >= offsets.length) return;
-          final offset = offsets[nextIndex++];
-          final length = min(_parallelChunkSize, size - offset);
-          await worker.readChunk(path, relPath, offset, length, (pieceOffset, piece) {
-            destination.setPositionSync(pieceOffset);
-            destination.writeFromSync(piece);
-            totalReceived += piece.length;
-            onProgress?.call(totalReceived, size);
-          });
-        }
+        listResp = await listChannel.request({'op': 'list', 'path': path, 'recursive': false});
       } finally {
-        await worker.close();
+        await listChannel.close();
       }
+
+      final entries = listResp['entries'] as List<dynamic>?;
+      if (entries == null || entries.isEmpty) {
+        throw Exception('$path: no such file or directory');
+      }
+      final entry = entries.first as Map<String, dynamic>;
+      final relPath = entry['rel_path'] as String;
+      final size = entry['size'] as int;
+
+      if (size == 0) {
+        onProgress?.call(0, 0);
+        return;
+      }
+
+      final offsets = <int>[for (var off = 0; off < size; off += _parallelChunkSize) off];
+      var nextIndex = 0;
+      var totalReceived = 0;
+      Object? workerError;
+
+      Future<void> runWorker() async {
+        final worker = await _openChannel();
+        try {
+          while (workerError == null) {
+            if (nextIndex >= offsets.length) return;
+            final offset = offsets[nextIndex++];
+            final length = min(_parallelChunkSize, size - offset);
+            await worker.readChunk(path, relPath, offset, length, (pieceOffset, piece) {
+              destination.setPositionSync(pieceOffset);
+              destination.writeFromSync(piece);
+              totalReceived += piece.length;
+              onProgress?.call(totalReceived, size);
+            });
+          }
+        } finally {
+          await worker.close();
+        }
+      }
+
+      final workerCount = min(numWorkers, offsets.length);
+      await Future.wait(List.generate(workerCount, (_) => runWorker().catchError((Object e) => workerError ??= e)));
+
+      if (workerError != null) throw workerError!;
+    } finally {
+      _activeTransfers--;
     }
-
-    final workerCount = min(numWorkers, offsets.length);
-    await Future.wait(List.generate(workerCount, (_) => runWorker().catchError((Object e) => workerError ??= e)));
-
-    if (workerError != null) throw workerError!;
   }
 
   Future<void> uploadFile(
@@ -314,59 +322,64 @@ class FileStreamService {
     int numWorkers = _defaultParallelWorkers,
     void Function(int sent, int total)? onProgress,
   }) async {
-    final file = File(localPath);
-    final size = await file.length();
-    final fileName = localPath.split('/').last;
-    final remotePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
-
-    final initChannel = await _FileStreamChannel.open(_session, _claimLabel());
+    _activeTransfers++;
     try {
-      await initChannel.request({
-        'op': 'init',
-        'path': remotePath,
-        'entries': [
-          {'rel_path': fileName, 'size': size, 'mode': 420, 'is_dir': false},
-        ],
-        'source_is_dir': false,
-        'target_is_dir_hint': false,
-      });
-    } finally {
-      await initChannel.close();
-    }
+      final file = File(localPath);
+      final size = await file.length();
+      final fileName = localPath.split('/').last;
+      final remotePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
 
-    if (size == 0) {
-      onProgress?.call(0, 0);
-      return;
-    }
-
-    final offsets = <int>[for (var off = 0; off < size; off += _parallelChunkSize) off];
-    var nextIndex = 0;
-    var totalSent = 0;
-    Object? workerError;
-
-    Future<void> runWorker() async {
-      final worker = await _FileStreamChannel.open(_session, _claimLabel());
-      final raf = await file.open();
+      final initChannel = await _openChannel();
       try {
-        while (workerError == null) {
-          if (nextIndex >= offsets.length) return;
-          final offset = offsets[nextIndex++];
-          final length = min(_parallelChunkSize, size - offset);
-          await raf.setPosition(offset);
-          final data = await raf.read(length);
-          await worker.writeChunk(remotePath, fileName, offset, data);
-          totalSent += data.length;
-          onProgress?.call(totalSent, size);
-        }
+        await initChannel.request({
+          'op': 'init',
+          'path': remotePath,
+          'entries': [
+            {'rel_path': fileName, 'size': size, 'mode': 420, 'is_dir': false},
+          ],
+          'source_is_dir': false,
+          'target_is_dir_hint': false,
+        });
       } finally {
-        await raf.close();
-        await worker.close();
+        await initChannel.close();
       }
+
+      if (size == 0) {
+        onProgress?.call(0, 0);
+        return;
+      }
+
+      final offsets = <int>[for (var off = 0; off < size; off += _parallelChunkSize) off];
+      var nextIndex = 0;
+      var totalSent = 0;
+      Object? workerError;
+
+      Future<void> runWorker() async {
+        final worker = await _openChannel();
+        final raf = await file.open();
+        try {
+          while (workerError == null) {
+            if (nextIndex >= offsets.length) return;
+            final offset = offsets[nextIndex++];
+            final length = min(_parallelChunkSize, size - offset);
+            await raf.setPosition(offset);
+            final data = await raf.read(length);
+            await worker.writeChunk(remotePath, fileName, offset, data);
+            totalSent += data.length;
+            onProgress?.call(totalSent, size);
+          }
+        } finally {
+          await raf.close();
+          await worker.close();
+        }
+      }
+
+      final workerCount = min(numWorkers, offsets.length);
+      await Future.wait(List.generate(workerCount, (_) => runWorker().catchError((Object e) => workerError ??= e)));
+
+      if (workerError != null) throw workerError!;
+    } finally {
+      _activeTransfers--;
     }
-
-    final workerCount = min(numWorkers, offsets.length);
-    await Future.wait(List.generate(workerCount, (_) => runWorker().catchError((Object e) => workerError ??= e)));
-
-    if (workerError != null) throw workerError!;
   }
 }

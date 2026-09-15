@@ -299,6 +299,10 @@ class DesktopConnectionManager {
           await connection.session.call(DeskconnProcedures.deskconndDeviceInfo).timeout(_heartbeatTimeout);
         } catch (e) {
           if (_connections[key] != connection) continue;
+          if (connection.fileStreamService?.isBusy == true) {
+            _log('heartbeat failed but file-stream transfer in progress, skipping drop key=$key error=$e');
+            continue;
+          }
           _log('heartbeat failed key=$key error=$e');
           await _dropConnection(key, connection, reason: 'heartbeat failed');
         }
