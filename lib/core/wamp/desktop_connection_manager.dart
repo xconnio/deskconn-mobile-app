@@ -33,6 +33,8 @@ class DesktopConnection {
     return _fileStreamServer ??= FileStreamServer(FileStreamService(rtc));
   }
 
+  FileStreamService? get fileStreamService => fileStreamServer?.service;
+
   DesktopConnection({required this.session, required this.isP2P, this.webRtcSession});
 
   Future<void> dispose() async {

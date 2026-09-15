@@ -39,6 +39,7 @@ class FileStreamServer {
   FileStreamServer(this._service);
 
   final FileStreamService _service;
+  FileStreamService get service => _service;
   HttpServer? _server;
   final Map<String, _StreamSession> _sessions = {};
   int _nextId = 0;
