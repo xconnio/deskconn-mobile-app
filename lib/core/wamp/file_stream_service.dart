@@ -229,8 +229,20 @@ class FileStreamService {
     return 'file-stream-${_nextChannel++}';
   }
 
+  Future<_FileStreamChannel> _openChannel({int attempts = 3}) async {
+    Object? lastError;
+    for (var i = 0; i < attempts; i++) {
+      try {
+        return await _FileStreamChannel.open(_session, _claimLabel());
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError!;
+  }
+
   Future<FileStreamRangeResult> openRange(String path, int offset, int length) async {
-    final fsChannel = await _FileStreamChannel.open(_session, _claimLabel());
+    final fsChannel = await _openChannel();
     final relPath = path.split('/').last;
     return FileStreamRangeResult(
       offset: offset,
@@ -245,7 +257,7 @@ class FileStreamService {
     int numWorkers = _defaultParallelWorkers,
     void Function(int received, int total)? onProgress,
   }) async {
-    final listChannel = await _FileStreamChannel.open(_session, _claimLabel());
+    final listChannel = await _openChannel();
     final Map<String, dynamic> listResp;
     try {
       listResp = await listChannel.request({'op': 'list', 'path': path, 'recursive': false});
@@ -272,7 +284,7 @@ class FileStreamService {
     Object? workerError;
 
     Future<void> runWorker() async {
-      final worker = await _FileStreamChannel.open(_session, _claimLabel());
+      final worker = await _openChannel();
       try {
         while (workerError == null) {
           if (nextIndex >= offsets.length) return;
