@@ -1117,7 +1117,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
 
     try {
-      final bytes = await _controller!.read(path);
+      final bytes = await _downloadBytes(path, entry.name);
       final savedPath = await saveToDevice(entry.name, bytes);
       if (mounted) {
         Navigator.pop(context);
@@ -1130,6 +1130,24 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         Navigator.pop(context);
         _showErrorSnackBar('Download failed: $e');
       }
+    }
+  }
+
+  Future<Uint8List> _downloadBytes(String path, String name) async {
+    final fsService = DesktopConnectionManager().get(widget.config.realm)?.fileStreamService;
+    if (fsService == null) throw Exception('Download requires a direct connection');
+
+    final tempFile = File('${(await getTemporaryDirectory()).path}/.dl_${DateTime.now().microsecondsSinceEpoch}_$name');
+    final raf = await tempFile.open(mode: FileMode.write);
+    try {
+      await fsService.downloadFile(path, raf);
+    } finally {
+      await raf.close();
+    }
+    try {
+      return await tempFile.readAsBytes();
+    } finally {
+      unawaited(tempFile.delete());
     }
   }
 
