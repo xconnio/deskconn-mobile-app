@@ -1207,7 +1207,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     );
 
     try {
-      await _controller!.upload(
+      final fsService = DesktopConnectionManager().get(widget.config.realm)?.fileStreamService;
+      if (fsService == null) throw Exception('Upload requires a direct connection');
+      await fsService.uploadFile(
         localPath,
         remotePath,
         onProgress: (sent, total) {

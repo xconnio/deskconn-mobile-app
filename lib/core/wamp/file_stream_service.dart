@@ -29,7 +29,10 @@ class FileStreamRangeResult {
 const int _kindControl = 0;
 const int _kindData = 1;
 const int _parallelChunkSize = 4 * 1024 * 1024;
-const int _defaultDownloadWorkers = 4;
+const int _defaultParallelWorkers = 4;
+const int _wireChunkSize = 65024;
+const int _sendBufferHighWater = 512 * 1024;
+const int _sendBufferLowWater = 256 * 1024;
 const Duration _requestTimeout = Duration(seconds: 15);
 
 class _Envelope {
@@ -172,6 +175,40 @@ class _FileStreamChannel {
     }
   }
 
+  Future<void> writeChunk(String path, String relPath, int offset, Uint8List data) async {
+    await request({
+      'op': 'write',
+      'path': path,
+      'rel_path': relPath,
+      'offset': offset,
+      'length': data.length,
+      'source_is_dir': false,
+      'target_is_dir_hint': false,
+    });
+
+    for (var i = 0; i < data.length; i += _wireChunkSize) {
+      final piece = data.sublist(i, min(i + _wireChunkSize, data.length));
+      await _waitForSendReady();
+      await _channel.send(RTCDataChannelMessage.fromBinary(Uint8List.fromList([_kindData, ..._enc.encrypt(piece)])));
+    }
+
+    final finalAck = await _events.firstWhere((e) => e.kind == _kindControl).timeout(_requestTimeout);
+    final decoded = jsonDecode(utf8.decode(finalAck.data)) as Map<String, dynamic>;
+    if (decoded['ok'] != true) {
+      throw Exception(decoded['error'] as String? ?? 'remote write failed');
+    }
+  }
+
+  Future<void> _waitForSendReady() async {
+    if ((_channel.bufferedAmount ?? 0) <= _sendBufferHighWater) return;
+    final ready = Completer<void>();
+    _channel.bufferedAmountLowThreshold = _sendBufferLowWater;
+    _channel.onBufferedAmountLow = (_) {
+      if (!ready.isCompleted) ready.complete();
+    };
+    await ready.future.timeout(_requestTimeout);
+  }
+
   Future<void> close() async {
     try {
       await _channel.close();
@@ -205,7 +242,7 @@ class FileStreamService {
   Future<void> downloadFile(
     String path,
     RandomAccessFile destination, {
-    int numWorkers = _defaultDownloadWorkers,
+    int numWorkers = _defaultParallelWorkers,
     void Function(int received, int total)? onProgress,
   }) async {
     final listChannel = await _FileStreamChannel.open(_session, _claimLabel());
@@ -249,6 +286,68 @@ class FileStreamService {
           });
         }
       } finally {
+        await worker.close();
+      }
+    }
+
+    final workerCount = min(numWorkers, offsets.length);
+    await Future.wait(List.generate(workerCount, (_) => runWorker().catchError((Object e) => workerError ??= e)));
+
+    if (workerError != null) throw workerError!;
+  }
+
+  Future<void> uploadFile(
+    String localPath,
+    String remoteDir, {
+    int numWorkers = _defaultParallelWorkers,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final file = File(localPath);
+    final size = await file.length();
+    final fileName = localPath.split('/').last;
+    final remotePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
+
+    final initChannel = await _FileStreamChannel.open(_session, _claimLabel());
+    try {
+      await initChannel.request({
+        'op': 'init',
+        'path': remotePath,
+        'entries': [
+          {'rel_path': fileName, 'size': size, 'mode': 420, 'is_dir': false},
+        ],
+        'source_is_dir': false,
+        'target_is_dir_hint': false,
+      });
+    } finally {
+      await initChannel.close();
+    }
+
+    if (size == 0) {
+      onProgress?.call(0, 0);
+      return;
+    }
+
+    final offsets = <int>[for (var off = 0; off < size; off += _parallelChunkSize) off];
+    var nextIndex = 0;
+    var totalSent = 0;
+    Object? workerError;
+
+    Future<void> runWorker() async {
+      final worker = await _FileStreamChannel.open(_session, _claimLabel());
+      final raf = await file.open();
+      try {
+        while (workerError == null) {
+          if (nextIndex >= offsets.length) return;
+          final offset = offsets[nextIndex++];
+          final length = min(_parallelChunkSize, size - offset);
+          await raf.setPosition(offset);
+          final data = await raf.read(length);
+          await worker.writeChunk(remotePath, fileName, offset, data);
+          totalSent += data.length;
+          onProgress?.call(totalSent, size);
+        }
+      } finally {
+        await raf.close();
         await worker.close();
       }
     }
