@@ -3,20 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:xconn/xconn.dart';
-// ignore: implementation_imports
-import 'package:xconn/src/types.dart';
+import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
-import 'package:deskconn_mobile_app/core/terminal/blocking_queue.dart';
+import 'package:deskconn_mobile_app/core/wamp/file_stream_service.dart';
 import 'models.dart';
 
 class FileExplorerController {
   final Session session;
   final String realm;
+  final web_rtc.WebRTCSession? webRtcSession;
   Encryption? _encryption;
   bool _keyExchanged = false;
   Future<void>? _keyExchangeFuture;
+  FileStreamService? _fileStream;
 
   static final Map<String, Uint8List> _thumbnailCache = {};
   static final Map<String, Future<Uint8List>> _thumbnailFutures = {};
@@ -27,7 +29,13 @@ class FileExplorerController {
   static const int _maxConcurrentDownloads = 4;
   static final List<Completer<void>> _downloadWaiters = [];
 
-  FileExplorerController(this.session, this.realm);
+  FileExplorerController(this.session, this.realm, {this.webRtcSession});
+
+  FileStreamService? get _fs {
+    final rtc = webRtcSession;
+    if (rtc == null) return null;
+    return _fileStream ??= FileStreamService(rtc);
+  }
 
   bool get isKeyExchanged => _keyExchanged;
 
@@ -159,156 +167,34 @@ class FileExplorerController {
   }
 
   Future<Uint8List> _executeDownload(String path, bool isThumbnail) async {
-    final enc = await Encryption.create();
+    final fs = _fs;
+    if (fs == null) throw Exception('Download requires a direct connection');
 
-    final List<Result> queue = [];
-    Completer<void>? wakeUp;
-    bool done = false;
-    Object? streamError;
-
-    void notify() {
-      final w = wakeUp;
-      wakeUp = null;
-      w?.complete();
+    final tempFile = File('${(await getTemporaryDirectory()).path}/.rd_${DateTime.now().microsecondsSinceEpoch}');
+    final raf = await tempFile.open(mode: FileMode.write);
+    try {
+      await fs.downloadFile(path, raf);
+    } finally {
+      await raf.close();
     }
-
-    session
-        .callProgress(DeskconnProcedures.deskconndFileDownload, (result) {
-          queue.add(result);
-          notify();
-        }, args: [path, isThumbnail, enc.clientPublicKey])
-        .then((_) {
-          done = true;
-          notify();
-        })
-        .catchError((Object e) {
-          streamError = e;
-          done = true;
-          notify();
-        });
-
-    bool keyReceived = false;
-    final builder = BytesBuilder(copy: false);
-
-    while (true) {
-      if (queue.isEmpty) {
-        if (done) break;
-        wakeUp = Completer<void>();
-        // Idle timeout, not a total-transfer timeout — resets every time data
-        // arrives, so a large-but-progressing download isn't cut off, but a
-        // stalled stream (connection half-open, no more data or completion
-        // ever coming) doesn't hang here forever.
-        await wakeUp!.future.timeout(DeskconnConfig.callTimeout);
-        continue;
-      }
-
-      final result = queue.removeAt(0);
-      if (result.args.isEmpty) continue;
-
-      if (!keyReceived) {
-        final raw = _coerceBytes(result.args[0]);
-        final keyPayload = raw.length == 32 ? Uint8List.fromList([...utf8.encode('KEY:'), ...raw]) : raw;
-        await enc.acceptServerKey(keyPayload);
-        keyReceived = true;
-        continue;
-      }
-
-      final type = result.args[0];
-      if (type == 'D' && result.args.length > 1) {
-        builder.add(enc.decrypt(_coerceBytes(result.args[1])));
-      }
+    try {
+      return await tempFile.readAsBytes();
+    } finally {
+      unawaited(tempFile.delete());
     }
-
-    if (streamError != null) throw streamError!;
-    return builder.takeBytes();
   }
 
   Future<void> upload(String localFilePath, String remoteDir, {void Function(int sent, int total)? onProgress}) async {
+    final fs = _fs;
+    if (fs == null) throw Exception('Upload requires a direct connection');
     final file = File(localFilePath);
     if (!await file.exists()) throw Exception('File not found: $localFilePath');
-
-    await ensureKeyExchanged();
-    final enc = _encryption!;
 
     final fileName = localFilePath.split('/').last;
     final remoteFilePath = remoteDir.isEmpty || remoteDir == '/' ? '/$fileName' : '$remoteDir/$fileName';
 
-    final stat = await file.stat();
-    onProgress?.call(0, stat.size);
-
-    var seq = 0;
-    final outgoing = BlockingQueue<Progress>();
-
-    Future<Progress> sender() => outgoing.take();
-    Future<void> receiver(Result _) async {}
-
-    final callFuture = session.callProgressiveProgress(DeskconnProcedures.deskconndFileUpload, sender, receiver);
-    // A dead connection mid-transfer previously wasn't noticed until after
-    // the entire local file had already been read and encrypted — wasted
-    // work on a call that's already failed. This lets the chunk loop below
-    // bail out as soon as the call errors, instead of only checking at the end.
-    Object? uploadError;
-    callFuture.then((_) {}, onError: (Object e) => uploadError = e);
-
-    try {
-      outgoing.put(
-        Progress(
-          args: [
-            'I',
-            seq,
-            enc.encrypt(
-              utf8.encode(
-                jsonEncode({'remote_path': remoteFilePath, 'source_is_dir': false, 'target_is_dir_hint': false}),
-              ),
-            ),
-          ],
-          options: {'progress': true},
-        ),
-      );
-      seq++;
-
-      outgoing.put(
-        Progress(
-          args: [
-            'H',
-            seq,
-            enc.encrypt(
-              utf8.encode(
-                jsonEncode({'name': fileName, 'rel_path': '', 'size': stat.size, 'mode': 420, 'is_dir': false}),
-              ),
-            ),
-          ],
-          options: {'progress': true},
-        ),
-      );
-      seq++;
-
-      const chunkSize = 1024 * 1024;
-      int sentBytes = 0;
-      final raf = await file.open();
-      try {
-        while (true) {
-          if (uploadError != null) throw uploadError!;
-          final chunk = await raf.read(chunkSize);
-          if (chunk.isEmpty) break;
-          outgoing.put(Progress(args: ['D', seq, enc.encrypt(chunk)], options: {'progress': true}));
-          seq++;
-          sentBytes += chunk.length;
-          onProgress?.call(sentBytes, stat.size);
-          await Future.delayed(Duration.zero);
-        }
-      } finally {
-        await raf.close();
-      }
-
-      outgoing.put(Progress(args: ['E', seq], options: {}));
-
-      await callFuture.timeout(const Duration(seconds: 10), onTimeout: () => Result());
-      _invalidateCache(remoteFilePath);
-    } catch (e) {
-      outgoing.cancelPending(StateError('Upload aborted'));
-      rethrow;
-    }
+    await fs.uploadFile(localFilePath, remoteDir, onProgress: onProgress);
+    _invalidateCache(remoteFilePath);
   }
 
   Future<void> rename(String oldPath, String newPath) async {
