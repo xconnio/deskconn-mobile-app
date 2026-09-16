@@ -112,7 +112,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final existing = DesktopConnectionManager().get(widget.config.realm);
     if (existing != null) {
       _log('reusing cached desktop session');
-      _controller = existing.explorerController ??= FileExplorerController(existing.session, widget.config.realm);
+      _controller = existing.explorerController ??= FileExplorerController(
+        existing.session,
+        widget.config.realm,
+        webRtcSession: existing.webRtcSession,
+      );
       if (_controller!.isKeyExchanged) {
         await _loadInitial();
         return;
@@ -147,7 +151,11 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           );
       _log('controller ready p2p=${connection.isP2P}');
       if (mounted) {
-        _controller = connection.explorerController ??= FileExplorerController(connection.session, widget.config.realm);
+        _controller = connection.explorerController ??= FileExplorerController(
+          connection.session,
+          widget.config.realm,
+          webRtcSession: connection.webRtcSession,
+        );
       }
 
       await _loadInitial();

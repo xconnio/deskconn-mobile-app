@@ -12,7 +12,6 @@ import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:xconn/xconn.dart';
 
 class ShareUploadScreen extends StatefulWidget {
   final List<SharedUploadFile> files;
@@ -61,8 +60,8 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     });
 
     try {
-      final session = await _connectTo(realm);
-      final controller = FileExplorerController(session, realm);
+      final connection = await _connectTo(realm);
+      final controller = FileExplorerController(connection.session, realm, webRtcSession: connection.webRtcSession);
       final browse = await controller.browse('');
       if (!mounted) return;
       setState(() {
@@ -79,7 +78,7 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     }
   }
 
-  Future<Session> _connectTo(String realm) async {
+  Future<DesktopConnection> _connectTo(String realm) async {
     if (!ConnectivityService().hasConnection) {
       throw Exception('No internet connection');
     }
@@ -91,15 +90,13 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
     final prefs = await SharedPreferences.getInstance();
     final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
     final existing = DesktopConnectionManager().get(realm);
-    final connection =
-        existing ??
+    return existing ??
         await DesktopConnectionManager().acquire(
           realm: realm,
           authId: authId,
           privateKey: privateKey,
           webRtcEnabled: webRtcEnabled,
         );
-    return connection.session;
   }
 
   Future<void> _reconnectTo(String realm) async {
@@ -119,7 +116,7 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       privateKey: privateKey,
       webRtcEnabled: webRtcEnabled,
     );
-    _controller = FileExplorerController(connection.session, realm);
+    _controller = FileExplorerController(connection.session, realm, webRtcSession: connection.webRtcSession);
   }
 
   // Mirrors the reconnect-on-drop pattern used elsewhere (FileExplorerScreen,
