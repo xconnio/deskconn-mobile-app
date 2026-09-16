@@ -6,6 +6,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -21,7 +23,7 @@ val isReleaseSigningConfigured = if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.deskconn_mobile_app"
+    namespace = "io.xconn.deskconn"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -36,11 +38,14 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.deskconn_mobile_app"
+        applicationId = "io.xconn.deskconn"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
@@ -56,9 +61,12 @@ android {
 
     buildTypes {
         getByName("release") {
-            // TEMP: disable R8/shrinker to avoid XMLStreamException
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
 
             val releaseConfig = signingConfigs.findByName("release")
             if (releaseConfig != null) {
