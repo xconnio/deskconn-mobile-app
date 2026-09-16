@@ -273,12 +273,12 @@ class _MachineGridState extends State<MachineGrid> {
             )
           : GridView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 2.5,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 1.1,
               ),
               itemCount: session.desktops.length,
               itemBuilder: (context, i) {
@@ -293,6 +293,7 @@ class _MachineGridState extends State<MachineGrid> {
                   name: name,
                   status: status,
                   wallpaper: wallpaper,
+                  selected: realm.isNotEmpty && realm == widget.currentRealm,
                   onTap: () => _openDesktop(context, d),
                   onStatusTap: () => _showConnectionDialog(context, d),
                 );
@@ -306,6 +307,7 @@ class _MachineCard extends StatelessWidget {
   final String name;
   final _RowStatus status;
   final Uint8List? wallpaper;
+  final bool selected;
   final VoidCallback onTap;
   final VoidCallback onStatusTap;
 
@@ -313,6 +315,7 @@ class _MachineCard extends StatelessWidget {
     required this.name,
     required this.status,
     required this.wallpaper,
+    required this.selected,
     required this.onTap,
     required this.onStatusTap,
   });
@@ -320,96 +323,100 @@ class _MachineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final palette = DeskconnPalette.of(context);
     final wallpaperBytes = wallpaper;
+    final ringColor = selected ? palette.googleBlue : colorScheme.outlineVariant;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: wallpaperBytes != null
-                      ? Image.memory(wallpaperBytes, fit: BoxFit.cover)
-                      : Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(Icons.desktop_windows, size: 18, color: colorScheme.primary),
-                        ),
-                ),
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: selected
+                  ? [BoxShadow(color: palette.googleBlue.withValues(alpha: 0.45), blurRadius: 16, spreadRadius: 1)]
+                  : null,
+            ),
+            child: Material(
+              color: colorScheme.surfaceContainerHighest,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: ringColor, width: selected ? 2 : 1),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+              child: InkWell(
+                onTap: onTap,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    if (wallpaperBytes != null)
+                      Image.memory(wallpaperBytes, fit: BoxFit.cover)
+                    else
+                      Center(child: Icon(Icons.computer, size: 46, color: palette.subtle)),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: _StatusDot(status: status, onTap: onStatusTap),
                     ),
-                    const SizedBox(height: 2),
-                    _ConnectionChip(status: status, onTap: onStatusTap),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.computer, size: 14, color: palette.subtle),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-class _ConnectionChip extends StatelessWidget {
+class _StatusDot extends StatelessWidget {
   final _RowStatus status;
   final VoidCallback onTap;
 
-  const _ConnectionChip({required this.status, required this.onTap});
+  const _StatusDot({required this.status, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final palette = DeskconnPalette.of(context);
-    final (dotColor, label) = switch (status) {
-      _RowStatus.connecting => (colorScheme.secondary, 'Connecting'),
-      _RowStatus.p2p => (palette.statusOnline, 'P2P'),
-      _RowStatus.routed => (palette.statusRouted, 'Routed'),
-      _RowStatus.offline => (palette.statusOffline, 'Offline'),
+    final dotColor = switch (status) {
+      _RowStatus.connecting => palette.subtle,
+      _RowStatus.p2p => palette.statusOnline,
+      _RowStatus.routed => palette.statusRouted,
+      _RowStatus.offline => palette.statusOffline,
     };
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4)],
             ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 11, fontWeight: FontWeight.w500),
-            ),
-          ],
+          ),
         ),
       ),
     );

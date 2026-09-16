@@ -11,10 +11,10 @@ import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
+import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
 import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
-import 'package:deskconn_mobile_app/widgets/desktop_status_pill.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
@@ -120,11 +120,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         (_connectionStatus == _DesktopConnectionStatus.routed || _connectionStatus == _DesktopConnectionStatus.p2p) &&
         !_openingTerminal;
 
-    final name = widget.desktop['name'] as String?;
-    final authId = widget.desktop['authid']?.toString() ?? '';
-    final shortId = authId.length > 4 ? authId.substring(authId.length - 4) : authId;
-    final displayName = name ?? 'Desktop #$shortId';
-
     final wallpaper = _wallpaperBytes;
 
     return Scaffold(
@@ -136,6 +131,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
               : Container(color: Theme.of(context).scaffoldBackgroundColor),
           if (wallpaper != null) Container(color: Colors.black.withValues(alpha: 0.25)),
           SafeArea(
+            bottom: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -215,11 +211,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     ),
                   ),
                 ),
-                _DesktopLabel(
-                  name: displayName,
-                  status: _connectionStatus,
+                _ConnectionStatusChip(status: _connectionStatus, onWallpaper: wallpaper != null),
+                _DesktopNavBar(
                   onWallpaper: wallpaper != null,
-                  onTap: () => switchMachine(context, currentRealm: _realm),
+                  onMachineTap: () => switchMachine(context, currentRealm: _realm),
+                  onWindowsTap: () {},
+                  onProfileTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
                 ),
               ],
             ),
@@ -588,31 +585,158 @@ class _LauncherTile extends StatelessWidget {
   }
 }
 
-class _DesktopLabel extends StatelessWidget {
-  final String name;
+class _ConnectionStatusChip extends StatelessWidget {
   final _DesktopConnectionStatus status;
   final bool onWallpaper;
-  final VoidCallback? onTap;
 
-  const _DesktopLabel({required this.name, required this.status, this.onWallpaper = false, this.onTap});
+  const _ConnectionStatusChip({required this.status, required this.onWallpaper});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = DeskconnPalette.of(context);
-    final (dotColor, statusLabel) = switch (status) {
-      _DesktopConnectionStatus.checking => (colorScheme.secondary, 'connecting'),
-      _DesktopConnectionStatus.routed => (palette.statusRouted, 'routed'),
-      _DesktopConnectionStatus.p2p => (palette.statusOnline, 'p2p'),
-      _DesktopConnectionStatus.offline => (palette.statusOffline, 'offline'),
+    final (dotColor, label) = switch (status) {
+      _DesktopConnectionStatus.checking => (palette.subtle, 'Connecting'),
+      _DesktopConnectionStatus.p2p => (palette.statusOnline, 'P2P'),
+      _DesktopConnectionStatus.routed => (palette.statusRouted, 'Routed'),
+      _DesktopConnectionStatus.offline => (palette.statusOffline, 'Offline'),
     };
+    final textColor = onWallpaper ? Colors.white : colorScheme.onSurface;
 
-    return DesktopStatusPill(
-      name: name,
-      dotColor: dotColor,
-      statusLabel: statusLabel,
-      onWallpaper: onWallpaper,
-      onTap: onTap,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: onWallpaper ? Colors.black.withValues(alpha: 0.45) : colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: onWallpaper ? Colors.white.withValues(alpha: 0.16) : colorScheme.outlineVariant),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopNavBar extends StatelessWidget {
+  final bool onWallpaper;
+  final VoidCallback onMachineTap;
+  final VoidCallback onWindowsTap;
+  final VoidCallback onProfileTap;
+
+  const _DesktopNavBar({
+    required this.onMachineTap,
+    required this.onWindowsTap,
+    required this.onProfileTap,
+    this.onWallpaper = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final background = onWallpaper ? Colors.black.withValues(alpha: 0.86) : colorScheme.surface;
+    final dividerColor = onWallpaper ? Colors.white.withValues(alpha: 0.14) : colorScheme.outlineVariant;
+    final selectedColor = onWallpaper ? Colors.white : colorScheme.primary;
+    final unselectedColor = onWallpaper
+        ? Colors.white.withValues(alpha: 0.6)
+        : colorScheme.onSurface.withValues(alpha: 0.55);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: background,
+        border: Border(top: BorderSide(color: dividerColor)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              _DesktopNavBarItem(
+                icon: Icons.desktop_windows_outlined,
+                label: 'Machine',
+                color: unselectedColor,
+                onTap: onMachineTap,
+              ),
+              _DesktopNavBarItem(
+                icon: Icons.grid_view_rounded,
+                label: 'Apps',
+                color: selectedColor,
+                onTap: onWindowsTap,
+                selected: true,
+              ),
+              _DesktopNavBarItem(
+                icon: Icons.person_outline,
+                label: 'Profile',
+                color: unselectedColor,
+                onTap: onProfileTap,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopNavBarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool selected;
+
+  const _DesktopNavBarItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20, color: color),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
