@@ -7,6 +7,7 @@ class DeviceIdentity {
   static const _deviceIdKey = 'device_id';
   static const _privateKey = 'private_key';
   static const _publicKey = 'public_key';
+  static const _principalExpiresAt = 'principal_expires_at';
   static const _lastEmail = 'last_email';
   static const _deviceNameKey = 'device_name';
   static const _deviceModelKey = 'device_model';
@@ -20,6 +21,7 @@ class DeviceIdentity {
     String? email,
     String? deviceName,
     String? deviceModel,
+    String? expiresAt,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_deviceIdKey, deviceId);
@@ -28,6 +30,15 @@ class DeviceIdentity {
     if (email != null) await prefs.setString(_lastEmail, email);
     if (deviceName != null) await prefs.setString(_deviceNameKey, deviceName);
     if (deviceModel != null) await prefs.setString(_deviceModelKey, deviceModel);
+    if (expiresAt != null) await prefs.setString(_principalExpiresAt, expiresAt);
+
+    await _secure.write(key: _privateKey, value: privateKey);
+  }
+
+  static Future<void> updateKeyPair({required String privateKey, required String publicKey, String? expiresAt}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_publicKey, publicKey);
+    if (expiresAt != null) await prefs.setString(_principalExpiresAt, expiresAt);
 
     await _secure.write(key: _privateKey, value: privateKey);
   }
@@ -49,6 +60,13 @@ class DeviceIdentity {
   static Future<String?> publicKey() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_publicKey);
+  }
+
+  static Future<DateTime?> principalExpiresAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_principalExpiresAt);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
   }
 
   static Future<bool> hasKeyPair() async {
@@ -106,6 +124,7 @@ class DeviceIdentity {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_deviceIdKey);
     await prefs.remove(_publicKey);
+    await prefs.remove(_principalExpiresAt);
     await prefs.remove(_lastEmail);
     await prefs.remove(_deviceNameKey);
     await prefs.remove(_deviceModelKey);
