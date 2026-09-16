@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/device/cryptosign_keys.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/core/errors/deskconn_error_mapper.dart';
@@ -254,6 +255,7 @@ class SessionProvider extends ChangeNotifier {
         email: email,
         deviceName: deviceName,
         deviceModel: deviceModel,
+        expiresAt: principal['expires_at']?.toString(),
       );
 
       await loadDesktops();
@@ -267,6 +269,32 @@ class SessionProvider extends ChangeNotifier {
         } catch (_) {}
       }
       rethrow;
+    }
+  }
+
+  static const _principalRotateThreshold = Duration(days: 5);
+
+  Future<void> _rotatePrincipalIfExpiringSoon(Session s) async {
+    final expiresAt = await DeviceIdentity.principalExpiresAt();
+    if (expiresAt == null) return;
+    if (expiresAt.difference(DateTime.now()) > _principalRotateThreshold) return;
+
+    try {
+      final oldPublicKey = await DeviceIdentity.publicKey();
+      if (oldPublicKey == null) return;
+
+      final newPrivateKey = await CryptoSignKeys.generatePrivateKey();
+      final newPublicKey = await CryptoSignKeys.derivePublicKey(newPrivateKey);
+
+      final res = await s
+          .call(DeskconnProcedures.accountPrincipalRotate, args: [oldPublicKey, newPublicKey])
+          .timeout(DeskconnConfig.callTimeout);
+
+      final newExpiresAt = res.args.isEmpty ? null : (res.args[0] as Map)['expires_at']?.toString();
+
+      await DeviceIdentity.updateKeyPair(privateKey: newPrivateKey, publicKey: newPublicKey, expiresAt: newExpiresAt);
+    } catch (e) {
+      debugPrint('Principal rotation failed: $e');
     }
   }
 
@@ -290,6 +318,8 @@ class SessionProvider extends ChangeNotifier {
           if (res.args.isEmpty) throw Exception("Empty account");
 
           account = Map<String, dynamic>.from(res.args[0] as Map);
+
+          await _rotatePrincipalIfExpiringSoon(session!);
 
           await loadDesktops();
 
