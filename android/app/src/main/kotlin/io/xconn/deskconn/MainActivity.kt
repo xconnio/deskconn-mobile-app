@@ -1,4 +1,4 @@
-package com.example.deskconn_mobile_app
+package io.xconn.deskconn
 
 import android.Manifest
 import android.app.NotificationChannel

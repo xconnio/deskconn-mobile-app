@@ -22,10 +22,13 @@ import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:deskconn_mobile_app/theme/system_ui.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:deskconn_mobile_app/core/update/update_service.dart';
+import 'package:deskconn_mobile_app/firebase_options.dart';
 import 'package:deskconn_mobile_app/widgets/update_dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -34,11 +37,16 @@ final navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+  };
+
   PlatformDispatcher.instance.onError = (error, stack) {
-    if (error is StateError && error.message == 'Terminal closed') return true;
-    if (error.toString().contains('WebRTC data channel closed')) return true;
-    if (error.toString().contains('WebRTC connection failed before data channel opened')) return true;
-    return false;
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
   };
 
   const MethodChannel('deskconn/shell_notification').setMethodCallHandler((call) async {

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "960498178217",
+    "project_id": "deskconn",
+    "storage_bucket": "deskconn.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:960498178217:android:bebef939f1dd79379531b8",
+        "android_client_info": {
+          "package_name": "io.xconn.deskconn"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuCTy7i7-YHbxc0Bj6a7U7mB-dUB0avqo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
