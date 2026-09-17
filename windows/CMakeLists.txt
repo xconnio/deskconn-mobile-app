@@ -65,9 +65,13 @@ include(flutter/generated_plugins.cmake)
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 # Make the "install" step default, as it's required to run.
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
-endif()
+# CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT is unreliable on some newer
+# CMake/Visual Studio combinations (observed false even on a fresh configure
+# with no -DCMAKE_INSTALL_PREFIX passed), which left CMAKE_INSTALL_PREFIX at
+# CMake's own system default (C:/Program Files/<name>) and made the install
+# step fail without admin rights. Force it unconditionally instead — nothing
+# in this project's workflow relies on a user-supplied install prefix.
+set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
@@ -96,11 +100,15 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/native/dart_quic_ffi.dll")
     COMPONENT Runtime)
 endif()
 
-# Copy the native assets provided by the build.dart from all packages.
+# Copy the native assets provided by the build.dart from all packages. This
+# directory is only produced when some dependency uses a native-assets build
+# hook; skip the install rather than failing when there's nothing to copy.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
-install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-   COMPONENT Runtime)
+if(EXISTS "${NATIVE_ASSETS_DIR}")
+  install(DIRECTORY "${NATIVE_ASSETS_DIR}"
+     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+     COMPONENT Runtime)
+endif()
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
