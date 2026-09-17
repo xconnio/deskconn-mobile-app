@@ -42,19 +42,25 @@ Future<void> initializeDesktopSessionBackgroundService() async {
   );
 }
 
-Future<void> showAppNotification() async {
+Future<void> promoteBackgroundService() async {
   final service = FlutterBackgroundService();
-  final promoted = service.on('promoted').first.timeout(const Duration(seconds: 3), onTimeout: () => {});
+
+  for (var attempt = 0; attempt < 10 && !await service.isRunning(); attempt++) {
+    await Future.delayed(const Duration(milliseconds: 300));
+  }
+
+  final promoted = service.on('promoted').first.timeout(const Duration(seconds: 5), onTimeout: () => {});
   service.invoke('promote');
   await promoted;
+}
 
+Future<void> showAppNotification() async {
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('show');
   } catch (_) {}
 }
 
 Future<void> hideAppNotification() async {
-  FlutterBackgroundService().invoke('demote');
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('hide');
   } catch (_) {}

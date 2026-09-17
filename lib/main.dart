@@ -77,7 +77,8 @@ Future<void> _initializeAppServices() async {
   try {
     await initializeDesktopSessionBackgroundService();
     await ShareService.instance.initialize();
-    unawaited(FlutterBackgroundService().startService());
+    await FlutterBackgroundService().startService();
+    unawaited(promoteBackgroundService());
   } catch (e) {
     debugPrint('App service initialization failed: $e');
   }
