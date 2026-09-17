@@ -402,7 +402,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     ordered: true,
     id: 0,
     topicAnswererOnCandidate: config.topicAnswererOnCandidate,
-    additionalChannels: fileStreamChannelLabels(),
+    additionalChannels: ['shell', ...fileStreamChannelLabels()],
   );
 
   final offerFuture = offerer.offer(offerConfig);

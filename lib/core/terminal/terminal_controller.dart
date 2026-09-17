@@ -5,13 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:xterm/core.dart';
 // ignore: implementation_imports
 import 'package:xconn/src/types.dart';
+import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 
 import 'blocking_queue.dart';
+import 'shell_stream.dart';
 import 'terminal_background_service.dart';
 import 'terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+
+enum _StreamShellResult { started, channelUnavailable, unsupported }
 
 class TerminalController {
   final Terminal terminal = Terminal();
@@ -37,13 +41,16 @@ class TerminalController {
   Encryption? _encryption;
   bool _closeFrameSent = false;
   bool _exitFired = false;
+  ShellHandle? _shellHandle;
 
+  static bool _streamShellSupported = true;
+  static web_rtc.WebRTCSession? _consumedShellSession;
   static const _reconnectDelay = Duration(seconds: 2);
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
   bool get isActive => _running;
-  bool get isReady => _keyReceived;
+  bool get isReady => _shellHandle != null || _keyReceived;
 
   TerminalController({required this.config});
 
@@ -66,6 +73,9 @@ class TerminalController {
   }
 
   Future<void> _connectAndRun() async {
+    final prewarm = _shellPrewarm;
+    if (prewarm != null) await prewarm;
+
     final DesktopConnection connection;
     try {
       connection =
@@ -83,6 +93,127 @@ class TerminalController {
     }
     _log('session ready p2p=${connection.isP2P}');
 
+    if (_streamShellSupported) {
+      var result = await _runStreamShell(connection.webRtcSession);
+      if (result == _StreamShellResult.channelUnavailable) {
+        result = await _reconnectForShellChannel();
+      }
+      if (result == _StreamShellResult.started) return;
+      if (result == _StreamShellResult.unsupported) _streamShellSupported = false;
+    }
+    await _runWampShell(connection);
+  }
+
+  Future<_StreamShellResult> _reconnectForShellChannel() async {
+    try {
+      final fresh = await _acquireFreshConnection();
+      return await _runStreamShell(fresh.webRtcSession);
+    } catch (e) {
+      _log('shell channel reconnect failed error=$e');
+      return _StreamShellResult.unsupported;
+    }
+  }
+
+  Future<DesktopConnection> _acquireFreshConnection() async {
+    final fresh = await DesktopConnectionManager().reacquire(
+      realm: config.realm,
+      authId: config.authId,
+      privateKey: config.privateKey,
+      webRtcEnabled: config.webRtcEnabled,
+    );
+    fresh.isAgentOnline = true;
+    return fresh;
+  }
+
+  static Future<void>? _shellPrewarm;
+
+  // A connection carries a single 'shell' channel, so the stream shell spends
+  // it. Warming a replacement up in the background the moment the terminal
+  // closes keeps the next terminal instant instead of paying for a reconnect.
+  static void _prewarmShellConnection(DesktopSessionLaunchConfig config) {
+    if (_shellPrewarm != null) return;
+    _shellPrewarm = DesktopConnectionManager()
+        .reacquire(
+          realm: config.realm,
+          authId: config.authId,
+          privateKey: config.privateKey,
+          webRtcEnabled: config.webRtcEnabled,
+        )
+        .then<void>((connection) => connection.isAgentOnline = true)
+        .catchError((Object _) {})
+        .whenComplete(() => _shellPrewarm = null);
+  }
+
+  Future<_StreamShellResult> _runStreamShell(web_rtc.WebRTCSession? rtc) async {
+    if (rtc == null) return _StreamShellResult.unsupported;
+    // A connection carries exactly one 'shell' channel, created with the offer
+    // (Android can't be relied on to open more later) -- once it has served a
+    // shell it is spent, so a second terminal needs a fresh connection.
+    if (identical(rtc, _consumedShellSession)) return _StreamShellResult.channelUnavailable;
+    _running = true;
+    _shellExited = false;
+
+    terminal.onResize = (int w, int h, int pw, int ph) {
+      _resizeTimer?.cancel();
+      _resizeTimer = Timer(const Duration(milliseconds: 100), () {
+        _shellHandle?.resize(terminal.viewWidth, terminal.viewHeight);
+      });
+    };
+
+    terminal.onOutput = (String data) {
+      if (!_running || data.isEmpty || _shellHandle == null) return;
+
+      String output = data;
+      if (ctrl) {
+        output = _applyCtrl(output);
+        ctrl = false;
+        onModifierChanged?.call();
+      }
+      if (alt) {
+        output = '\x1b$output';
+        alt = false;
+        onModifierChanged?.call();
+      }
+
+      _shellHandle!.send(Uint8List.fromList(utf8.encode(output)));
+    };
+
+    try {
+      final handle = await openShell(
+        rtc,
+        terminal.viewWidth,
+        terminal.viewHeight,
+        (bytes) {
+          if (!_disposed) terminal.write(utf8.decode(bytes, allowMalformed: true));
+        },
+        () {
+          _shellExited = true;
+          _fireExit();
+        },
+      );
+
+      if (_disposed || _shellExited) {
+        await handle.close();
+        return _StreamShellResult.started;
+      }
+
+      _consumedShellSession = rtc;
+      _shellHandle = handle;
+      handle.resize(terminal.viewWidth, terminal.viewHeight);
+      onStarted?.call();
+      return _StreamShellResult.started;
+    } on ShellChannelUnavailableException catch (e) {
+      _log('shell channel unavailable error=$e');
+      _shellHandle = null;
+      return _StreamShellResult.channelUnavailable;
+    } catch (e) {
+      _log('stream shell unavailable error=$e');
+      _shellHandle = null;
+      return _StreamShellResult.unsupported;
+    }
+  }
+
+  Future<void> _runWampShell(DesktopConnection connection) async {
     _outgoingQueue.clear();
     _encryption = await Encryption.create();
     _keyReceived = false;
@@ -243,6 +374,12 @@ class TerminalController {
   }
 
   void _requestShellClose() {
+    if (_shellHandle != null) {
+      _shellHandle!.send(Uint8List.fromList(utf8.encode('\x03')));
+      unawaited(_shellHandle!.close());
+      _shellHandle = null;
+      return;
+    }
     if (_closeFrameSent) return;
     _closeFrameSent = true;
     _log('send terminal close frame');
@@ -273,7 +410,12 @@ class TerminalController {
   }
 
   void sendSpecialKey(String sequence) {
-    if (!_running || !_keyReceived) return;
+    if (!_running) return;
+    if (_shellHandle != null) {
+      _shellHandle!.send(Uint8List.fromList(utf8.encode(sequence)));
+      return;
+    }
+    if (!_keyReceived) return;
     _outgoingQueue.put(Progress(args: [_encodeOutboundText(sequence)], options: {'progress': true}));
   }
 
@@ -296,18 +438,24 @@ class TerminalController {
   // Called when resuming an already-active session to force the server-side
   // shell to redraw its prompt via SIGWINCH.
   void requestRedraw() {
-    if (!_running || !_keyReceived) return;
+    if (!_running) return;
     _log('request redraw');
-    _sendSize();
+    if (_shellHandle != null) {
+      _shellHandle!.resize(terminal.viewWidth, terminal.viewHeight);
+      return;
+    }
+    if (_keyReceived) _sendSize();
   }
 
   void dispose() {
     if (_disposed) return;
     _log('dispose');
+    final usedStreamShell = _shellHandle != null;
     _requestShellClose();
     _disposed = true;
     _running = false;
     _cleanup();
     _fireExit();
+    if (usedStreamShell) _prewarmShellConnection(config);
   }
 }
