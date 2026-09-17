@@ -40,5 +40,21 @@ setup-quic-ios:
 	cp target/aarch64-apple-ios-sim/release/libdart_quic_ffi.a \
 		ios/Runner/QuicFFI/libdart_quic_ffi-sim.a
 
+# Builds the QUIC FFI DLL for Windows from the same dart-quic Rust crate and
+# drops it where lib/core/wamp/quic_library_path.dart looks for it (next to the
+# executable). Requires: Rust toolchain (rustup), run from Git Bash or MSYS2 so
+# git/sed/cp/mkdir are available. Without it the app falls back to the router's
+# WebSocket endpoint instead of QUIC.
+setup-quic-windows:
+	@set -e; \
+	if [ ! -d /tmp/dart-quic ]; then \
+		git clone --depth 1 https://github.com/arcticfox1919/dart-quic.git /tmp/dart-quic; \
+	fi; \
+	cd /tmp/dart-quic/dart-quic-ffi && \
+		sed -i 's/vec!\[b"h3".to_vec(), b"hq-29".to_vec()\]/vec![b"wamp.2.quic".to_vec()]/g' src/quic/quic_config.rs; \
+	cargo build --release; \
+	mkdir -p "$(CURDIR)/windows/native"; \
+	cp target/release/dart_quic_ffi.dll "$(CURDIR)/windows/native/dart_quic_ffi.dll"
+
 build-apk:
 	flutter build apk --no-tree-shake-icons
