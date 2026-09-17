@@ -56,5 +56,21 @@ setup-quic-windows:
 	mkdir -p "$(CURDIR)/windows/native"; \
 	cp target/release/dart_quic_ffi.dll "$(CURDIR)/windows/native/dart_quic_ffi.dll"
 
+# Builds the QUIC FFI dylib for macOS from the same dart-quic Rust crate, into
+# macos/Runner/QuicFFI. Add that dylib to the Runner target's "Copy Files" phase
+# (Destination: Executables) in Xcode so it ships next to the app binary, where
+# lib/core/wamp/quic_library_path.dart looks for it. Without it the app falls
+# back to the router's WebSocket endpoint instead of QUIC.
+setup-quic-macos:
+	@set -e; \
+	if [ ! -d /tmp/dart-quic ]; then \
+		git clone --depth 1 https://github.com/arcticfox1919/dart-quic.git /tmp/dart-quic; \
+	fi; \
+	cd /tmp/dart-quic/dart-quic-ffi && \
+		sed -i '' 's/vec!\[b"h3".to_vec(), b"hq-29".to_vec()\]/vec![b"wamp.2.quic".to_vec()]/g' src/quic/quic_config.rs; \
+	cargo build --release; \
+	mkdir -p "$(CURDIR)/macos/Runner/QuicFFI"; \
+	cp target/release/libdart_quic_ffi.dylib "$(CURDIR)/macos/Runner/QuicFFI/libdart_quic_ffi.dylib"
+
 build-apk:
 	flutter build apk --no-tree-shake-icons
