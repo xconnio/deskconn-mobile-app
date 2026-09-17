@@ -5,12 +5,14 @@ import 'dart:typed_data';
 import 'package:xconn/xconn.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
+import 'package:deskconn_mobile_app/core/window_manager/desktop_window.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
@@ -18,6 +20,8 @@ import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
+import 'package:deskconn_mobile_app/widgets/app_dock.dart';
+import 'package:deskconn_mobile_app/widgets/floating_window.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,6 +51,8 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
   bool _openingTerminal = false;
   _DesktopConnectionStatus _connectionStatus = _DesktopConnectionStatus.checking;
   Uint8List? _wallpaperBytes;
+  final DesktopWindowManager _windowManager = DesktopWindowManager();
+  bool _dockAutoHide = false;
 
   String? get _realm => widget.desktop['realm']?.toString();
 
@@ -55,7 +61,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     super.initState();
     unawaited(_probeDesktopConnection());
     unawaited(_loadCachedWallpaper());
+    unawaited(_loadDockAutoHide());
     ConnectivityService().addListener(_handleConnectivityChanged);
+  }
+
+  Future<void> _loadDockAutoHide() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _dockAutoHide = prefs.getBool(prefKeyDockAutoHide) ?? false);
   }
 
   @override
@@ -63,6 +75,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     ConnectivityService().removeListener(_handleConnectivityChanged);
     final realm = _realm;
     if (realm != null) DesktopConnectionManager().get(realm)?.onDisconnected = null;
+    _windowManager.dispose();
     super.dispose();
   }
 
@@ -121,6 +134,10 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         !_openingTerminal;
 
     final wallpaper = _wallpaperBytes;
+
+    if (isDesktopLayout(context)) {
+      return _buildDesktopWorkspace(context, wallpaper: wallpaper, terminalEnabled: terminalEnabled);
+    }
 
     return Scaffold(
       body: Stack(
@@ -226,6 +243,101 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     );
   }
 
+  Widget _buildDesktopWorkspace(BuildContext context, {required Uint8List? wallpaper, required bool terminalEnabled}) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          wallpaper != null
+              ? Image.memory(wallpaper, fit: BoxFit.cover)
+              : Container(color: Theme.of(context).scaffoldBackgroundColor),
+          if (wallpaper != null) Container(color: Colors.black.withValues(alpha: 0.25)),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final workspaceRect = Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight);
+                      return AnimatedBuilder(
+                        animation: _windowManager,
+                        builder: (context, _) {
+                          final open = _windowManager.openWindows;
+                          final topId = open.isEmpty ? null : open.last.id;
+                          return Stack(
+                            children: [
+                              for (final entry in open)
+                                FloatingWindow(
+                                  key: ValueKey(entry.id),
+                                  manager: _windowManager,
+                                  entry: entry,
+                                  focused: entry.id == topId,
+                                  workspaceRect: workspaceRect,
+                                  child: entry.content,
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                _AutoHideDock(
+                  enabled: _dockAutoHide,
+                  child: AppDock(
+                    manager: _windowManager,
+                    realm: _realm ?? '',
+                    machineName: widget.desktop['name']?.toString() ?? 'Desktop',
+                    appsEnabled: terminalEnabled,
+                    connectionStatusLabel: _connectionStatusLabel,
+                    connectionStatusColor: _connectionStatusColor(context),
+                    onMachineTap: () => switchMachine(context, currentRealm: _realm),
+                    onProfileTap: () =>
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
+                    onOpen: (kind, {category}) {
+                      switch (kind) {
+                        case DesktopAppKind.remoteControl:
+                          _openRemoteControl(context);
+                          break;
+                        case DesktopAppKind.terminal:
+                          _openTerminal(context);
+                          break;
+                        case DesktopAppKind.fileExplorer:
+                          _openFileExplorer(context, category: category);
+                          break;
+                        case DesktopAppKind.resourceMonitor:
+                          _openResourceMonitor(context);
+                          break;
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _connectionStatusLabel => switch (_connectionStatus) {
+    _DesktopConnectionStatus.checking => 'Connecting',
+    _DesktopConnectionStatus.p2p => 'P2P',
+    _DesktopConnectionStatus.routed => 'Routed',
+    _DesktopConnectionStatus.offline => 'Offline',
+  };
+
+  Color _connectionStatusColor(BuildContext context) {
+    final palette = DeskconnPalette.of(context);
+    return switch (_connectionStatus) {
+      _DesktopConnectionStatus.checking => palette.subtle,
+      _DesktopConnectionStatus.p2p => palette.statusOnline,
+      _DesktopConnectionStatus.routed => palette.statusRouted,
+      _DesktopConnectionStatus.offline => palette.statusOffline,
+    };
+  }
+
   Future<void> _probeDesktopConnection() async {
     final realm = _realm;
 
@@ -255,7 +367,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     final authId = await DeviceIdentity.lastEmail();
     final privateKey = await DeviceIdentity.privateKey();
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? defaultWebRtcEnabled;
 
     if (authId == null || privateKey == null || realm == null) {
       if (mounted) {
@@ -361,6 +473,19 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
       final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
+      if (isDesktopLayout(context)) {
+        final palette = DeskconnPalette.of(context);
+        _windowManager.open(
+          DesktopAppKind.remoteControl,
+          title: 'Remote Ctrl',
+          icon: Icons.settings_remote_outlined,
+          iconColor: palette.osMint,
+          content: RemoteControlView(config: config, embedded: true),
+          workspaceSize: MediaQuery.sizeOf(context),
+        );
+        return;
+      }
+
       await Navigator.push(context, MaterialPageRoute(builder: (_) => RemoteControlScreen(config: config)));
     } catch (e) {
       if (context.mounted) {
@@ -387,6 +512,21 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
       final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
 
+      if (isDesktopLayout(context)) {
+        final palette = DeskconnPalette.of(context);
+        _windowManager.open(
+          DesktopAppKind.resourceMonitor,
+          title: 'Monitor',
+          icon: Icons.speed_outlined,
+          iconColor: palette.osUbuntu,
+          content: ResourceMonitorView(config: config, embedded: true),
+          workspaceSize: MediaQuery.sizeOf(context),
+          width: 700,
+          height: 560,
+        );
+        return;
+      }
+
       await Navigator.push(context, MaterialPageRoute(builder: (_) => ResourceMonitorScreen(config: config)));
     } catch (e) {
       if (context.mounted) {
@@ -412,6 +552,35 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       if (!context.mounted) return;
 
       final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+
+      if (isDesktopLayout(context)) {
+        final palette = DeskconnPalette.of(context);
+        final title = switch (category) {
+          'documents' => 'Documents',
+          'images' => 'Photos',
+          'videos' => 'Videos',
+          _ => 'Files',
+        };
+        late final VoidCallback closeFilesWindow;
+        final entry = _windowManager.open(
+          DesktopAppKind.fileExplorer,
+          category: category,
+          title: title,
+          icon: Icons.folder_open,
+          iconColor: palette.osKubuntu,
+          content: FileExplorerScreen(
+            config: config,
+            category: category,
+            embedded: true,
+            onRequestClose: () => closeFilesWindow(),
+          ),
+          workspaceSize: MediaQuery.sizeOf(context),
+          width: 900,
+          height: 600,
+        );
+        closeFilesWindow = () => _windowManager.close(entry.id);
+        return;
+      }
 
       await Navigator.push(
         context,
@@ -463,6 +632,24 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
       if (!context.mounted) return;
 
       setState(() => _openingTerminal = false);
+
+      if (isDesktopLayout(context)) {
+        _appendTerminalLog("Opening terminal window");
+        late final VoidCallback closeTerminalWindow;
+        final entry = _windowManager.open(
+          DesktopAppKind.terminal,
+          title: 'Terminal',
+          icon: Icons.terminal,
+          iconColor: DeskconnPalette.of(context).osDebian,
+          content: TerminalPane(controller: controller, embedded: true, onRequestClose: () => closeTerminalWindow()),
+          workspaceSize: MediaQuery.sizeOf(context),
+          width: 800,
+          height: 520,
+        );
+        closeTerminalWindow = () => _windowManager.close(entry.id);
+        return;
+      }
+
       _appendTerminalLog("Navigating to terminal screen");
 
       await Navigator.push(context, MaterialPageRoute(builder: (_) => TerminalScreen(controller: controller!)));
@@ -735,6 +922,44 @@ class _DesktopNavBarItem extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Reveals the dock on hover near its own reserved strip at the bottom edge
+// and hides it once the pointer leaves — the SizedBox keeps that strip's
+// layout size constant either way, so the hover target never disappears
+// along with the dock's visuals.
+class _AutoHideDock extends StatefulWidget {
+  final bool enabled;
+  final Widget child;
+
+  const _AutoHideDock({required this.enabled, required this.child});
+
+  @override
+  State<_AutoHideDock> createState() => _AutoHideDockState();
+}
+
+class _AutoHideDockState extends State<_AutoHideDock> {
+  bool _visible = true;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _visible = true),
+      onExit: (_) => setState(() => _visible = false),
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        offset: _visible ? Offset.zero : const Offset(0, 1),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: _visible ? 1 : 0,
+          child: widget.child,
         ),
       ),
     );

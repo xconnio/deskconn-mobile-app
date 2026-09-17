@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
@@ -127,7 +128,7 @@ class _MachineGridState extends State<MachineGrid> {
 
     if (mounted) setState(() => _connectingRealms.add(realm));
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? defaultWebRtcEnabled;
     final success = await _connect(realm, webRtcEnabled);
     if (mounted) setState(() => _connectingRealms.remove(realm));
     return success;
@@ -217,6 +218,22 @@ class _MachineGridState extends State<MachineGrid> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
+    // Matches deskconn-web-app's OverviewGrid: fixed 220px tiles that wrap to
+    // however many columns fit, instead of stretching to fill a wide window.
+    // Mobile keeps its existing fixed 2-up grid.
+    final gridDelegate = isDesktopLayout(context)
+        ? const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 220,
+            crossAxisSpacing: 20,
+            mainAxisSpacing: 20,
+            childAspectRatio: 1.3,
+          )
+        : const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 1.1,
+          );
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -274,12 +291,7 @@ class _MachineGridState extends State<MachineGrid> {
           : GridView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 1.1,
-              ),
+              gridDelegate: gridDelegate,
               itemCount: session.desktops.length,
               itemBuilder: (context, i) {
                 final d = session.desktops[i];

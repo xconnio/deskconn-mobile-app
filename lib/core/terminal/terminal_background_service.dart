@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+
+// flutter_background_service only has an Android/iOS implementation — every
+// entry point here is a no-op elsewhere instead of throwing.
+bool get _backgroundServiceSupported => Platform.isAndroid || Platform.isIOS;
 
 const _kAppNotificationChannel = 'deskconn/notification';
 const _kNotifId = 1107;
@@ -26,6 +31,7 @@ class DesktopSessionLaunchConfig {
 }
 
 Future<void> initializeDesktopSessionBackgroundService() async {
+  if (!_backgroundServiceSupported) return;
   await FlutterBackgroundService().configure(
     androidConfiguration: AndroidConfiguration(
       onStart: _onStart,
@@ -43,6 +49,7 @@ Future<void> initializeDesktopSessionBackgroundService() async {
 }
 
 Future<void> promoteBackgroundService() async {
+  if (!_backgroundServiceSupported) return;
   final service = FlutterBackgroundService();
 
   for (var attempt = 0; attempt < 10 && !await service.isRunning(); attempt++) {
@@ -55,12 +62,15 @@ Future<void> promoteBackgroundService() async {
 }
 
 Future<void> showAppNotification() async {
+  if (!_backgroundServiceSupported) return;
+
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('show');
   } catch (_) {}
 }
 
 Future<void> hideAppNotification() async {
+  if (!_backgroundServiceSupported) return;
   try {
     await const MethodChannel(_kAppNotificationChannel).invokeMethod('hide');
   } catch (_) {}

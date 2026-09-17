@@ -1,7 +1,7 @@
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/settings_screen.dart';
 import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
@@ -52,7 +52,7 @@ class AppShell extends StatelessWidget {
         : email.isNotEmpty
         ? email[0].toUpperCase()
         : '?';
-    final showSidebar = _isDesktopLayout(context);
+    final showSidebar = isDesktopLayout(context);
     final sidebar = _AppSidebar(
       currentSection: currentSection,
       name: name,
@@ -80,14 +80,6 @@ class AppShell extends StatelessWidget {
           : body,
     );
   }
-}
-
-bool _isDesktopLayout(BuildContext context) {
-  if (MediaQuery.sizeOf(context).width >= 900) return true;
-  return switch (defaultTargetPlatform) {
-    TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => true,
-    _ => false,
-  };
 }
 
 class _AppSidebar extends StatelessWidget {

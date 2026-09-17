@@ -47,16 +47,34 @@ String _friendlyError(Object error) {
   return error.toString();
 }
 
-class ResourceMonitorScreen extends StatefulWidget {
+class ResourceMonitorScreen extends StatelessWidget {
   final DesktopSessionLaunchConfig config;
 
   const ResourceMonitorScreen({super.key, required this.config});
 
   @override
-  State<ResourceMonitorScreen> createState() => _ResourceMonitorScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(config.desktopName)),
+      body: ResourceMonitorView(config: config),
+    );
+  }
 }
 
-class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with SingleTickerProviderStateMixin {
+/// Embeddable content for the resource monitor. Used standalone inside
+/// [ResourceMonitorScreen] (mobile full-screen push) and directly as
+/// [DesktopWindowEntry.content] inside a [FloatingWindow] on desktop.
+class ResourceMonitorView extends StatefulWidget {
+  final DesktopSessionLaunchConfig config;
+  final bool embedded;
+
+  const ResourceMonitorView({super.key, required this.config, this.embedded = false});
+
+  @override
+  State<ResourceMonitorView> createState() => _ResourceMonitorViewState();
+}
+
+class _ResourceMonitorViewState extends State<ResourceMonitorView> with SingleTickerProviderStateMixin {
   static const _tabs = [
     (icon: Icons.apps_rounded, label: 'Apps'),
     (icon: Icons.list_alt_rounded, label: 'Processes'),
@@ -356,82 +374,81 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.config.desktopName)),
-      body: Column(
-        children: [
-          _buildStatRow(context),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null && _info == null
-                ? _ErrorView(message: _error!)
-                : Column(
-                    children: [
-                      if (_actionError != null)
-                        Container(
-                          width: double.infinity,
-                          color: _reconnecting
-                              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-                              : Colors.red.withValues(alpha: 0.08),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Row(
-                            children: [
-                              if (_reconnecting)
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                )
-                              else
-                                const Icon(Icons.error_outline, color: Colors.red, size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _actionError!,
-                                  style: TextStyle(
-                                    color: _reconnecting ? Theme.of(context).colorScheme.primary : Colors.red,
-                                    fontSize: 12,
-                                  ),
+    return Column(
+      children: [
+        _buildStatRow(context),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null && _info == null
+              ? _ErrorView(message: _error!)
+              : Column(
+                  children: [
+                    if (_actionError != null)
+                      Container(
+                        width: double.infinity,
+                        color: _reconnecting
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+                            : Colors.red.withValues(alpha: 0.08),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Row(
+                          children: [
+                            if (_reconnecting)
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              )
+                            else
+                              const Icon(Icons.error_outline, color: Colors.red, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _actionError!,
+                                style: TextStyle(
+                                  color: _reconnecting ? Theme.of(context).colorScheme.primary : Colors.red,
+                                  fontSize: 12,
                                 ),
                               ),
-                              if (!_reconnecting)
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => setState(() => _actionError = null),
-                                ),
-                            ],
-                          ),
-                        ),
-                      TabBar(
-                        controller: _tabController,
-                        isScrollable: false,
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                        labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                        unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-                        tabs: [for (final t in _tabs) Tab(height: 48, icon: Icon(t.icon, size: 16), text: t.label)],
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildAppsTab(),
-                            _buildProcessesTab(),
-                            _buildProcessorTab(),
-                            _buildMemoryTab(),
-                            _buildDiskTab(),
-                            _buildNetworkTab(),
+                            ),
+                            if (!_reconnecting)
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () => setState(() => _actionError = null),
+                              ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-          ),
+                    TabBar(
+                      controller: _tabController,
+                      isScrollable: false,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                      labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                      unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                      tabs: [for (final t in _tabs) Tab(height: 48, icon: Icon(t.icon, size: 16), text: t.label)],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildAppsTab(),
+                          _buildProcessesTab(),
+                          _buildProcessorTab(),
+                          _buildMemoryTab(),
+                          _buildDiskTab(),
+                          _buildNetworkTab(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+        if (!widget.embedded)
           SafeArea(
             top: false,
             child: DesktopStatusPill.forSession(
@@ -441,8 +458,7 @@ class _ResourceMonitorScreenState extends State<ResourceMonitorScreen> with Sing
               onTap: () => switchMachine(context, currentRealm: widget.config.realm),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 

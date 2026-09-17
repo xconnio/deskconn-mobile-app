@@ -1,3 +1,15 @@
+import 'package:flutter/foundation.dart';
+
+// The WebRTC data-channel path (used for P2P + the filestream key exchange)
+// crashes the whole process on Linux desktop — reproduced 2026-09-17: the
+// desktop agent logs "filestream: key exchange failed: invalid character
+// '\x01'..." the instant the data channel opens, then the client process
+// dies outright (a native crash, not a catchable Dart exception). Routed
+// mode doesn't touch this path at all, so default P2P off on desktop until
+// that's root-caused — still user-toggleable in Settings.
+final bool defaultWebRtcEnabled =
+    defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+
 class DeskconnConfig {
   static const String quicAddr = "api.deskconn.com:8081";
   static const String realm = "io.xconn.deskconn";

@@ -1,3 +1,5 @@
+import 'package:deskconn_mobile_app/core/constants.dart';
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/providers/session_provider.dart';
 import 'package:deskconn_mobile_app/providers/theme_provider.dart';
@@ -9,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String prefKeyWebRtcEnabled = 'webrtc_enabled';
+const String prefKeyDockAutoHide = 'dock_auto_hide';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,7 +21,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _webRtcEnabled = true;
+  bool _webRtcEnabled = defaultWebRtcEnabled;
+  bool _dockAutoHide = false;
 
   @override
   void initState() {
@@ -30,7 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+      _webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? defaultWebRtcEnabled;
+      _dockAutoHide = prefs.getBool(prefKeyDockAutoHide) ?? false;
     });
   }
 
@@ -40,6 +45,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _webRtcEnabled = value);
     await DesktopConnectionManager().invalidateAll();
+  }
+
+  Future<void> _setDockAutoHide(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(prefKeyDockAutoHide, value);
+    if (!mounted) return;
+    setState(() => _dockAutoHide = value);
   }
 
   Future<void> _chooseTheme(BuildContext context) async {
@@ -129,6 +141,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: _setWebRtc,
           ),
           const Divider(),
+          if (isDesktopLayout(context)) ...[
+            SwitchListTile(
+              secondary: const Icon(Icons.dock_outlined),
+              title: const Text('Auto-hide dock'),
+              subtitle: const Text('Hide the dock until you move the pointer to the bottom edge'),
+              value: _dockAutoHide,
+              onChanged: _setDockAutoHide,
+            ),
+            const Divider(),
+          ],
           ListTile(
             leading: const Icon(Icons.brightness_6_outlined),
             title: const Text('Theme'),

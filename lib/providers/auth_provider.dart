@@ -5,6 +5,7 @@ import 'package:deskconn_mobile_app/core/errors/deskconn_error_messages.dart';
 import 'package:deskconn_mobile_app/core/errors/deskconn_error_mapper.dart';
 import 'package:deskconn_mobile_app/core/operation_result.dart';
 import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_library_path.dart';
 import 'package:xconn/xconn.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -28,6 +29,7 @@ class AuthProvider extends ChangeNotifier {
         DeskconnConfig.realm,
         QUICDialerConfig(
           authenticator: CryptoSignAuthenticator(DeskconnConfig.mobileAppAuthID, DeskconnConfig.servicePrivateKey),
+          libraryPath: desktopQuicLibraryPath(),
         ),
       );
     }
