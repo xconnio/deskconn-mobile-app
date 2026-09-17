@@ -17,3 +17,13 @@ String? desktopQuicLibraryPath() {
   if (Platform.isMacOS) return '$executableDir/libdart_quic_ffi.dylib';
   return null;
 }
+
+/// Whether QUIC can actually be dialled here: on mobile the library is linked
+/// into the app, on desktop it has to be bundled next to the executable.
+bool get hasDesktopQuicLibrary {
+  if (kIsWeb) return false;
+  if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) return true;
+
+  final path = desktopQuicLibraryPath();
+  return path != null && File(path).existsSync();
+}
