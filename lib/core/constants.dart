@@ -12,6 +12,7 @@ final bool defaultWebRtcEnabled =
 
 class DeskconnConfig {
   static const String quicAddr = "api.deskconn.com:8081";
+  static const String wampWsUrl = "wss://api.deskconn.com/ws";
   static const String realm = "io.xconn.deskconn";
 
   static const String mobileAppAuthRole = "xconnio:deskconn:app:mobile";

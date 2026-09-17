@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_library_path.dart';
 import 'package:flutter/foundation.dart';
 import 'package:xconn/xconn.dart';
 
@@ -25,6 +26,10 @@ class QUICConnectionManager {
   }
 
   Future<Session> openSession(String realm, QUICDialerConfig config) async {
+    if (!hasDesktopQuicLibrary) {
+      return _openWebSocketSession(realm, config);
+    }
+
     final root = _root;
     if (root != null && root.isConnected()) {
       return _openRealmSession(root, realm, config);
@@ -32,6 +37,31 @@ class QUICConnectionManager {
 
     final newRoot = await _connectRoot(realm, config);
     return _openRealmSession(newRoot, realm, config);
+  }
+
+  // Desktop platforms whose QUIC library isn't bundled (Windows, macOS) dial
+  // the router's WebSocket endpoint instead -- the transport the web app uses,
+  // and one that still carries WebRTC signalling for P2P desktops.
+  Future<Session> _openWebSocketSession(String realm, QUICDialerConfig config) async {
+    try {
+      final session = await _withRetry(
+        () =>
+            Client(
+                  config: ClientConfig(authenticator: config.authenticator, serializer: config.serializer),
+                )
+                .connect(DeskconnConfig.wampWsUrl, realm)
+                .timeout(
+                  const Duration(seconds: 15),
+                  onTimeout: () =>
+                      throw TimeoutException('WAMP WebSocket connect did not complete', const Duration(seconds: 15)),
+                ),
+      );
+      ConnectivityService().reportBackendReachable();
+      return session;
+    } catch (e) {
+      ConnectivityService().reportBackendUnreachable();
+      rethrow;
+    }
   }
 
   Future<Session> _openRealmSession(QUICSession root, String realm, QUICDialerConfig config) {
