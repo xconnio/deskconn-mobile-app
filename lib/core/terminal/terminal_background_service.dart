@@ -44,6 +44,11 @@ Future<void> initializeDesktopSessionBackgroundService() async {
 
 Future<void> promoteBackgroundService() async {
   final service = FlutterBackgroundService();
+
+  for (var attempt = 0; attempt < 10 && !await service.isRunning(); attempt++) {
+    await Future.delayed(const Duration(milliseconds: 300));
+  }
+
   final promoted = service.on('promoted').first.timeout(const Duration(seconds: 5), onTimeout: () => {});
   service.invoke('promote');
   await promoted;
