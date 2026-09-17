@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:xconn/xconn.dart';
 
 class QUICConnectionManager {
@@ -92,8 +93,12 @@ Future<T> _withRetry<T>(
   for (var i = 0; i < maxAttempts; i++) {
     try {
       return await attempt();
-    } catch (e) {
-      if (i == maxAttempts - 1) rethrow;
+    } catch (e, st) {
+      debugPrint('QUIC connect attempt ${i + 1}/$maxAttempts failed: $e');
+      if (i == maxAttempts - 1) {
+        debugPrint('$st');
+        rethrow;
+      }
       await Future.delayed(delay);
     }
   }

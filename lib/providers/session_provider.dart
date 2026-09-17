@@ -109,7 +109,9 @@ class SessionProvider extends ChangeNotifier {
       await authSession.call(DeskconnProcedures.accountLogin, args: [email]).timeout(DeskconnConfig.callTimeout);
 
       return const OperationResult.success();
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('requestSignInOtp failed: $e');
+      debugPrint('$st');
       await _closeSignInSession();
       return OperationResult.failure(
         DeskconnErrorMapper.messageFor(

@@ -380,6 +380,13 @@ class MainActivity : FlutterActivity() {
             Intent(this, TerminalNotificationActionReceiver::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openPi = PendingIntent.getActivity(
+            this, 0, openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         val n = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_bg_service_small)
             .setContentTitle("Deskconn")
@@ -388,6 +395,7 @@ class MainActivity : FlutterActivity() {
             .setOngoing(true)
             .setAutoCancel(false)
             .setSilent(true)
+            .setContentIntent(openPi)
             .addAction(0, "Close", closePi)
             .build()
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(notifId, n)

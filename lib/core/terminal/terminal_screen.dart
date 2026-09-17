@@ -5,16 +5,37 @@ import 'toolbar.dart';
 
 void _log(String msg) => debugPrint('[TerminalScreen ${DateTime.now().millisecondsSinceEpoch}] $msg');
 
-class TerminalScreen extends StatefulWidget {
+class TerminalScreen extends StatelessWidget {
   final TerminalController controller;
 
   const TerminalScreen({super.key, required this.controller});
 
   @override
-  State<TerminalScreen> createState() => _TerminalScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: TerminalPane(controller: controller),
+    );
+  }
 }
 
-class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObserver {
+/// Embeddable content for a live terminal session. Used standalone inside
+/// [TerminalScreen] (mobile full-screen push) and directly as
+/// [DesktopWindowEntry.content] inside a [FloatingWindow] on desktop, where
+/// [onRequestClose] closes the window instead of popping the (unrelated)
+/// enclosing route.
+class TerminalPane extends StatefulWidget {
+  final TerminalController controller;
+  final bool embedded;
+  final VoidCallback? onRequestClose;
+
+  const TerminalPane({super.key, required this.controller, this.embedded = false, this.onRequestClose});
+
+  @override
+  State<TerminalPane> createState() => _TerminalPaneState();
+}
+
+class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver {
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
   bool _isLoading = false;
@@ -41,9 +62,7 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     widget.controller.onStarted = () {
       if (mounted) setState(() => _isLoading = false);
     };
-    widget.controller.onExit = () {
-      if (mounted) Navigator.pop(context);
-    };
+    widget.controller.onExit = _close;
     widget.controller.onError = (e) {
       if (mounted) setState(() => _startError = e);
     };
@@ -62,6 +81,15 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     super.dispose();
   }
 
+  void _close() {
+    if (!mounted) return;
+    if (widget.embedded) {
+      widget.onRequestClose?.call();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   AppBar _launchAppBar() {
     return AppBar(
       backgroundColor: Colors.black,
@@ -71,11 +99,15 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     );
   }
 
+  Widget _chrome({PreferredSizeWidget? appBar, required Widget body}) {
+    if (widget.embedded) return Container(color: Colors.black, child: body);
+    return Scaffold(backgroundColor: Colors.black, appBar: appBar, body: body);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_startError != null) {
-      return Scaffold(
-        backgroundColor: Colors.black,
+      return _chrome(
         appBar: _launchAppBar(),
         body: Center(
           child: Padding(
@@ -94,7 +126,7 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
                 ),
                 const SizedBox(height: 24),
                 OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _close,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
                     side: const BorderSide(color: Colors.white38),
@@ -109,8 +141,7 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
     }
 
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: Colors.black,
+      return _chrome(
         appBar: _launchAppBar(),
         body: Center(
           child: Column(
@@ -130,8 +161,7 @@ class _TerminalScreenState extends State<TerminalScreen> with WidgetsBindingObse
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return _chrome(
       body: SafeArea(
         child: Column(
           children: [

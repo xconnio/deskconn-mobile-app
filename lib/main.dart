@@ -24,6 +24,7 @@ import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
@@ -37,17 +38,34 @@ final navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // firebase_core/firebase_crashlytics have no Linux/Windows implementation
+  // (DefaultFirebaseOptions.currentPlatform only covers android/iOS) — skip
+  // Firebase entirely on desktop platforms that lack it rather than crash.
+  final firebaseSupported =
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
 
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-  };
+  if (firebaseSupported) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  } else {
+    // No Crashlytics here, but still need a handler — without one, an
+    // uncaught error outside the widget build phase (e.g. an async frame
+    // callback) takes the whole process down instead of just logging.
+    FlutterError.onError = FlutterError.presentError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('Uncaught error: $error\n$stack');
+      return true;
+    };
+  }
 
   const MethodChannel('deskconn/shell_notification').setMethodCallHandler((call) async {
     final realm = (call.arguments as Map?)?.entries
@@ -77,7 +95,10 @@ Future<void> _initializeAppServices() async {
   try {
     await initializeDesktopSessionBackgroundService();
     await ShareService.instance.initialize();
-    unawaited(FlutterBackgroundService().startService());
+    if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) {
+      await FlutterBackgroundService().startService();
+      unawaited(promoteBackgroundService());
+    }
   } catch (e) {
     debugPrint('App service initialization failed: $e');
   }

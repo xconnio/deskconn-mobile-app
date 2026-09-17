@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/device/device_identity.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/models.dart';
@@ -88,7 +89,7 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       throw Exception('Missing credentials');
     }
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? defaultWebRtcEnabled;
     final existing = DesktopConnectionManager().get(realm);
     return existing ??
         await DesktopConnectionManager().acquire(
@@ -109,7 +110,7 @@ class _ShareUploadScreenState extends State<ShareUploadScreen> {
       throw Exception('Missing credentials');
     }
     final prefs = await SharedPreferences.getInstance();
-    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? true;
+    final webRtcEnabled = prefs.getBool(prefKeyWebRtcEnabled) ?? defaultWebRtcEnabled;
     final connection = await DesktopConnectionManager().reacquire(
       realm: realm,
       authId: authId,

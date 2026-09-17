@@ -127,16 +127,36 @@ class _MprisPlayer {
   }
 }
 
-class RemoteControlScreen extends StatefulWidget {
+class RemoteControlScreen extends StatelessWidget {
   final DesktopSessionLaunchConfig config;
 
   const RemoteControlScreen({super.key, required this.config});
 
   @override
-  State<RemoteControlScreen> createState() => _RemoteControlScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(config.desktopName)),
+      body: RemoteControlView(config: config),
+    );
+  }
 }
 
-class _RemoteControlScreenState extends State<RemoteControlScreen> {
+/// Embeddable content for a connected desktop's remote-control panel. Used
+/// standalone inside [RemoteControlScreen] (mobile full-screen push) and
+/// directly as [DesktopWindowEntry.content] inside a [FloatingWindow] on
+/// desktop, where the window's titlebar already supplies the icon/title/close
+/// chrome, so this widget never needs to render its own.
+class RemoteControlView extends StatefulWidget {
+  final DesktopSessionLaunchConfig config;
+  final bool embedded;
+
+  const RemoteControlView({super.key, required this.config, this.embedded = false});
+
+  @override
+  State<RemoteControlView> createState() => _RemoteControlViewState();
+}
+
+class _RemoteControlViewState extends State<RemoteControlView> {
   double _brightness = 50;
   bool _brightnessLoaded = false;
   bool _brightnessAvailable = false;
@@ -388,7 +408,57 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     await _mprisCall(_procMprisPlayPause, playerName: player?.busName);
   }
 
-  void _showBrightnessSheet() {
+  Offset _brightnessTapPos = Offset.zero;
+
+  void _showBrightnessControl() {
+    if (widget.embedded) {
+      showMenu<void>(
+        context: context,
+        position: RelativeRect.fromLTRB(
+          _brightnessTapPos.dx,
+          _brightnessTapPos.dy,
+          _brightnessTapPos.dx,
+          _brightnessTapPos.dy,
+        ),
+        items: [
+          PopupMenuItem<void>(
+            enabled: false,
+            child: StatefulBuilder(
+              builder: (context, setMenuState) {
+                return SizedBox(
+                  width: 220,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.brightness_6_outlined, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Brightness  ${_brightness.round()}%'),
+                        ],
+                      ),
+                      Slider(
+                        value: _brightness,
+                        min: 1,
+                        max: 100,
+                        divisions: 99,
+                        onChanged: (v) {
+                          setMenuState(() {});
+                          setState(() => _brightness = v);
+                        },
+                        onChangeEnd: (v) => _setBrightness(v.round()),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => _BrightnessSheet(
@@ -403,16 +473,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.config.desktopName),
-        bottom: _reconnecting
-            ? const PreferredSize(preferredSize: Size.fromHeight(2), child: LinearProgressIndicator(minHeight: 2))
-            : null,
-      ),
-      body: Column(
-        children: [
-          Expanded(child: _buildBody(context)),
+    return Column(
+      children: [
+        if (_reconnecting) const LinearProgressIndicator(minHeight: 2),
+        Expanded(child: _buildBody(context)),
+        // The dock already shows connection status + machine name on
+        // desktop, so this would just duplicate it inside the window.
+        if (!widget.embedded)
           SafeArea(
             top: false,
             child: DesktopStatusPill.forSession(
@@ -422,8 +489,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               onTap: () => switchMachine(context, currentRealm: widget.config.realm),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -440,10 +506,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           children: [
             _IconTile(icon: _locking ? null : Icons.lock_outline, label: 'Lock', loading: _locking, onTap: _lockScreen),
             if (_brightnessAvailable)
-              _IconTile(
-                icon: Icons.brightness_6_outlined,
-                label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
-                onTap: _showBrightnessSheet,
+              GestureDetector(
+                onTapDown: (d) => _brightnessTapPos = d.globalPosition,
+                child: _IconTile(
+                  icon: Icons.brightness_6_outlined,
+                  label: _brightnessLoaded ? '${_brightness.round()}%' : 'Brightness',
+                  onTap: _showBrightnessControl,
+                ),
               ),
             _IconTile(
               icon: _isMuted == null

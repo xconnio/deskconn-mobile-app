@@ -13,6 +13,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
@@ -30,8 +31,22 @@ class FileExplorerScreen extends StatefulWidget {
   final String? initialPath;
   final String? initialOpenFile;
   final String? category;
+  // When embedded as a FloatingWindow's content on desktop, this widget
+  // isn't a pushed route of its own — an actual Navigator pop (the mobile
+  // "leave the screen" behavior) would instead pop the enclosing desktop
+  // session route. onRequestClose closes the window instead.
+  final bool embedded;
+  final VoidCallback? onRequestClose;
 
-  const FileExplorerScreen({super.key, required this.config, this.initialPath, this.initialOpenFile, this.category});
+  const FileExplorerScreen({
+    super.key,
+    required this.config,
+    this.initialPath,
+    this.initialOpenFile,
+    this.category,
+    this.embedded = false,
+    this.onRequestClose,
+  });
 
   @override
   State<FileExplorerScreen> createState() => _FileExplorerScreenState();
@@ -561,16 +576,19 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         _currentBrowse!.path == _currentBrowse!.homePath ||
         _currentBrowse!.path == '/' ||
         _currentBrowse!.path.isEmpty;
-    final showSidebar = _isDesktopLayout(context);
+    final showSidebar = isDesktopLayout(context);
+    final wantsToLeave = !_selectionMode && !_isSearching && (_currentCategory != null || isAtRoot);
 
     return PopScope(
-      canPop: !_selectionMode && !_isSearching && (_currentCategory != null || isAtRoot),
+      canPop: !widget.embedded && wantsToLeave,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_selectionMode) {
           _exitSelectionMode();
         } else if (_isSearching) {
           _exitSearch();
+        } else if (wantsToLeave && widget.embedded) {
+          widget.onRequestClose?.call();
         } else {
           _goUp();
         }
@@ -589,15 +607,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               ),
             if (_clipboardEntries.isNotEmpty) _buildClipboardBanner(),
             Expanded(child: _buildBody()),
-            SafeArea(
-              top: false,
-              child: DesktopStatusPill.forSession(
-                name: widget.config.desktopName,
-                isP2P: widget.config.webRtcEnabled,
-                palette: DeskconnPalette.of(context),
-                onTap: () => switchMachine(context, currentRealm: widget.config.realm),
+            if (!showSidebar)
+              SafeArea(
+                top: false,
+                child: DesktopStatusPill.forSession(
+                  name: widget.config.desktopName,
+                  isP2P: widget.config.webRtcEnabled,
+                  palette: DeskconnPalette.of(context),
+                  onTap: () => switchMachine(context, currentRealm: widget.config.realm),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -629,7 +648,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       _menuItem('refresh', Icons.refresh, 'Refresh'),
     ];
 
+    final showSidebar = isDesktopLayout(context);
+
     return AppBar(
+      // A Scaffold.drawer makes AppBar default `leading` to the drawer's
+      // hamburger icon instead of a back arrow — on desktop that silently
+      // swallows the only way back to the launcher (mobile has no drawer
+      // here, so it never hits this).
+      leading: const BackButton(),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [
         if (_canUpload) IconButton(icon: const Icon(Icons.add), tooltip: 'Upload file', onPressed: _uploadFile),
@@ -638,6 +664,14 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           tooltip: 'Search',
           onPressed: () => setState(() => _isSearching = true),
         ),
+        if (showSidebar)
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.category_outlined),
+              tooltip: 'Categories',
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
         PopupMenuButton<String>(
           tooltip: 'More',
           itemBuilder: (_) => secondaryActions,
@@ -1377,14 +1411,6 @@ class _LoadMoreIndicator extends StatelessWidget {
       child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
     );
   }
-}
-
-bool _isDesktopLayout(BuildContext context) {
-  if (MediaQuery.sizeOf(context).width >= 900) return true;
-  return switch (defaultTargetPlatform) {
-    TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => true,
-    _ => false,
-  };
 }
 
 /// Save [bytes] to the public Downloads folder via the native MediaStore API
