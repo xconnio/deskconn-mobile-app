@@ -1,3 +1,18 @@
+# The POSIX-shell recipes below (setup-quic-ios/-windows) need bash, but on
+# Windows `make` defaults to cmd.exe unless told otherwise — even when `make`
+# itself is invoked from PowerShell/cmd rather than Git Bash. Point it at Git
+# for Windows' bash so `make setup-quic-windows` works from any shell. Only
+# do this if that bash.exe actually exists, so machines without Git for
+# Windows at the default path still get plain targets (install/lint/format)
+# working via cmd.exe instead of every target breaking outright.
+ifeq ($(OS),Windows_NT)
+GIT_BASH := C:/Program Files/Git/bin/bash.exe
+ifneq ($(wildcard $(GIT_BASH)),)
+SHELL := $(GIT_BASH)
+.SHELLFLAGS := -ec
+endif
+endif
+
 install:
 	flutter pub get
 
