@@ -228,7 +228,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     ),
                   ),
                 ),
-                _ConnectionStatusChip(status: _connectionStatus, onWallpaper: wallpaper != null),
+                _ConnectionStatusChip(
+                  status: _connectionStatus,
+                  name: widget.desktop['name']?.toString() ?? '',
+                  onWallpaper: wallpaper != null,
+                ),
                 _DesktopNavBar(
                   onWallpaper: wallpaper != null,
                   onMachineTap: () => switchMachine(context, currentRealm: _realm),
@@ -774,9 +778,10 @@ class _LauncherTile extends StatelessWidget {
 
 class _ConnectionStatusChip extends StatelessWidget {
   final _DesktopConnectionStatus status;
+  final String name;
   final bool onWallpaper;
 
-  const _ConnectionStatusChip({required this.status, required this.onWallpaper});
+  const _ConnectionStatusChip({required this.status, required this.name, required this.onWallpaper});
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +794,11 @@ class _ConnectionStatusChip extends StatelessWidget {
       _DesktopConnectionStatus.offline => (palette.statusOffline, 'Offline'),
     };
     final textColor = onWallpaper ? Colors.white : colorScheme.onSurface;
+    final statusStyle = TextStyle(
+      color: name.isEmpty ? textColor : textColor.withValues(alpha: 0.75),
+      fontSize: 12,
+      fontWeight: name.isEmpty ? FontWeight.w600 : FontWeight.w400,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -809,9 +819,17 @@ class _ConnectionStatusChip extends StatelessWidget {
                 decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    if (name.isNotEmpty)
+                      TextSpan(
+                        text: name,
+                        style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    TextSpan(text: name.isEmpty ? label : ' ($label)', style: statusStyle),
+                  ],
+                ),
               ),
             ],
           ),
