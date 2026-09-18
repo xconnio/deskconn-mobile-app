@@ -6,9 +6,7 @@ import 'package:xconn/xconn.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/responsive.dart';
-import 'package:deskconn_mobile_app/core/terminal/terminal_controller.dart';
 import 'package:deskconn_mobile_app/core/terminal/terminal_encryption.dart';
-import 'package:deskconn_mobile_app/core/terminal/terminal_registry.dart';
 import 'package:deskconn_mobile_app/core/wallpaper/wallpaper_cache.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
@@ -612,27 +610,8 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     _appendTerminalLog("Starting terminal connection");
 
     try {
-      var controller = TerminalRegistry().getActive(realm);
-
-      if (controller == null) {
-        final authId = await DeviceIdentity.lastEmail();
-        final privateKey = await DeviceIdentity.privateKey();
-        if (authId == null || privateKey == null) {
-          throw Exception("Missing terminal credentials.");
-        }
-
-        final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
-
-        controller = TerminalController(config: config);
-
-        controller.onClosed = () => TerminalRegistry().remove(realm);
-
-        TerminalRegistry().register(realm, controller);
-        unawaited(controller.start());
-        _appendTerminalLog("Terminal controller created");
-      } else {
-        _appendTerminalLog("Reusing persistent terminal controller");
-      }
+      final desktopName = widget.desktop['name']?.toString() ?? 'Desktop';
+      final webRtcEnabled = _connectionStatus == _DesktopConnectionStatus.p2p;
 
       if (!context.mounted) return;
 
@@ -646,7 +625,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
           title: 'Terminal',
           icon: Icons.terminal,
           iconColor: DeskconnPalette.of(context).osDebian,
-          content: TerminalPane(controller: controller, embedded: true, onRequestClose: () => closeTerminalWindow()),
+          content: TerminalTabsView(
+            realm: realm,
+            desktopName: desktopName,
+            webRtcEnabled: webRtcEnabled,
+            embedded: true,
+            onRequestClose: () => closeTerminalWindow(),
+          ),
           workspaceSize: MediaQuery.sizeOf(context),
           width: 800,
           height: 520,
@@ -657,7 +642,12 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
 
       _appendTerminalLog("Navigating to terminal screen");
 
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => TerminalScreen(controller: controller!)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TerminalScreen(realm: realm, desktopName: desktopName, webRtcEnabled: webRtcEnabled),
+        ),
+      );
     } catch (e) {
       final message = _friendlyTerminalError(e);
       _appendTerminalLog("Terminal open failed: $message");

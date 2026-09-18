@@ -78,9 +78,15 @@ Future<void> main() async {
         if (realm != null) TerminalRegistry().closeTerminal(realm);
       case 'openTerminal':
         if (realm != null) {
-          final controller = TerminalRegistry().getActive(realm);
-          if (controller != null) {
-            navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => TerminalScreen(controller: controller)));
+          final group = TerminalRegistry().getActive(realm);
+          if (group != null) {
+            final sample = group.tabs.first.controller.config;
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    TerminalScreen(realm: realm, desktopName: sample.desktopName, webRtcEnabled: sample.webRtcEnabled),
+              ),
+            );
           }
         }
     }
