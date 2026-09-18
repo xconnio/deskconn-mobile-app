@@ -1,3 +1,4 @@
+import 'package:deskconn_mobile_app/core/responsive.dart';
 import 'package:deskconn_mobile_app/widgets/machine_grid.dart';
 import 'package:flutter/material.dart';
 
@@ -20,18 +21,19 @@ class MachinesScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Machines'),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: IconButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              tooltip: 'Close',
-              icon: const Icon(Icons.close),
-              style: IconButton.styleFrom(
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                foregroundColor: colorScheme.onSurface,
+          if (isDesktopLayout(context))
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                tooltip: 'Close',
+                icon: const Icon(Icons.close),
+                style: IconButton.styleFrom(
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  foregroundColor: colorScheme.onSurface,
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: MachineGrid(currentRealm: currentRealm),
