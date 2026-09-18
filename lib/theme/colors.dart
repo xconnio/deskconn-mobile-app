@@ -154,7 +154,7 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     osKubuntu: Color(0xFFE95420),
     osXubuntu: Color(0xFF77216F),
     osMint: Color(0xFF0E8420),
-    osDebian: Color(0xFF2C2C2C),
+    osDebian: Color(0xFF300A24),
     osWindows: Color(0xFFC7162B),
   );
 
@@ -194,7 +194,7 @@ class DeskconnPalette extends ThemeExtension<DeskconnPalette> {
     osKubuntu: Color(0xFFE95420),
     osXubuntu: Color(0xFF77216F),
     osMint: Color(0xFF0E8420),
-    osDebian: Color(0xFF9E9E9E),
+    osDebian: Color(0xFF300A24),
     osWindows: Color(0xFFC7162B),
   );
 
