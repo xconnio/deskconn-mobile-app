@@ -8,7 +8,7 @@ import 'terminal_controller.dart';
 class TerminalTab {
   final String id;
   final TerminalController controller;
-  final String title;
+  String title;
 
   TerminalTab({required this.id, required this.controller, required this.title});
 }
@@ -29,6 +29,11 @@ class TerminalGroup extends ChangeNotifier {
 
   TerminalTab addTab(TerminalController controller) {
     final tab = TerminalTab(id: 't${_nextId++}', controller: controller, title: 'Terminal ${_nextTabNumber++}');
+    controller.terminal.onTitleChange = (title) {
+      if (title.trim().isEmpty) return;
+      tab.title = title;
+      notifyListeners();
+    };
     _tabs.add(tab);
     _activeId = tab.id;
     notifyListeners();

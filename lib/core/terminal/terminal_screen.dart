@@ -164,94 +164,109 @@ class _TerminalTabBar extends StatelessWidget {
     required this.onAdd,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      color: Colors.black,
-      child: Row(
-        children: [
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+  Future<void> _showSwitcher(BuildContext context, Offset at) async {
+    final selection = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      color: const Color(0xFF1E1E1E),
+      items: [
+        for (final tab in tabs)
+          PopupMenuItem(
+            value: tab.id,
+            child: Row(
               children: [
-                for (final tab in tabs)
-                  _TabChip(
-                    key: ValueKey(tab.id),
-                    title: tab.title,
-                    active: tab.id == activeId,
-                    onTap: () => onSelect(tab.id),
-                    onClose: () => onClose(tab.id),
+                Icon(Icons.terminal, size: 16, color: tab.id == activeId ? Colors.white : Colors.white54),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tab.title,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: tab.id == activeId ? Colors.white : Colors.white70),
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16, color: Colors.white54),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onClose(tab.id);
+                  },
+                ),
               ],
             ),
           ),
+      ],
+    );
+    if (selection != null) onSelect(selection);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = tabs.firstWhere((t) => t.id == activeId, orElse: () => tabs.first);
+
+    return Container(
+      height: 44,
+      color: Colors.black,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.terminal, size: 14, color: Colors.white54),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      active.title,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           SizedBox(
-            width: 40,
-            height: 40,
+            width: 34,
+            height: 34,
             child: addingTab
                 ? const Padding(
-                    padding: EdgeInsets.all(11),
+                    padding: EdgeInsets.all(9),
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
                   )
                 : IconButton(
+                    padding: EdgeInsets.zero,
                     icon: const Icon(Icons.add, color: Colors.white70, size: 20),
                     tooltip: 'New tab',
                     onPressed: onAdd,
                   ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabChip extends StatelessWidget {
-  final String title;
-  final bool active;
-  final VoidCallback onTap;
-  final VoidCallback onClose;
-
-  const _TabChip({super.key, required this.title, required this.active, required this.onTap, required this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: active ? Colors.white.withValues(alpha: 0.14) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minWidth: 96, maxWidth: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.terminal, size: 14, color: active ? Colors.white : Colors.white54),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  title,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: active ? Colors.white : Colors.white54,
-                    fontSize: 12,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
+          GestureDetector(
+            onTapDown: (details) => _showSwitcher(context, details.globalPosition),
+            child: Container(
+              width: 34,
+              height: 34,
+              margin: const EdgeInsets.only(left: 4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white54, width: 1.4),
+                borderRadius: BorderRadius.circular(6),
               ),
-              const SizedBox(width: 4),
-              InkWell(
-                onTap: onClose,
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(Icons.close, size: 13, color: active ? Colors.white70 : Colors.white38),
-                ),
+              child: Text(
+                '${tabs.length}',
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
