@@ -237,7 +237,8 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                   onWallpaper: wallpaper != null,
                   onMachineTap: () => switchMachine(context, currentRealm: _realm),
                   onWindowsTap: () {},
-                  onProfileTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
+                  onSettingsTap: () =>
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
                 ),
               ],
             ),
@@ -843,12 +844,12 @@ class _DesktopNavBar extends StatelessWidget {
   final bool onWallpaper;
   final VoidCallback onMachineTap;
   final VoidCallback onWindowsTap;
-  final VoidCallback onProfileTap;
+  final VoidCallback onSettingsTap;
 
   const _DesktopNavBar({
     required this.onMachineTap,
     required this.onWindowsTap,
-    required this.onProfileTap,
+    required this.onSettingsTap,
     this.onWallpaper = false,
   });
 
@@ -887,10 +888,10 @@ class _DesktopNavBar extends StatelessWidget {
                 selected: true,
               ),
               _DesktopNavBarItem(
-                icon: Icons.person_outline,
-                label: 'Profile',
+                icon: Icons.settings_outlined,
+                label: 'Settings',
                 color: unselectedColor,
-                onTap: onProfileTap,
+                onTap: onSettingsTap,
               ),
             ],
           ),
