@@ -13,6 +13,7 @@ import 'package:deskconn_mobile_app/core/wamp/machine_switcher.dart';
 import 'package:deskconn_mobile_app/core/window_manager/desktop_window.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
+import 'package:deskconn_mobile_app/screens/port_forward_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
 import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
@@ -220,6 +221,14 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                               onWallpaper: wallpaper != null,
                               onTap: () => _openResourceMonitor(context),
                             ),
+                            _LauncherTile(
+                              icon: Icons.swap_horiz,
+                              badgeColor: palette.osXubuntu,
+                              title: "Ports",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openPortForward(context),
+                            ),
                           ],
                         );
                       },
@@ -311,6 +320,9 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                           break;
                         case DesktopAppKind.resourceMonitor:
                           _openResourceMonitor(context);
+                          break;
+                        case DesktopAppKind.portForward:
+                          _openPortForward(context);
                           break;
                       }
                     },
@@ -534,6 +546,47 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Resource Monitor: $e")));
+      }
+    }
+  }
+
+  Future<void> _openPortForward(BuildContext context) async {
+    final realm = _realm;
+    if (realm == null ||
+        (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
+      return;
+    }
+
+    try {
+      final authId = await DeviceIdentity.lastEmail();
+      final privateKey = await DeviceIdentity.privateKey();
+      if (authId == null || privateKey == null) {
+        throw Exception("Missing credentials.");
+      }
+
+      if (!context.mounted) return;
+
+      final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+
+      if (isDesktopLayout(context)) {
+        final palette = DeskconnPalette.of(context);
+        _windowManager.open(
+          DesktopAppKind.portForward,
+          title: 'Ports',
+          icon: Icons.swap_horiz,
+          iconColor: palette.osXubuntu,
+          content: PortForwardView(config: config, embedded: true),
+          workspaceSize: MediaQuery.sizeOf(context),
+          width: 560,
+          height: 460,
+        );
+        return;
+      }
+
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => PortForwardScreen(config: config)));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Port Forwarding: $e")));
       }
     }
   }
@@ -937,10 +990,6 @@ class _DesktopNavBarItem extends StatelessWidget {
   }
 }
 
-// Reveals the dock on hover near its own reserved strip at the bottom edge
-// and hides it once the pointer leaves — the SizedBox keeps that strip's
-// layout size constant either way, so the hover target never disappears
-// along with the dock's visuals.
 class _AutoHideDock extends StatefulWidget {
   final bool enabled;
   final Widget child;

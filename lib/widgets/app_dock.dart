@@ -25,12 +25,14 @@ const _pinnedApps = [
   ),
   _PinnedApp(kind: DesktopAppKind.terminal, title: 'Terminal', icon: Icons.terminal, color: _debian),
   _PinnedApp(kind: DesktopAppKind.resourceMonitor, title: 'Monitor', icon: Icons.speed_outlined, color: _ubuntu),
+  _PinnedApp(kind: DesktopAppKind.portForward, title: 'Ports', icon: Icons.swap_horiz, color: _xubuntu),
 ];
 
 Color _kubuntu(DeskconnPalette p) => p.osKubuntu;
 Color _mint(DeskconnPalette p) => p.osMint;
 Color _debian(DeskconnPalette p) => p.osDebian;
 Color _ubuntu(DeskconnPalette p) => p.osUbuntu;
+Color _xubuntu(DeskconnPalette p) => p.osXubuntu;
 
 class AppDock extends StatefulWidget {
   final DesktopWindowManager manager;
@@ -335,10 +337,6 @@ class _AppIcon extends StatelessWidget {
     final palette = DeskconnPalette.of(context);
     final color = enabled ? app.color(palette) : app.color(palette).withValues(alpha: 0.35);
 
-    // A plain GestureDetector.onSecondaryTapDown here loses the gesture
-    // arena to the parent ReorderableDragStartListener's drag recognizer, so
-    // right-click never fires. Listener doesn't participate in the arena —
-    // it gets every pointer-down unconditionally, so it isn't affected.
     return Listener(
       onPointerDown: (event) {
         if (event.buttons == kSecondaryButton) onSecondaryTapDown(event.position);
