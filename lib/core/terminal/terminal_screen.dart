@@ -81,8 +81,16 @@ class _TerminalTabsViewState extends State<TerminalTabsView> {
     }
   }
 
+  static const int _maxLiveTabs = 2;
+
   Future<void> _addTab() async {
     if (_addingTab) return;
+    if (_group.tabs.length >= _maxLiveTabs) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Only $_maxLiveTabs terminal tabs per desktop are supported right now.')),
+      );
+      return;
+    }
     setState(() => _addingTab = true);
     try {
       final controller = await startNewTerminalTab(
@@ -164,45 +172,32 @@ class _TerminalTabBar extends StatelessWidget {
     required this.onAdd,
   });
 
-  Future<void> _showSwitcher(BuildContext context, Offset at) async {
-    final selection = await showMenu<String>(
+  Future<void> _showSwitcher(BuildContext context) {
+    return showModalBottomSheet<void>(
       context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-      color: const Color(0xFF1E1E1E),
-      items: [
-        for (final tab in tabs)
-          PopupMenuItem(
-            value: tab.id,
-            child: Row(
-              children: [
-                Icon(Icons.terminal, size: 16, color: tab.id == activeId ? Colors.white : Colors.white54),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tab.title,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: tab.id == activeId ? Colors.white : Colors.white70),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16, color: Colors.white54),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    onClose(tab.id);
-                  },
-                ),
-              ],
-            ),
-          ),
-      ],
+      backgroundColor: const Color(0xFF141414),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (sheetContext) => _TabSwitcherSheet(
+        tabs: tabs,
+        activeId: activeId,
+        onSelect: (id) {
+          Navigator.of(sheetContext).pop();
+          onSelect(id);
+        },
+        onClose: (id) {
+          Navigator.of(sheetContext).pop();
+          onClose(id);
+        },
+        onAdd: () {
+          Navigator.of(sheetContext).pop();
+          onAdd();
+        },
+      ),
     );
-    if (selection != null) onSelect(selection);
   }
 
   @override
   Widget build(BuildContext context) {
-    final active = tabs.firstWhere((t) => t.id == activeId, orElse: () => tabs.first);
-
     return Container(
       height: 44,
       color: Colors.black,
@@ -210,28 +205,19 @@ class _TerminalTabBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.terminal, size: 14, color: Colors.white54),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      active.title,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: tabs.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final tab = tabs[index];
+                return _TabChip(
+                  title: tab.title,
+                  active: tab.id == activeId,
+                  onSelect: () => onSelect(tab.id),
+                  onClose: () => onClose(tab.id),
+                );
+              },
             ),
           ),
           SizedBox(
@@ -250,23 +236,206 @@ class _TerminalTabBar extends StatelessWidget {
                   ),
           ),
           GestureDetector(
-            onTapDown: (details) => _showSwitcher(context, details.globalPosition),
+            onTap: () => _showSwitcher(context),
             child: Container(
-              width: 34,
+              width: 40,
               height: 34,
               margin: const EdgeInsets.only(left: 4),
-              alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.white54, width: 1.4),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                '${tabs.length}',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.grid_view_rounded, color: Colors.white70, size: 13),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${tabs.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TabChip extends StatelessWidget {
+  final String title;
+  final bool active;
+  final VoidCallback onSelect;
+  final VoidCallback onClose;
+
+  const _TabChip({required this.title, required this.active, required this.onSelect, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onSelect,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 190),
+        padding: const EdgeInsets.only(left: 12, right: 4),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: active ? 0.16 : 0.06),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: active ? Colors.white24 : Colors.transparent),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.terminal, size: 13, color: active ? Colors.white : Colors.white38),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white60,
+                  fontSize: 12.5,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.close, size: 13, color: Colors.white38),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabSwitcherSheet extends StatelessWidget {
+  final List<TerminalTab> tabs;
+  final String? activeId;
+  final void Function(String id) onSelect;
+  final void Function(String id) onClose;
+  final VoidCallback onAdd;
+
+  const _TabSwitcherSheet({
+    required this.tabs,
+    required this.activeId,
+    required this.onSelect,
+    required this.onClose,
+    required this.onAdd,
+  });
+
+  static const _previewLines = 6;
+
+  String _previewOf(TerminalTab tab) {
+    final lines = tab.controller.preview.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    if (lines.length <= _previewLines) return lines.join('\n');
+    return lines.sublist(lines.length - _previewLines).join('\n');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Tabs',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(width: 8),
+                Text('${tabs.length}', style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add, size: 16, color: Colors.white70),
+                  label: const Text('New tab', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.2,
+              children: [for (final tab in tabs) _card(tab)],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _card(TerminalTab tab) {
+    final active = tab.id == activeId;
+    return GestureDetector(
+      onTap: () => onSelect(tab.id),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B0B0B),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: active ? Colors.white54 : Colors.white12, width: active ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  _previewOf(tab),
+                  maxLines: _previewLines,
+                  style: const TextStyle(color: Colors.white54, fontSize: 8, fontFamily: 'monospace', height: 1.35),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white12)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.terminal, size: 12, color: Colors.white54),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      tab.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => onClose(tab.id),
+                    borderRadius: BorderRadius.circular(10),
+                    child: const Padding(
+                      padding: EdgeInsets.all(3),
+                      child: Icon(Icons.close, size: 13, color: Colors.white38),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -308,7 +477,16 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
       });
     }
     widget.controller.onStarted = () {
-      if (mounted) setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      // The PTY is created with the client's size at that moment and only
+      // corrected once the view has laid out, so its first output is drawn at
+      // the wrong width. Wipe that and ask the shell to repaint instead of
+      // leaving wrapped/overlapping lines behind.
+      widget.controller.clearScreen();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.controller.requestRedraw();
+      });
     };
     widget.controller.onExit = _close;
     widget.controller.onError = (e) {

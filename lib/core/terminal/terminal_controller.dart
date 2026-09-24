@@ -41,16 +41,37 @@ class TerminalController {
   Encryption? _encryption;
   bool _closeFrameSent = false;
   bool _exitFired = false;
+  bool _usesSharedConnection = true;
   ShellHandle? _shellHandle;
+  DesktopConnection? _standaloneConnection;
 
   static bool _streamShellSupported = true;
-  static web_rtc.WebRTCSession? _consumedShellSession;
+  static final Set<web_rtc.WebRTCSession> _consumedShellSessions = {};
+  static final Map<String, Future<DesktopConnection?>> _prewarmedStandalones = {};
   static const _reconnectDelay = Duration(seconds: 2);
 
   final BlockingQueue<Progress> _outgoingQueue = BlockingQueue();
 
   bool get isActive => _running;
   bool get isReady => _shellHandle != null || _keyReceived;
+
+  String _preview = '';
+
+  /// Plain-text tail of this tab's output, for the tab switcher's preview.
+  String get preview => _preview;
+
+  void _write(String text) {
+    if (_disposed) return;
+    terminal.write(text);
+    final clean = text
+        .replaceAll(RegExp(r'\x1B\][^\x07]*\x07'), '')
+        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')
+        .replaceAll('\r', '');
+    if (clean.isEmpty) return;
+    _preview = _preview.length + clean.length > 800
+        ? (_preview + clean).substring(_preview.length + clean.length - 800)
+        : _preview + clean;
+  }
 
   TerminalController({required this.config});
 
@@ -73,9 +94,6 @@ class TerminalController {
   }
 
   Future<void> _connectAndRun() async {
-    final prewarm = _shellPrewarm;
-    if (prewarm != null) await prewarm;
-
     final DesktopConnection connection;
     try {
       connection =
@@ -94,62 +112,77 @@ class TerminalController {
     _log('session ready p2p=${connection.isP2P}');
 
     if (_streamShellSupported) {
-      var result = await _runStreamShell(connection.webRtcSession);
-      if (result == _StreamShellResult.channelUnavailable) {
-        result = await _reconnectForShellChannel();
-      }
+      final result = await _runStreamShell(connection.webRtcSession);
       if (result == _StreamShellResult.started) return;
-      if (result == _StreamShellResult.unsupported) _streamShellSupported = false;
+      if (result == _StreamShellResult.unsupported) {
+        _streamShellSupported = false;
+      } else if (result == _StreamShellResult.channelUnavailable) {
+        await _runOnStandaloneConnection();
+        return;
+      }
     }
     await _runWampShell(connection);
   }
 
-  Future<_StreamShellResult> _reconnectForShellChannel() async {
+  Future<void> _runOnStandaloneConnection() async {
+    final DesktopConnection fresh;
     try {
-      final fresh = await _acquireFreshConnection();
-      return await _runStreamShell(fresh.webRtcSession);
+      fresh = await _takeStandalone();
     } catch (e) {
-      _log('shell channel reconnect failed error=$e');
-      return _StreamShellResult.unsupported;
+      _log('standalone connect failed error=$e');
+      onError?.call(e);
+      return;
     }
+    _standaloneConnection = fresh;
+    _usesSharedConnection = false;
+
+    final result = await _runStreamShell(fresh.webRtcSession);
+    if (result == _StreamShellResult.started) return;
+    onError?.call(const TerminalTabException('This desktop does not support extra terminal tabs.'));
+    _standaloneConnection = null;
+    unawaited(DesktopConnectionManager().releaseStandalone(config.realm, fresh));
   }
 
-  Future<DesktopConnection> _acquireFreshConnection() async {
-    final fresh = await DesktopConnectionManager().reacquire(
+  Future<DesktopConnection> _takeStandalone() async {
+    final prewarmed = _prewarmedStandalones.remove(config.realm);
+    final connection = prewarmed == null ? null : await prewarmed;
+    if (connection != null) {
+      _log('using prewarmed standalone connection');
+      return connection;
+    }
+    return _connectStandalone();
+  }
+
+  Future<DesktopConnection> _connectStandalone() {
+    return DesktopConnectionManager().connectStandalone(
       realm: config.realm,
       authId: config.authId,
       privateKey: config.privateKey,
       webRtcEnabled: config.webRtcEnabled,
     );
-    fresh.isAgentOnline = true;
-    return fresh;
   }
 
-  static Future<void>? _shellPrewarm;
-
-  // A connection carries a single 'shell' channel, so the stream shell spends
-  // it. Warming a replacement up in the background the moment the terminal
-  // closes keeps the next terminal instant instead of paying for a reconnect.
-  static void _prewarmShellConnection(DesktopSessionLaunchConfig config) {
-    if (_shellPrewarm != null) return;
-    _shellPrewarm = DesktopConnectionManager()
-        .reacquire(
-          realm: config.realm,
-          authId: config.authId,
-          privateKey: config.privateKey,
-          webRtcEnabled: config.webRtcEnabled,
-        )
-        .then<void>((connection) => connection.isAgentOnline = true)
-        .catchError((Object _) {})
-        .whenComplete(() => _shellPrewarm = null);
+  // A connection carries a single 'shell' channel, so opening a shell spends
+  // whichever connection it ran on. Warming a replacement in the background as
+  // soon as a shell ends is what keeps the next terminal from waiting on a
+  // fresh WebRTC negotiation.
+  void _prewarmStandalone() {
+    if (_prewarmedStandalones.containsKey(config.realm)) return;
+    _prewarmedStandalones[config.realm] = _connectStandalone()
+        .then<DesktopConnection?>((connection) {
+          connection.isAgentOnline = true;
+          _log('standalone connection prewarmed');
+          return connection;
+        })
+        .catchError((Object e) {
+          _log('standalone prewarm failed error=$e');
+          return null;
+        });
   }
 
   Future<_StreamShellResult> _runStreamShell(web_rtc.WebRTCSession? rtc) async {
     if (rtc == null) return _StreamShellResult.unsupported;
-    // A connection carries exactly one 'shell' channel, created with the offer
-    // (Android can't be relied on to open more later) -- once it has served a
-    // shell it is spent, so a second terminal needs a fresh connection.
-    if (identical(rtc, _consumedShellSession)) return _StreamShellResult.channelUnavailable;
+    if (_consumedShellSessions.contains(rtc)) return _StreamShellResult.channelUnavailable;
     _running = true;
     _shellExited = false;
 
@@ -184,7 +217,7 @@ class TerminalController {
         terminal.viewWidth,
         terminal.viewHeight,
         (bytes) {
-          if (!_disposed) terminal.write(utf8.decode(bytes, allowMalformed: true));
+          if (!_disposed) _write(utf8.decode(bytes, allowMalformed: true));
         },
         () {
           _shellExited = true;
@@ -197,7 +230,7 @@ class TerminalController {
         return _StreamShellResult.started;
       }
 
-      _consumedShellSession = rtc;
+      _consumedShellSessions.add(rtc);
       _shellHandle = handle;
       handle.resize(terminal.viewWidth, terminal.viewHeight);
       onStarted?.call();
@@ -238,7 +271,7 @@ class TerminalController {
     } finally {
       _running = false;
       _cleanup();
-      final exiting = _disposed || _shellExited;
+      final exiting = _disposed || _shellExited || !_usesSharedConnection;
       _log('shell stream finished disposed=$_disposed shellExited=$_shellExited exiting=$exiting');
       if (exiting) {
         onClosed?.call();
@@ -366,7 +399,7 @@ class TerminalController {
         text = raw.toString();
       }
     }
-    if (text.isNotEmpty) terminal.write(text);
+    if (text.isNotEmpty) _write(text);
   }
 
   void _cleanup() {
@@ -450,12 +483,14 @@ class TerminalController {
   void dispose() {
     if (_disposed) return;
     _log('dispose');
-    final usedStreamShell = _shellHandle != null;
     _requestShellClose();
     _disposed = true;
     _running = false;
     _cleanup();
     _fireExit();
-    if (usedStreamShell) _prewarmShellConnection(config);
+    final standalone = _standaloneConnection;
+    _standaloneConnection = null;
+    if (standalone != null) unawaited(DesktopConnectionManager().releaseStandalone(config.realm, standalone));
+    _prewarmStandalone();
   }
 }
