@@ -50,6 +50,17 @@ class DesktopConnection {
   }
 }
 
+/// An error whose text is already user-facing: screens that render
+/// `error.toString()` show it as-is instead of "Exception: ..." noise.
+class TerminalTabException implements Exception {
+  const TerminalTabException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class DesktopConnectionManager {
   static final DesktopConnectionManager _instance = DesktopConnectionManager._();
   factory DesktopConnectionManager() => _instance;
@@ -64,6 +75,7 @@ class DesktopConnectionManager {
   final Set<String> _noWebRtcSupportRealms = {};
   final Set<String> _everConnectedRealms = {};
   final Map<String, int> _webRtcFailureCount = {};
+  final Map<String, DesktopConnection> _standaloneConnections = {};
 
   final ValueNotifier<bool> isReconnecting = ValueNotifier(false);
 
@@ -171,6 +183,69 @@ class DesktopConnectionManager {
       await release(realm);
     }
 
+    DesktopConnection connection;
+    try {
+      connection = await _negotiateConnection(
+        realm: realm,
+        authId: authId,
+        webRtcEnabled: webRtcEnabled,
+        privateKey: privateKey,
+      );
+    } catch (e) {
+      if (webRtcEnabled && !kForceWebRtcOnly) {
+        final failures = (_webRtcFailureCount[realm] ?? 0) + 1;
+        _webRtcFailureCount[realm] = failures;
+        if (failures >= _webRtcFailureFallbackThreshold) {
+          _log('falling back to routed realm=$realm after $failures consecutive webrtc failures');
+          return _connectInternal(realm: realm, authId: authId, webRtcEnabled: false, privateKey: privateKey);
+        }
+      }
+      rethrow;
+    }
+
+    _connections[key] = connection;
+    _everConnectedRealms.add(key);
+    _log('session cached realm=$realm p2p=${connection.isP2P} active=${_connections.length}');
+
+    connection.session.onDisconnect(() {
+      unawaited(_dropConnection(key, connection, reason: 'session disconnected'));
+    });
+
+    return connection;
+  }
+
+  Future<DesktopConnection> connectStandalone({
+    required String realm,
+    required String authId,
+    required bool webRtcEnabled,
+    required String privateKey,
+  }) async {
+    if (_standaloneConnections.containsKey(realm)) {
+      throw const TerminalTabException('Only 2 terminal tabs per desktop are supported right now.');
+    }
+    final connection = await _negotiateConnection(
+      realm: realm,
+      authId: authId,
+      webRtcEnabled: webRtcEnabled,
+      privateKey: privateKey,
+    );
+    _standaloneConnections[realm] = connection;
+    return connection;
+  }
+
+  Future<void> releaseStandalone(String realm, DesktopConnection connection) async {
+    if (_standaloneConnections[realm] == connection) {
+      _standaloneConnections.remove(realm);
+    }
+    await connection.dispose();
+  }
+
+  Future<DesktopConnection> _negotiateConnection({
+    required String realm,
+    required String authId,
+    required bool webRtcEnabled,
+    required String privateKey,
+  }) async {
     final willUseWebRtc = webRtcEnabled || kForceWebRtcOnly;
 
     if (willUseWebRtc && kForceWebRtcOnly && _noWebRtcSupportRealms.contains(realm)) {
@@ -181,97 +256,65 @@ class DesktopConnectionManager {
     _log('connect start realm=$realm webrtcPreferred=$webRtcEnabled');
 
     final client = WampClient();
-    final signalingFuture = client.connectCryptoSignWithSerializer(
+    final signalingSession = await client.connectCryptoSignWithSerializer(
       authId: authId,
       privateKey: privateKey,
       realm: realm,
       serializer: CBORSerializer(),
     );
-    final signalingSession = await signalingFuture;
 
-    Session finalSession = signalingSession;
-    bool isP2P = false;
+    if (!willUseWebRtc) {
+      return DesktopConnection(session: signalingSession, isP2P: false);
+    }
 
-    if (willUseWebRtc) {
-      await _awaitWebRtcDisposeCooldown(realm);
-      if (!kIsWeb) {
-        try {
-          if (Platform.isAndroid) {
-            await Helper.setAndroidAudioConfiguration(
-              AndroidAudioConfiguration(manageAudioFocus: false, androidAudioMode: AndroidAudioMode.normal),
-            );
-          } else if (Platform.isIOS) {
-            await Helper.setAppleAudioConfiguration(
-              AppleAudioConfiguration(
-                appleAudioCategory: AppleAudioCategory.playback,
-                appleAudioCategoryOptions: {AppleAudioCategoryOption.mixWithOthers},
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint('Failed to configure WebRTC audio: $e');
-        }
-      }
-      Object? lastError;
+    await _awaitWebRtcDisposeCooldown(realm);
+    if (!kIsWeb) {
       try {
-        final config = web_rtc.ClientConfig(
-          realm: realm,
-          procedureWebRTCOffer: DeskconnProcedures.webrtcOffer,
-          topicAnswererOnCandidate: DeskconnProcedures.webrtcAnswererOnCandidate,
-          topicOffererOnCandidate: DeskconnProcedures.webrtcOffererOnCandidate,
-          iceServers: [
-            {'urls': 'stun:stun.l.google.com:19302'},
-          ],
-          serializer: CBORSerializer(),
-          session: signalingSession,
-          authenticator: CryptoSignAuthenticator(authId, privateKey),
-        );
-
-        final connection = await _connectWampWithWebRTC(config);
-        finalSession = connection.session;
-        isP2P = true;
-        _connections[key] = DesktopConnection(
-          session: finalSession,
-          isP2P: isP2P,
-          webRtcSession: connection.webRtcSession,
-        );
-        _webRtcFailureCount.remove(realm);
-        _log('connect success realm=$realm transport=webrtc');
+        if (Platform.isAndroid) {
+          await Helper.setAndroidAudioConfiguration(
+            AndroidAudioConfiguration(manageAudioFocus: false, androidAudioMode: AndroidAudioMode.normal),
+          );
+        } else if (Platform.isIOS) {
+          await Helper.setAppleAudioConfiguration(
+            AppleAudioConfiguration(
+              appleAudioCategory: AppleAudioCategory.playback,
+              appleAudioCategoryOptions: {AppleAudioCategoryOption.mixWithOthers},
+            ),
+          );
+        }
       } catch (e) {
-        lastError = e;
-        if (e.toString().contains('wamp.error.no_such_procedure')) {
-          _noWebRtcSupportRealms.add(realm);
-        }
-      }
-
-      if (lastError != null) {
-        _log('connect failed realm=$realm webrtc_failed=$lastError');
-        try {
-          await signalingSession.close();
-        } catch (_) {}
-
-        if (!kForceWebRtcOnly) {
-          final failures = (_webRtcFailureCount[realm] ?? 0) + 1;
-          _webRtcFailureCount[realm] = failures;
-          if (failures >= _webRtcFailureFallbackThreshold) {
-            _log('falling back to routed realm=$realm after $failures consecutive webrtc failures');
-            return _connectInternal(realm: realm, authId: authId, webRtcEnabled: false, privateKey: privateKey);
-          }
-        }
-        throw lastError;
+        debugPrint('Failed to configure WebRTC audio: $e');
       }
     }
 
-    final connection = _connections[key] ?? DesktopConnection(session: finalSession, isP2P: isP2P);
-    _connections[key] = connection;
-    _everConnectedRealms.add(key);
-    _log('session cached realm=$realm p2p=$isP2P active=${_connections.length}');
+    try {
+      final config = web_rtc.ClientConfig(
+        realm: realm,
+        procedureWebRTCOffer: DeskconnProcedures.webrtcOffer,
+        topicAnswererOnCandidate: DeskconnProcedures.webrtcAnswererOnCandidate,
+        topicOffererOnCandidate: DeskconnProcedures.webrtcOffererOnCandidate,
+        iceServers: [
+          {'urls': 'stun:stun.l.google.com:19302'},
+        ],
+        serializer: CBORSerializer(),
+        session: signalingSession,
+        authenticator: CryptoSignAuthenticator(authId, privateKey),
+      );
 
-    finalSession.onDisconnect(() {
-      unawaited(_dropConnection(key, connection, reason: 'session disconnected'));
-    });
-
-    return connection;
+      final connection = await _connectWampWithWebRTC(config);
+      _webRtcFailureCount.remove(realm);
+      _log('connect success realm=$realm transport=webrtc');
+      return DesktopConnection(session: connection.session, isP2P: true, webRtcSession: connection.webRtcSession);
+    } catch (e) {
+      _log('connect failed realm=$realm webrtc_failed=$e');
+      try {
+        await signalingSession.close();
+      } catch (_) {}
+      if (e.toString().contains('wamp.error.no_such_procedure')) {
+        _noWebRtcSupportRealms.add(realm);
+      }
+      rethrow;
+    }
   }
 
   Future<void> _handleNetworkChanged() async {
