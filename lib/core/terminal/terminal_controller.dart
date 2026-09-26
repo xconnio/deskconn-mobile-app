@@ -140,12 +140,15 @@ class TerminalController {
     if (result == _StreamShellResult.started) return;
     onError?.call(const TerminalTabException('This desktop does not support extra terminal tabs.'));
     _standaloneConnection = null;
-    unawaited(DesktopConnectionManager().releaseStandalone(config.realm, fresh));
+    unawaited(DesktopConnectionManager().releaseStandalone(fresh));
   }
 
   Future<DesktopConnection> _takeStandalone() async {
     final prewarmed = _prewarmedStandalones.remove(config.realm);
     final connection = prewarmed == null ? null : await prewarmed;
+    // Keep one connection ready at all times: a tab opening later takes it
+    // instead of waiting on a fresh WebRTC negotiation of its own.
+    _prewarmStandalone();
     if (connection != null) {
       _log('using prewarmed standalone connection');
       return connection;
@@ -490,7 +493,7 @@ class TerminalController {
     _fireExit();
     final standalone = _standaloneConnection;
     _standaloneConnection = null;
-    if (standalone != null) unawaited(DesktopConnectionManager().releaseStandalone(config.realm, standalone));
+    if (standalone != null) unawaited(DesktopConnectionManager().releaseStandalone(standalone));
     _prewarmStandalone();
   }
 }
