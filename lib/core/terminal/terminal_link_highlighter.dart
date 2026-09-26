@@ -59,7 +59,9 @@ class TerminalLinkPainter extends CustomPainter {
     if (lines.length == 0) return;
 
     final firstRow = math.max(0, ((-origin.dy) / cell.height).floor());
-    final lastRow = math.min(lines.length - 1, ((size.height - origin.dy) / cell.height).ceil());
+    final visibleRows = firstRow + terminal.viewHeight;
+    final maxRow = math.min(lines.length - 1, visibleRows);
+    final lastRow = math.min(maxRow, ((size.height - origin.dy) / cell.height).ceil());
     if (lastRow < firstRow) return;
 
     final cells = TerminalLinks.linkCells(terminal, firstRow, lastRow);

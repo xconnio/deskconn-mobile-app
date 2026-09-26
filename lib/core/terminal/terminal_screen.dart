@@ -479,6 +479,7 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
   final GlobalKey _stackKey = GlobalKey();
   final GlobalKey<TerminalViewState> _viewKey = GlobalKey<TerminalViewState>();
   late final TerminalLinkRepaint _linkRepaint;
+  final GlobalKey _linkAreaKey = GlobalKey();
 
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
@@ -639,18 +640,6 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
                 ],
               ),
             ),
-            Positioned.fill(
-              child: CustomPaint(
-                painter: TerminalLinkPainter(
-                  terminal: widget.controller.terminal,
-                  theme: kTerminalTheme,
-                  textStyle: TerminalStyle(fontSize: _fontSize),
-                  textScaler: MediaQuery.textScalerOf(context),
-                  resolveOrigin: _linkOrigin,
-                  repaint: _linkRepaint,
-                ),
-              ),
-            ),
             ..._selectionOverlay(),
           ],
         ),
@@ -659,36 +648,55 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
   }
 
   Widget _terminalArea() {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (_) {
-        if (_xtermController.selection != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _syncSelection());
-        }
-        return false;
-      },
-      child: Listener(
-        onPointerDown: _handlePointerDown,
-        onPointerUp: _handlePointerUp,
-        onPointerCancel: (_) => _pointerDownPosition = null,
-        child: GestureDetector(
-          onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
-          onScaleUpdate: (details) {
-            if (details.pointerCount < 2) return;
-            final newSize = (_fontSizeOnScaleStart * details.scale).clamp(_minFontSize, _maxFontSize);
-            if ((newSize - _fontSize).abs() >= 0.5) {
-              setState(() => _fontSize = newSize);
-            }
-          },
-          child: TerminalView(
-            widget.controller.terminal,
-            key: _viewKey,
-            controller: _xtermController,
-            theme: kTerminalTheme,
-            autofocus: true,
-            textStyle: TerminalStyle(fontSize: _fontSize),
+    return Stack(
+      key: _linkAreaKey,
+      children: [
+        Positioned.fill(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (_) {
+              if (_xtermController.selection != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) => _syncSelection());
+              }
+              return false;
+            },
+            child: Listener(
+              onPointerDown: _handlePointerDown,
+              onPointerUp: _handlePointerUp,
+              onPointerCancel: (_) => _pointerDownPosition = null,
+              child: GestureDetector(
+                onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
+                onScaleUpdate: (details) {
+                  if (details.pointerCount < 2) return;
+                  final newSize = (_fontSizeOnScaleStart * details.scale).clamp(_minFontSize, _maxFontSize);
+                  if ((newSize - _fontSize).abs() >= 0.5) {
+                    setState(() => _fontSize = newSize);
+                  }
+                },
+                child: TerminalView(
+                  widget.controller.terminal,
+                  key: _viewKey,
+                  controller: _xtermController,
+                  theme: kTerminalTheme,
+                  autofocus: true,
+                  textStyle: TerminalStyle(fontSize: _fontSize),
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+        Positioned.fill(
+          child: CustomPaint(
+            painter: TerminalLinkPainter(
+              terminal: widget.controller.terminal,
+              theme: kTerminalTheme,
+              textStyle: TerminalStyle(fontSize: _fontSize),
+              textScaler: MediaQuery.textScalerOf(context),
+              resolveOrigin: _linkOrigin,
+              repaint: _linkRepaint,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -793,14 +801,14 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
 
   Offset? _linkOrigin() {
     final render = _viewKey.currentState?.renderTerminal;
-    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (render == null || stack == null || !render.hasSize || !stack.hasSize) return null;
     return stack.globalToLocal(render.localToGlobal(render.getOffset(const CellOffset(0, 0))));
   }
 
   void _startHandleDrag(bool isStart, Offset globalPosition) {
     final geometry = _selectionGeometry;
-    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (geometry == null || stack == null) return;
     setState(() {
       _draggingHandle = true;
@@ -850,7 +858,7 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
     if (!mounted) return;
     final selection = _xtermController.selection;
     final render = _viewKey.currentState?.renderTerminal;
-    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (selection == null || render == null || stack == null) {
       if (_selectionGeometry != null) setState(() => _selectionGeometry = null);
       return;
