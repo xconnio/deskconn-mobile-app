@@ -491,6 +491,8 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
   DateTime? _pointerDownTime;
   Timer? _tapTimer;
   bool _hadSelectionOnDown = false;
+  bool _keyboardWasOpenOnDown = false;
+  String? _pendingLink;
 
   @override
   void initState() {
@@ -749,9 +751,15 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
     final topLeft = anchor - controls.getHandleAnchor(type, geometry.lineHeight);
     final padding = Offset((touchWidth - size.width) / 2, (touchHeight - size.height) / 2);
 
+    // Keep the whole touch box inside the pane: the start handle is drawn to the
+    // left of the selection, so it would otherwise fall outside the stack (and
+    // outside hit testing) for anything selected at the start of a line.
+    final left = (topLeft.dx - padding.dx).clamp(0.0, math.max(0.0, geometry.viewportWidth - touchWidth)).toDouble();
+    final top = (topLeft.dy - padding.dy).clamp(0.0, math.max(0.0, geometry.viewportHeight - touchHeight)).toDouble();
+
     return Positioned(
-      left: topLeft.dx - padding.dx,
-      top: topLeft.dy - padding.dy,
+      left: left,
+      top: top,
       width: touchWidth,
       height: touchHeight,
       child: GestureDetector(
@@ -859,6 +867,7 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
       end: stack.globalToLocal(render.localToGlobal(endPoint)),
       lineHeight: cell.height,
       viewportWidth: stack.size.width,
+      viewportHeight: stack.size.height,
     );
     if (_selectionGeometry?.matches(geometry) ?? false) return;
     setState(() => _selectionGeometry = geometry);
@@ -919,30 +928,37 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
     _pointerDownPosition = event.position;
     _pointerDownTime = DateTime.now();
     _hadSelectionOnDown = _xtermController.selection != null;
+    _keyboardWasOpenOnDown = _viewKey.currentState?.hasInputConnection ?? false;
+    _pendingLink = _hadSelectionOnDown ? null : _linkAt(event.position);
   }
 
   void _handlePointerUp(PointerUpEvent event) {
     final downPosition = _pointerDownPosition;
     final downTime = _pointerDownTime;
+    final link = _pendingLink;
+    _pendingLink = null;
     _pointerDownPosition = null;
     _pointerDownTime = null;
     if (downPosition == null || downTime == null || _hadSelectionOnDown) return;
     if ((event.position - downPosition).distance > kTouchSlop) return;
     if (DateTime.now().difference(downTime) > _tapTimeout) return;
-    final position = event.position;
+    if (link == null) return;
     _tapTimer?.cancel();
     _tapTimer = Timer(kDoubleTapTimeout, () {
       _tapTimer = null;
-      if (mounted) _openLinkAt(position);
+      if (!mounted) return;
+      if (!_keyboardWasOpenOnDown) _viewKey.currentState?.closeKeyboard();
+      _openLink(link);
     });
   }
 
-  void _openLinkAt(Offset globalPosition) {
+  String? _linkAt(Offset globalPosition) {
     final render = _viewKey.currentState?.renderTerminal;
-    if (render == null || !render.hasSize) return;
-    final cell = render.getCellOffset(render.globalToLocal(globalPosition));
-    final link = TerminalLinks.urlAt(widget.controller.terminal, cell);
-    if (link == null) return;
+    if (render == null || !render.hasSize) return null;
+    return TerminalLinks.urlAt(widget.controller.terminal, render.getCellOffset(render.globalToLocal(globalPosition)));
+  }
+
+  void _openLink(String link) {
     final uri = Uri.tryParse(link.contains('://') ? link : 'https://$link');
     if (uri == null) return;
     unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
@@ -954,18 +970,21 @@ class _SelectionGeometry {
   final Offset end;
   final double lineHeight;
   final double viewportWidth;
+  final double viewportHeight;
 
   const _SelectionGeometry({
     required this.start,
     required this.end,
     required this.lineHeight,
     required this.viewportWidth,
+    required this.viewportHeight,
   });
 
   bool matches(_SelectionGeometry other) {
     return (start - other.start).distance < 1 &&
         (end - other.end).distance < 1 &&
         lineHeight == other.lineHeight &&
-        viewportWidth == other.viewportWidth;
+        viewportWidth == other.viewportWidth &&
+        viewportHeight == other.viewportHeight;
   }
 }
