@@ -81,16 +81,8 @@ class _TerminalTabsViewState extends State<TerminalTabsView> {
     }
   }
 
-  static const int _maxLiveTabs = 2;
-
   Future<void> _addTab() async {
     if (_addingTab) return;
-    if (_group.tabs.length >= _maxLiveTabs) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Only $_maxLiveTabs terminal tabs per desktop are supported right now.')),
-      );
-      return;
-    }
     setState(() => _addingTab = true);
     try {
       final controller = await startNewTerminalTab(
@@ -176,6 +168,8 @@ class _TerminalTabBar extends StatelessWidget {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF141414),
+      isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (sheetContext) => _TabSwitcherSheet(
         tabs: tabs,
@@ -343,15 +337,22 @@ class _TabSwitcherSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.72,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+            child: Row(
               children: [
+                const Icon(Icons.grid_view_rounded, size: 16, color: Colors.white70),
+                const SizedBox(width: 8),
                 const Text(
                   'Tabs',
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
@@ -359,25 +360,28 @@ class _TabSwitcherSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text('${tabs.length}', style: const TextStyle(color: Colors.white38, fontSize: 13)),
                 const Spacer(),
-                TextButton.icon(
+                IconButton(
                   onPressed: onAdd,
-                  icon: const Icon(Icons.add, size: 16, color: Colors.white70),
-                  label: const Text('New tab', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  tooltip: 'New tab',
+                  icon: const Icon(Icons.add, color: Colors.white70),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.2,
-              children: [for (final tab in tabs) _card(tab)],
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.05,
+              ),
+              itemCount: tabs.length,
+              itemBuilder: (context, index) => _card(tabs[index]),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -388,39 +392,30 @@ class _TabSwitcherSheet extends StatelessWidget {
       onTap: () => onSelect(tab.id),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF0B0B0B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: active ? Colors.white54 : Colors.white12, width: active ? 1.5 : 1),
+          color: const Color(0xFF171717),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: active ? Colors.white70 : Colors.white12, width: active ? 1.5 : 1),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  _previewOf(tab),
-                  maxLines: _previewLines,
-                  style: const TextStyle(color: Colors.white54, fontSize: 8, fontFamily: 'monospace', height: 1.35),
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.white12)),
-              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 2, 5),
               child: Row(
                 children: [
-                  const Icon(Icons.terminal, size: 12, color: Colors.white54),
-                  const SizedBox(width: 5),
+                  Icon(Icons.terminal, size: 13, color: active ? Colors.white : Colors.white54),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       tab.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: active ? Colors.white : Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   InkWell(
@@ -432,6 +427,17 @@ class _TabSwitcherSheet extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                color: Colors.black,
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  _previewOf(tab),
+                  maxLines: _previewLines,
+                  style: const TextStyle(color: Colors.white54, fontSize: 8, fontFamily: 'monospace', height: 1.35),
+                ),
               ),
             ),
           ],

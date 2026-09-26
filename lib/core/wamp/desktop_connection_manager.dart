@@ -75,7 +75,7 @@ class DesktopConnectionManager {
   final Set<String> _noWebRtcSupportRealms = {};
   final Set<String> _everConnectedRealms = {};
   final Map<String, int> _webRtcFailureCount = {};
-  final Map<String, DesktopConnection> _standaloneConnections = {};
+  final Set<DesktopConnection> _standaloneConnections = {};
 
   final ValueNotifier<bool> isReconnecting = ValueNotifier(false);
 
@@ -220,23 +220,18 @@ class DesktopConnectionManager {
     required bool webRtcEnabled,
     required String privateKey,
   }) async {
-    if (_standaloneConnections.containsKey(realm)) {
-      throw const TerminalTabException('Only 2 terminal tabs per desktop are supported right now.');
-    }
     final connection = await _negotiateConnection(
       realm: realm,
       authId: authId,
       webRtcEnabled: webRtcEnabled,
       privateKey: privateKey,
     );
-    _standaloneConnections[realm] = connection;
+    _standaloneConnections.add(connection);
     return connection;
   }
 
-  Future<void> releaseStandalone(String realm, DesktopConnection connection) async {
-    if (_standaloneConnections[realm] == connection) {
-      _standaloneConnections.remove(realm);
-    }
+  Future<void> releaseStandalone(DesktopConnection connection) async {
+    _standaloneConnections.remove(connection);
     await connection.dispose();
   }
 
@@ -411,6 +406,11 @@ class DesktopConnectionManager {
         .toList(growable: false);
     for (final realm in realms) {
       await release(realm);
+    }
+    final standalones = List<DesktopConnection>.of(_standaloneConnections);
+    _standaloneConnections.clear();
+    for (final connection in standalones) {
+      await connection.dispose();
     }
     _noWebRtcSupportRealms.clear();
     _webRtcFailureCount.clear();
