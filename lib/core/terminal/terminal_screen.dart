@@ -1,10 +1,22 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:xterm/core.dart';
 import 'package:xterm/ui.dart' hide TerminalController;
+import 'package:xterm/ui.dart' as xterm show SelectionMode, TerminalController;
 import 'terminal_controller.dart';
 import 'terminal_launcher.dart';
+import 'terminal_link_highlighter.dart';
+import 'terminal_links.dart';
 import 'terminal_registry.dart';
+import 'terminal_theme.dart';
 import 'toolbar.dart';
 
 void _log(String msg) => debugPrint('[TerminalScreen ${DateTime.now().millisecondsSinceEpoch}] $msg');
@@ -459,18 +471,36 @@ class TerminalPane extends StatefulWidget {
 }
 
 class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver {
+  static const double _minFontSize = 8;
+  static const double _maxFontSize = 32;
+  static const Duration _tapTimeout = Duration(milliseconds: 500);
+
+  final xterm.TerminalController _xtermController = xterm.TerminalController();
+  final GlobalKey _stackKey = GlobalKey();
+  final GlobalKey<TerminalViewState> _viewKey = GlobalKey<TerminalViewState>();
+  late final TerminalLinkRepaint _linkRepaint;
+  final GlobalKey _linkAreaKey = GlobalKey();
+
   double _fontSize = 14;
   double _fontSizeOnScaleStart = 14;
   bool _isLoading = false;
   Object? _startError;
-
-  static const double _minFontSize = 8;
-  static const double _maxFontSize = 32;
+  _SelectionGeometry? _selectionGeometry;
+  bool _draggingHandle = false;
+  Offset _handleGrabOffset = Offset.zero;
+  Offset? _pointerDownPosition;
+  DateTime? _pointerDownTime;
+  Timer? _tapTimer;
+  bool _hadSelectionOnDown = false;
+  bool _keyboardWasOpenOnDown = false;
+  String? _pendingLink;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _linkRepaint = TerminalLinkRepaint(widget.controller.terminal);
+    _xtermController.addListener(_syncSelection);
 
     _isLoading = !widget.controller.isReady;
     if (widget.controller.isReady) {
@@ -510,6 +540,10 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
     widget.controller.onExit = null;
     widget.controller.onError = null;
     widget.controller.dispose();
+    _tapTimer?.cancel();
+    _linkRepaint.dispose();
+    _xtermController.removeListener(_syncSelection);
+    _xtermController.dispose();
     super.dispose();
   }
 
@@ -595,9 +629,40 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
 
     return _chrome(
       body: SafeArea(
-        child: Column(
+        child: Stack(
+          key: _stackKey,
           children: [
-            Expanded(
+            Positioned.fill(
+              child: Column(
+                children: [
+                  Expanded(child: _terminalArea()),
+                  Toolbar(controller: widget.controller, onPaste: _pasteFromClipboard),
+                ],
+              ),
+            ),
+            ..._selectionOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _terminalArea() {
+    return Stack(
+      key: _linkAreaKey,
+      children: [
+        Positioned.fill(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (_) {
+              if (_xtermController.selection != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) => _syncSelection());
+              }
+              return false;
+            },
+            child: Listener(
+              onPointerDown: _handlePointerDown,
+              onPointerUp: _handlePointerUp,
+              onPointerCancel: (_) => _pointerDownPosition = null,
               child: GestureDetector(
                 onScaleStart: (_) => _fontSizeOnScaleStart = _fontSize,
                 onScaleUpdate: (details) {
@@ -609,15 +674,325 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
                 },
                 child: TerminalView(
                   widget.controller.terminal,
+                  key: _viewKey,
+                  controller: _xtermController,
+                  theme: kTerminalTheme,
                   autofocus: true,
                   textStyle: TerminalStyle(fontSize: _fontSize),
                 ),
               ),
             ),
-            Toolbar(controller: widget.controller),
-          ],
+          ),
+        ),
+        Positioned.fill(
+          child: CustomPaint(
+            painter: TerminalLinkPainter(
+              terminal: widget.controller.terminal,
+              theme: kTerminalTheme,
+              textStyle: TerminalStyle(fontSize: _fontSize),
+              textScaler: MediaQuery.textScalerOf(context),
+              resolveOrigin: _linkOrigin,
+              repaint: _linkRepaint,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  TextSelectionControls get _handleControls {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return cupertinoTextSelectionHandleControls;
+      default:
+        return materialTextSelectionHandleControls;
+    }
+  }
+
+  List<Widget> _selectionOverlay() {
+    final geometry = _selectionGeometry;
+    if (geometry == null) return const [];
+
+    final controls = _handleControls;
+    final lineHeight = geometry.lineHeight;
+    final overlays = <Widget>[];
+
+    if (!_draggingHandle) {
+      final multiline = (geometry.end.dy - geometry.start.dy) > lineHeight / 2;
+      final anchorX = multiline ? geometry.viewportWidth / 2 : (geometry.start.dx + geometry.end.dx) / 2;
+      overlays.add(
+        Positioned.fill(
+          child: AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: TextSelectionToolbarAnchors(
+              primaryAnchor: Offset(anchorX, geometry.start.dy),
+              secondaryAnchor: Offset(anchorX, geometry.end.dy),
+            ),
+            buttonItems: [
+              ContextMenuButtonItem(type: ContextMenuButtonType.copy, onPressed: _copySelection),
+              ContextMenuButtonItem(type: ContextMenuButtonType.paste, onPressed: _pasteFromClipboard),
+              ContextMenuButtonItem(type: ContextMenuButtonType.share, onPressed: _shareSelection),
+              ContextMenuButtonItem(type: ContextMenuButtonType.selectAll, onPressed: _selectAll),
+              ContextMenuButtonItem(type: ContextMenuButtonType.searchWeb, onPressed: _searchSelectionWeb),
+            ],
+          ),
+        ),
+      );
+    }
+
+    overlays.add(_selectionHandle(geometry, TextSelectionHandleType.left, true, controls));
+    overlays.add(_selectionHandle(geometry, TextSelectionHandleType.right, false, controls));
+    return overlays;
+  }
+
+  Widget _selectionHandle(
+    _SelectionGeometry geometry,
+    TextSelectionHandleType type,
+    bool isStart,
+    TextSelectionControls controls,
+  ) {
+    const minTouchSize = kMinInteractiveDimension;
+    final size = controls.getHandleSize(geometry.lineHeight);
+    final touchWidth = math.max(minTouchSize, size.width);
+    final touchHeight = math.max(minTouchSize, size.height);
+    final anchor = isStart ? geometry.start : geometry.end;
+    final topLeft = anchor - controls.getHandleAnchor(type, geometry.lineHeight);
+    final padding = Offset((touchWidth - size.width) / 2, (touchHeight - size.height) / 2);
+
+    // Keep the whole touch box inside the pane: the start handle is drawn to the
+    // left of the selection, so it would otherwise fall outside the stack (and
+    // outside hit testing) for anything selected at the start of a line.
+    final left = (topLeft.dx - padding.dx).clamp(0.0, math.max(0.0, geometry.viewportWidth - touchWidth)).toDouble();
+    final top = (topLeft.dy - padding.dy).clamp(0.0, math.max(0.0, geometry.viewportHeight - touchHeight)).toDouble();
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: touchWidth,
+      height: touchHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (details) => _startHandleDrag(isStart, details.globalPosition),
+        onPanUpdate: (details) => _updateHandleDrag(isStart, details.globalPosition),
+        onPanEnd: (_) => _endHandleDrag(),
+        onPanCancel: _endHandleDrag,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: EdgeInsets.only(left: padding.dx, top: padding.dy),
+            child: _themedHandle(type, geometry.lineHeight),
+          ),
         ),
       ),
     );
+  }
+
+  Widget _themedHandle(TextSelectionHandleType type, double lineHeight) {
+    return TextSelectionTheme(
+      data: TextSelectionTheme.of(
+        context,
+      ).copyWith(selectionHandleColor: kTerminalAccent, selectionColor: kTerminalSelection),
+      child: CupertinoTheme(
+        data: CupertinoTheme.of(context).copyWith(selectionHandleColor: kTerminalAccent),
+        child: Builder(builder: (handleContext) => _handleControls.buildHandle(handleContext, type, lineHeight)),
+      ),
+    );
+  }
+
+  Offset? _linkOrigin() {
+    final render = _viewKey.currentState?.renderTerminal;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (render == null || stack == null || !render.hasSize || !stack.hasSize) return null;
+    return stack.globalToLocal(render.localToGlobal(render.getOffset(const CellOffset(0, 0))));
+  }
+
+  void _startHandleDrag(bool isStart, Offset globalPosition) {
+    final geometry = _selectionGeometry;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (geometry == null || stack == null) return;
+    setState(() {
+      _draggingHandle = true;
+      _handleGrabOffset = globalPosition - stack.localToGlobal(isStart ? geometry.start : geometry.end);
+    });
+  }
+
+  void _updateHandleDrag(bool isStart, Offset globalPosition) {
+    final render = _viewKey.currentState?.renderTerminal;
+    final selection = _xtermController.selection;
+    if (render == null || !render.hasSize || selection == null) return;
+
+    final cellSize = render.cellSize;
+    final local = render.globalToLocal(globalPosition - _handleGrabOffset);
+
+    final CellOffset moving;
+    if (isStart) {
+      moving = render.getCellOffset(local);
+    } else {
+      // The end handle sits on the bottom-right corner of the last selected cell,
+      // which is also the top-left corner of the next one, so step back into the
+      // cell the handle actually belongs to before resolving it.
+      final last = render.getCellOffset(local - Offset(cellSize.width / 2, cellSize.height / 2));
+      moving = CellOffset(last.x + 1, last.y);
+    }
+
+    final range = selection.normalized;
+    final fixed = isStart ? range.end : range.begin;
+    final begin = moving.isBefore(fixed) ? moving : fixed;
+    final end = moving.isBefore(fixed) ? fixed : moving;
+    if (begin.isEqual(end)) return;
+
+    final buffer = widget.controller.terminal.buffer;
+    _xtermController.setSelection(
+      buffer.createAnchorFromOffset(begin),
+      buffer.createAnchorFromOffset(end),
+      mode: xterm.SelectionMode.line,
+    );
+  }
+
+  void _endHandleDrag() {
+    if (!_draggingHandle) return;
+    setState(() => _draggingHandle = false);
+  }
+
+  void _syncSelection() {
+    if (!mounted) return;
+    final selection = _xtermController.selection;
+    final render = _viewKey.currentState?.renderTerminal;
+    final stack = _linkAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (selection == null || render == null || stack == null) {
+      if (_selectionGeometry != null) setState(() => _selectionGeometry = null);
+      return;
+    }
+    if (!render.hasSize || !stack.hasSize) return;
+
+    final cell = render.cellSize;
+    final begin = selection.normalized.begin;
+    final end = selection.normalized.end;
+    final start = stack.globalToLocal(render.localToGlobal(render.getOffset(begin)));
+    final endPoint = render.getOffset(CellOffset(end.x, end.y)) + Offset(0, cell.height);
+    final geometry = _SelectionGeometry(
+      start: start,
+      end: stack.globalToLocal(render.localToGlobal(endPoint)),
+      lineHeight: cell.height,
+      viewportWidth: stack.size.width,
+      viewportHeight: stack.size.height,
+    );
+    if (_selectionGeometry?.matches(geometry) ?? false) return;
+    setState(() => _selectionGeometry = geometry);
+  }
+
+  String? _takeSelectionText() {
+    final selection = _xtermController.selection;
+    if (selection == null) return null;
+    final text = widget.controller.terminal.buffer.getText(selection);
+    _xtermController.clearSelection();
+    return text.trim().isEmpty ? null : text;
+  }
+
+  Future<void> _copySelection() async {
+    final text = _takeSelectionText();
+    if (text == null) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)));
+  }
+
+  Future<void> _shareSelection() async {
+    final text = _takeSelectionText();
+    if (text == null) return;
+    await SharePlus.instance.share(ShareParams(text: text));
+  }
+
+  Future<void> _searchSelectionWeb() async {
+    final text = _takeSelectionText();
+    if (text == null) return;
+    final uri = Uri.tryParse('https://www.google.com/search?q=${Uri.encodeComponent(text.trim())}');
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) return;
+    _xtermController.clearSelection();
+    widget.controller.terminal.paste(text);
+  }
+
+  void _selectAll() {
+    final terminal = widget.controller.terminal;
+    final buffer = terminal.buffer;
+    _xtermController.setSelection(
+      buffer.createAnchor(0, buffer.height - terminal.viewHeight),
+      buffer.createAnchor(terminal.viewWidth, buffer.height - 1),
+      mode: xterm.SelectionMode.line,
+    );
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _tapTimer?.cancel();
+    _tapTimer = null;
+    _pointerDownPosition = event.position;
+    _pointerDownTime = DateTime.now();
+    _hadSelectionOnDown = _xtermController.selection != null;
+    _keyboardWasOpenOnDown = _viewKey.currentState?.hasInputConnection ?? false;
+    _pendingLink = _hadSelectionOnDown ? null : _linkAt(event.position);
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    final downPosition = _pointerDownPosition;
+    final downTime = _pointerDownTime;
+    final link = _pendingLink;
+    _pendingLink = null;
+    _pointerDownPosition = null;
+    _pointerDownTime = null;
+    if (downPosition == null || downTime == null || _hadSelectionOnDown) return;
+    if ((event.position - downPosition).distance > kTouchSlop) return;
+    if (DateTime.now().difference(downTime) > _tapTimeout) return;
+    if (link == null) return;
+    _tapTimer?.cancel();
+    _tapTimer = Timer(kDoubleTapTimeout, () {
+      _tapTimer = null;
+      if (!mounted) return;
+      if (!_keyboardWasOpenOnDown) _viewKey.currentState?.closeKeyboard();
+      _openLink(link);
+    });
+  }
+
+  String? _linkAt(Offset globalPosition) {
+    final render = _viewKey.currentState?.renderTerminal;
+    if (render == null || !render.hasSize) return null;
+    return TerminalLinks.urlAt(widget.controller.terminal, render.getCellOffset(render.globalToLocal(globalPosition)));
+  }
+
+  void _openLink(String link) {
+    final uri = Uri.tryParse(link.contains('://') ? link : 'https://$link');
+    if (uri == null) return;
+    unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
+  }
+}
+
+class _SelectionGeometry {
+  final Offset start;
+  final Offset end;
+  final double lineHeight;
+  final double viewportWidth;
+  final double viewportHeight;
+
+  const _SelectionGeometry({
+    required this.start,
+    required this.end,
+    required this.lineHeight,
+    required this.viewportWidth,
+    required this.viewportHeight,
+  });
+
+  bool matches(_SelectionGeometry other) {
+    return (start - other.start).distance < 1 &&
+        (end - other.end).distance < 1 &&
+        lineHeight == other.lineHeight &&
+        viewportWidth == other.viewportWidth &&
+        viewportHeight == other.viewportHeight;
   }
 }
