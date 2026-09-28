@@ -53,7 +53,9 @@ jobs:
           EOF
 
       - name: Build App Bundle
-        run: flutter build appbundle --no-tree-shake-icons --build-number=${{ github.run_number }}
+        run: |
+          BASE=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+          flutter build appbundle --no-tree-shake-icons --build-number=$((BASE + ${{ github.run_number }}))
 
       - name: Upload to Play Store
         uses: r0adkll/upload-google-play@v1
