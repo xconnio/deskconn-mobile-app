@@ -152,87 +152,83 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _probeDesktopConnection,
-                    child: Builder(
-                      builder: (context) {
-                        final palette = DeskconnPalette.of(context);
-                        return GridView.count(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
-                          crossAxisCount: 4,
-                          crossAxisSpacing: 4,
-                          mainAxisSpacing: 4,
-                          childAspectRatio: 0.85,
-                          children: [
-                            _LauncherTile(
-                              icon: Icons.description_outlined,
-                              badgeColor: palette.osUbuntu,
-                              title: "Documents",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openFileExplorer(context, category: 'documents'),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.folder_open,
-                              badgeColor: palette.osKubuntu,
-                              title: "Files",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openFileExplorer(context),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.image_outlined,
-                              badgeColor: palette.osXubuntu,
-                              title: "Photos",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openFileExplorer(context, category: 'images'),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.settings_remote_outlined,
-                              badgeColor: palette.osMint,
-                              title: "Remote Ctrl",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openRemoteControl(context),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.terminal,
-                              badgeColor: palette.osDebian,
-                              title: "Terminal",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openTerminal(context),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.video_library_outlined,
-                              badgeColor: palette.osWindows,
-                              title: "Videos",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openFileExplorer(context, category: 'videos'),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.speed_outlined,
-                              badgeColor: palette.osUbuntu,
-                              title: "Monitor",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openResourceMonitor(context),
-                            ),
-                            _LauncherTile(
-                              icon: Icons.swap_horiz,
-                              badgeColor: palette.osXubuntu,
-                              title: "Ports",
-                              enabled: terminalEnabled,
-                              onWallpaper: wallpaper != null,
-                              onTap: () => _openPortForward(context),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                  child: Builder(
+                    builder: (context) {
+                      final palette = DeskconnPalette.of(context);
+                      return GridView.count(
+                        padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
+                        childAspectRatio: 0.85,
+                        children: [
+                          _LauncherTile(
+                            icon: Icons.description_outlined,
+                            badgeColor: palette.osUbuntu,
+                            title: "Documents",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openFileExplorer(context, category: 'documents'),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.folder_open,
+                            badgeColor: palette.osKubuntu,
+                            title: "Files",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openFileExplorer(context),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.image_outlined,
+                            badgeColor: palette.osXubuntu,
+                            title: "Photos",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openFileExplorer(context, category: 'images'),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.settings_remote_outlined,
+                            badgeColor: palette.osMint,
+                            title: "Remote Ctrl",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openRemoteControl(context),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.terminal,
+                            badgeColor: palette.osDebian,
+                            title: "Terminal",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openTerminal(context),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.video_library_outlined,
+                            badgeColor: palette.osWindows,
+                            title: "Videos",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openFileExplorer(context, category: 'videos'),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.speed_outlined,
+                            badgeColor: palette.osUbuntu,
+                            title: "Monitor",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openResourceMonitor(context),
+                          ),
+                          _LauncherTile(
+                            icon: Icons.swap_horiz,
+                            badgeColor: palette.osXubuntu,
+                            title: "Ports",
+                            enabled: terminalEnabled,
+                            onWallpaper: wallpaper != null,
+                            onTap: () => _openPortForward(context),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 _ConnectionStatusChip(
