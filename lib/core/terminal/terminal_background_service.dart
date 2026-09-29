@@ -42,7 +42,7 @@ Future<void> initializeDesktopSessionBackgroundService() async {
       initialNotificationTitle: 'Deskconn',
       initialNotificationContent: 'Deskconn is running',
       foregroundServiceNotificationId: _kNotifId,
-      foregroundServiceTypes: [AndroidForegroundType.dataSync],
+      foregroundServiceTypes: [AndroidForegroundType.connectedDevice],
     ),
     iosConfiguration: IosConfiguration(autoStart: false, onForeground: _onStart, onBackground: (instance) => true),
   );
