@@ -82,6 +82,12 @@ class DesktopConnectionManager {
   static const _webRtcFailureFallbackThreshold = 2;
   static const _heartbeatInterval = Duration(seconds: 8);
   static const _heartbeatTimeout = Duration(seconds: 5);
+  static const heartbeatMaxMisses = 3;
+
+  @visibleForTesting
+  static bool shouldDropAfterHeartbeatFailure({required bool strict, required bool connected, required int misses}) {
+    return strict || !connected || misses >= heartbeatMaxMisses;
+  }
 
   void _recomputeReconnecting() {
     isReconnecting.value = _pendingConnections.keys.any(_everConnectedRealms.contains);
@@ -314,18 +320,18 @@ class DesktopConnectionManager {
 
   Future<void> _handleNetworkChanged() async {
     _webRtcFailureCount.clear();
-    final keys = _connections.keys.toList(growable: false);
-    for (final key in keys) {
-      final connection = _connections[key];
-      if (connection == null) continue;
-      await _dropConnection(key, connection, reason: 'network changed');
-    }
+    await _runHeartbeat(strict: true);
   }
 
   bool _heartbeatRunning = false;
+  bool _strictHeartbeatPending = false;
+  final Expando<int> _heartbeatMisses = Expando();
 
-  Future<void> _runHeartbeat() async {
-    if (_heartbeatRunning) return;
+  Future<void> _runHeartbeat({bool strict = false}) async {
+    if (_heartbeatRunning) {
+      if (strict) _strictHeartbeatPending = true;
+      return;
+    }
     _heartbeatRunning = true;
     try {
       final entries = _connections.entries.toList(growable: false);
@@ -335,14 +341,24 @@ class DesktopConnectionManager {
         if (_connections[key] != connection) continue;
         try {
           await connection.session.call(DeskconnProcedures.deskconndDeviceInfo).timeout(_heartbeatTimeout);
+          _heartbeatMisses[connection] = null;
         } catch (e) {
           if (_connections[key] != connection) continue;
-          _log('heartbeat failed key=$key error=$e');
-          await _dropConnection(key, connection, reason: 'heartbeat failed');
+          final misses = (_heartbeatMisses[connection] ?? 0) + 1;
+          _heartbeatMisses[connection] = misses;
+          final connected = connection.session.isConnected();
+          _log('heartbeat failed key=$key strict=$strict connected=$connected misses=$misses error=$e');
+          if (shouldDropAfterHeartbeatFailure(strict: strict, connected: connected, misses: misses)) {
+            await _dropConnection(key, connection, reason: strict ? 'network changed' : 'heartbeat failed');
+          }
         }
       }
     } finally {
       _heartbeatRunning = false;
+      if (_strictHeartbeatPending) {
+        _strictHeartbeatPending = false;
+        unawaited(_runHeartbeat(strict: true));
+      }
     }
   }
 
