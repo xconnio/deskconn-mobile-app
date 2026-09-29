@@ -21,6 +21,7 @@ import 'package:deskconn_mobile_app/screens/sign_in_screen.dart';
 import 'package:deskconn_mobile_app/theme/app_theme.dart';
 import 'package:deskconn_mobile_app/theme/system_ui.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
+import 'package:deskconn_mobile_app/widgets/exit_guard.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -129,12 +130,16 @@ class DeskconnApp extends StatelessWidget {
             theme: DeskconnTheme.light(),
             darkTheme: DeskconnTheme.dark(),
             themeMode: theme.mode,
+            onNavigationNotification: keepFrameworkHandlingBack,
             builder: (context, child) {
               final brightness = Theme.of(context).brightness;
 
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: DeskconnSystemUi.overlayStyle(brightness),
-                child: _ReconnectingOverlay(child: child ?? const SizedBox.shrink()),
+                child: ExitGuard(
+                  navigatorKey: navigatorKey,
+                  child: _ReconnectingOverlay(child: child ?? const SizedBox.shrink()),
+                ),
               );
             },
             home: const AppBootstrap(),
