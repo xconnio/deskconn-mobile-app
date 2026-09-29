@@ -12,6 +12,7 @@ import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
+import 'package:deskconn_mobile_app/core/wamp/webrtc_close_peer.dart';
 
 const bool kForceWebRtcOnly = false;
 
@@ -448,7 +449,13 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     additionalChannels: ['shell', ...fileStreamChannelLabels()],
   );
 
+  offerer.waitReady().ignore();
+  for (final label in offerConfig.additionalChannels) {
+    offerer.extraChannel(label).ignore();
+  }
+
   final offerFuture = offerer.offer(offerConfig);
+  offerFuture.ignore();
   final subscription = await config.session.subscribe(config.topicOffererOnCandidate, (Event event) async {
     if (event.args.length < 2) return;
 
@@ -506,7 +513,12 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
       incomingChannels: offerer.incomingChannels,
       extraChannel: offerer.extraChannel,
     );
-    final base = await joinPeer(web_rtc.WebRTCPeer(channel), config.realm, config.serializer!, config.authenticator!);
+    final base = await joinPeer(
+      WebRTCClosePeer(web_rtc.WebRTCPeer(channel)),
+      config.realm,
+      config.serializer!,
+      config.authenticator!,
+    );
     return _WampWebRTCConnection(session: Session(base), webRtcSession: webRtcSession);
   }
 
