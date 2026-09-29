@@ -18,7 +18,7 @@ import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
 enum _StreamShellResult { started, channelUnavailable, unsupported }
 
 class TerminalController {
-  final Terminal terminal = Terminal();
+  final Terminal terminal;
   final DesktopSessionLaunchConfig config;
 
   void Function()? onStarted;
@@ -60,9 +60,16 @@ class TerminalController {
   /// Plain-text tail of this tab's output, for the tab switcher's preview.
   String get preview => _preview;
 
+  @visibleForTesting
+  void writeOutput(String text) => _write(text);
+
   void _write(String text) {
     if (_disposed) return;
-    terminal.write(text);
+    try {
+      terminal.write(text);
+    } catch (e) {
+      _log('terminal write failed error=$e');
+    }
     final clean = text
         .replaceAll(RegExp(r'\x1B\][^\x07]*\x07'), '')
         .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')
@@ -73,7 +80,7 @@ class TerminalController {
         : _preview + clean;
   }
 
-  TerminalController({required this.config});
+  TerminalController({required this.config, Terminal? terminal}) : terminal = terminal ?? Terminal();
 
   void _log(String message) {
     debugPrint('[Terminal ${config.realm} ${DateTime.now().toIso8601String()}] $message');
