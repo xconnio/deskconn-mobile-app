@@ -22,6 +22,10 @@ lint:
 lint-fix:
 	dart fix --apply
 
+.PHONY: test
+test:
+	flutter test
+
 check-format:
 	dart format --output=none --set-exit-if-changed --line-length 120 .
 
