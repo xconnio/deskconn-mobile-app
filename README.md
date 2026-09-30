@@ -11,8 +11,68 @@ Connect to your desk and control it remotely.
     media playback (MPRIS) with track artwork, mute/unmute audio, take
     screenshots
 - **Share to desktop** — send files/photos from your phone to your desktop
+- **Port forwarding** — reach a port on your desktop from this device, or
+  expose a port of this device on the desktop
+- **VPN** (Android) — route this phone's traffic through the desktop's
+  connection (start it on the desktop with `deskconn vpn start`)
 - **Account & device management** — sign up/sign in, manage your account,
   and manage the devices paired to it
+
+## Connection modes
+
+Every platform, desktop included, connects peer-to-peer (WebRTC) first
+(`defaultWebRtcEnabled` in `lib/core/constants.dart`). After two failed P2P
+attempts in a row, `DesktopConnectionManager` falls back to a connection
+routed through the server.
+
+- The status chip shows which mode is in use (`p2p` / `routed`).
+- On the Machines screen, tapping a machine's status dot switches between
+  them ("Retry P2P" / "Use Routed").
+- Settings has a toggle to turn P2P off.
+
+### P2P
+
+The WebRTC offer and ICE candidates go over the routed WAMP session. The
+connection then opens a `data` channel that carries WAMP, plus the `shell`,
+`vpn` and file-stream channels, all created before the offer.
+
+The desktop agent recognises the WAMP channel by its subprotocol
+(`wamp.2.cbor`). On Windows and Linux, flutter_webrtc's desktop plugin (still
+as of 1.6.2+hotfix.3) sends every channel's protocol as `sctp` instead. So on
+those platforms the app first sends a 4-byte RawSocket handshake
+(`0x7F 0xB3 0x00 0x00`) on the `data` channel and waits for the agent's reply
+before speaking WAMP (`_wampChannelHandshake` in
+`lib/core/wamp/desktop_connection_manager.dart`). Android, iOS and macOS keep
+using the subprotocol.
+
+### Routed
+
+The WAMP session runs over QUIC, or over the router's WebSocket endpoint
+when the native QUIC library is missing (see Setup).
+
+The terminal can't use the WAMP session: the agent serves shells only over
+streams. So the app opens a raw QUIC stream that the router relays to the
+desktop (`openRoutedShell` in `lib/core/terminal/shell_stream.dart`). This is
+the same protocol the `deskconn shell` CLI uses:
+
+1. Dial a QUIC connection into the desktop's realm for that shell alone. The
+   router only relays a stream to the realm its connection authenticated to,
+   so the shared connection can't be used.
+2. Send a routing frame (`{"realm": ..., "op": "shell"}`).
+3. Exchange X25519 keys.
+4. Send and receive length-prefixed, ChaCha20-Poly1305-encrypted envelopes:
+   a kind byte (control or PTY data), then the nonce and ciphertext.
+
+This needs the native QUIC library. If no shell path works, the terminal says
+it isn't available over the connection instead of retrying forever. The
+paths, tried in order, are:
+
+1. the P2P `shell` channel
+2. the routed QUIC stream
+3. the legacy `io.xconn.deskconn.deskconnd.shell` procedure, for older agents
+
+Port forwarding and the VPN need P2P. The VPN always opens its own P2P
+connection, whichever mode the desktop's chip shows.
 
 ## Setup
 
@@ -23,7 +83,8 @@ flutter pub get
 The app talks to desktops over a QUIC transport (`lib/core/wamp/quic_library_path.dart`).
 Without the platform's native QUIC library, it silently falls back to the
 router's WebSocket endpoint instead — so if desktop connections feel slow or
-flaky, check this first. Build/fetch it per platform:
+flaky, or the terminal is unavailable on a routed connection, check this
+first. Build/fetch it per platform:
 
 ### Android
 
@@ -129,7 +190,13 @@ automatically.
 
 ### macOS
 
-Not yet automated (no Makefile target, no bundling step in the Xcode
-project). The app will fall back to the WebSocket endpoint on macOS until
-this is added.
+```
+make setup-quic-macos
+```
+
+Requires the Rust toolchain (`rustup`). Builds
+`macos/Runner/QuicFFI/libdart_quic_ffi.dylib`. Bundling it is still manual:
+add the dylib to the Runner target's "Copy Files" phase (Destination:
+Executables) in Xcode so it ships next to the app binary. Until that's done
+the app falls back to the WebSocket endpoint on macOS.
 
