@@ -51,6 +51,14 @@ class ConnectivityService extends ChangeNotifier {
     });
   }
 
+  Future<void> refresh() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      _debounce?.cancel();
+      _applyResults(results);
+    } catch (_) {}
+  }
+
   void _applyResults(List<ConnectivityResult> results) {
     final resultSet = results.toSet();
     final pathChanged = !setEquals(resultSet, _lastResults);

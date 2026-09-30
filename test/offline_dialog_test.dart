@@ -31,11 +31,11 @@ void main() {
     );
   }
 
-  void showOffline() {
+  void showOffline({Future<void> Function()? recheck}) {
     showDialog<void>(
       context: navigatorKey.currentContext!,
       barrierDismissible: false,
-      builder: (_) => OfflineDialog(connectivity: connectivity, isOnline: () => connectivity.online),
+      builder: (_) => OfflineDialog(connectivity: connectivity, isOnline: () => connectivity.online, recheck: recheck),
     );
   }
 
@@ -117,5 +117,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(connectivity.listening, isFalse);
+  });
+
+  testWidgets('closes when a recheck finds the phone online without any notification', (tester) async {
+    await pumpHome(tester);
+    var checks = 0;
+    showOffline(
+      recheck: () async {
+        checks++;
+        if (checks == 2) connectivity.online = true;
+      },
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No internet connection'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('No internet connection'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('No internet connection'), findsNothing);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('keeps rechecking while still offline', (tester) async {
+    await pumpHome(tester);
+    var checks = 0;
+    showOffline(recheck: () async => checks++);
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(checks, 3);
+    expect(find.text('No internet connection'), findsOneWidget);
+  });
+
+  testWidgets('stops rechecking once closed', (tester) async {
+    await pumpHome(tester);
+    var checks = 0;
+    showOffline(recheck: () async => checks++);
+    await tester.pumpAndSettle();
+    connectivity.set(true);
+    await tester.pumpAndSettle();
+    final afterClose = checks;
+
+    await tester.pump(const Duration(seconds: 10));
+
+    expect(checks, afterClose);
   });
 }
