@@ -18,6 +18,7 @@ import android.util.Patterns
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -36,12 +37,30 @@ class MainActivity : FlutterActivity() {
     // running and received the share via onNewIntent instead, this stays
     // false so we never finish() an Activity the user is actively using.
     private var launchedForShareOnly = false
+    private var engineReused = false
+
+    override fun provideFlutterEngine(context: Context): FlutterEngine {
+        val cache = FlutterEngineCache.getInstance()
+        cache.get(ENGINE_ID)?.let {
+            engineReused = true
+            return it
+        }
+        return FlutterEngine(context.applicationContext).also { cache.put(ENGINE_ID, it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel()
         pendingSharedFiles = extractSharedFiles(intent)
         launchedForShareOnly = pendingSharedFiles.isNotEmpty()
+        if (engineReused) setFrameworkHandlesBack(true)
+        if (engineReused && pendingSharedFiles.isNotEmpty()) {
+            val files = pendingSharedFiles
+            pendingSharedFiles = emptyList()
+            flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                MethodChannel(it, shareChannel).invokeMethod("sharedFiles", files)
+            }
+        }
     }
 
     // Flutter's default behavior for back-with-nothing-left-to-pop is to
@@ -80,6 +99,14 @@ class MainActivity : FlutterActivity() {
                 .edit().putBoolean("is_manually_stopped", true).apply()
         }
         super.onDestroy()
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        for (name in listOf(notifChannel, fileChannel, shareChannel)) {
+            MethodChannel(messenger, name).setMethodCallHandler(null)
+        }
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -411,5 +438,9 @@ class MainActivity : FlutterActivity() {
 
     private fun hideNotification() {
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+    }
+
+    companion object {
+        const val ENGINE_ID = "deskconn_main"
     }
 }
