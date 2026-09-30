@@ -292,7 +292,7 @@ class AppBootstrap extends StatefulWidget {
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends State<AppBootstrap> {
+class _AppBootstrapState extends State<AppBootstrap> with WidgetsBindingObserver {
   late final Future<void> _initialization;
   bool _notificationActive = false;
   bool _wasOffline = false;
@@ -304,6 +304,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     super.initState();
     _wasOffline = !ConnectivityService().hasConnection;
     ConnectivityService().addListener(_handleConnectivityChange);
+    WidgetsBinding.instance.addObserver(this);
     ShareService.instance.pendingFiles.addListener(_handlePendingSharedFiles);
 
     final completer = Completer<void>();
@@ -345,7 +346,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(ConnectivityService().refresh());
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ConnectivityService().removeListener(_handleConnectivityChange);
     ShareService.instance.pendingFiles.removeListener(_handlePendingSharedFiles);
     super.dispose();
@@ -375,8 +382,11 @@ class _AppBootstrapState extends State<AppBootstrap> {
       showDialog<void>(
         context: ctx,
         barrierDismissible: false,
-        builder: (_) =>
-            OfflineDialog(connectivity: ConnectivityService(), isOnline: () => ConnectivityService().hasConnection),
+        builder: (_) => OfflineDialog(
+          connectivity: ConnectivityService(),
+          isOnline: () => ConnectivityService().hasConnection,
+          recheck: ConnectivityService().refresh,
+        ),
       ),
     );
   }

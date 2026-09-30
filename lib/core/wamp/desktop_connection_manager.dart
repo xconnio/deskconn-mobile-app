@@ -94,7 +94,7 @@ class DesktopConnectionManager {
     isReconnecting.value = _pendingConnections.keys.any(_everConnectedRealms.contains);
   }
 
-  static const _webRtcDisposeCooldown = Duration(milliseconds: 500);
+  static const _webRtcDisposeCooldown = Duration(seconds: 3);
   final Map<String, DateTime> _lastWebRtcDisposeAt = {};
   final Map<String, Future<void>> _pendingWebRtcDispose = {};
 
@@ -309,6 +309,7 @@ class DesktopConnectionManager {
       return DesktopConnection(session: connection.session, isP2P: true, webRtcSession: connection.webRtcSession);
     } catch (e) {
       _log('connect failed realm=$realm webrtc_failed=$e');
+      _markWebRtcDisposed(realm, Future<void>.value());
       try {
         await signalingSession.close();
       } catch (_) {}
