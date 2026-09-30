@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:app_settings/app_settings.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/share/share_service.dart';
@@ -23,6 +22,7 @@ import 'package:deskconn_mobile_app/theme/system_ui.dart';
 import 'package:deskconn_mobile_app/theme/typography.dart';
 import 'package:deskconn_mobile_app/widgets/exit_guard.dart';
 import 'package:deskconn_mobile_app/widgets/logo.dart';
+import 'package:deskconn_mobile_app/widgets/offline_dialog.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -261,54 +261,6 @@ class _ReconnectingBanner extends StatelessWidget {
   }
 }
 
-// Auto-dismisses itself the moment connectivity comes back, so there's no
-// separate reconnect-tracking logic needed at the call site.
-class _OfflineDialog extends StatefulWidget {
-  const _OfflineDialog();
-
-  @override
-  State<_OfflineDialog> createState() => _OfflineDialogState();
-}
-
-class _OfflineDialogState extends State<_OfflineDialog> {
-  @override
-  void initState() {
-    super.initState();
-    ConnectivityService().addListener(_maybeClose);
-  }
-
-  @override
-  void dispose() {
-    ConnectivityService().removeListener(_maybeClose);
-    super.dispose();
-  }
-
-  void _maybeClose() {
-    if (mounted && ConnectivityService().hasConnection) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: AlertDialog(
-        title: const Text('No internet connection'),
-        content: const Text(
-          'Deskconn needs an internet connection to reach your desktops. Check your Wi-Fi or mobile data.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => AppSettings.openAppSettings(type: AppSettingsType.wifi),
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SplashContent extends StatelessWidget {
   const _SplashContent();
 
@@ -419,7 +371,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
   void _showOfflineDialog() {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
-    unawaited(showDialog<void>(context: ctx, barrierDismissible: false, builder: (_) => const _OfflineDialog()));
+    unawaited(
+      showDialog<void>(
+        context: ctx,
+        barrierDismissible: false,
+        builder: (_) =>
+            OfflineDialog(connectivity: ConnectivityService(), isOnline: () => ConnectivityService().hasConnection),
+      ),
+    );
   }
 
   Future<void> _checkForUpdate() async {
