@@ -102,6 +102,17 @@ class QUICConnectionManager {
     }();
   }
 
+  // The router only relays a raw stream to the realm its own connection
+  // authenticated to, so a stream meant for a desktop can't ride the shared
+  // root connection -- it needs one dialled straight into that realm. The
+  // caller owns the returned session and closes it.
+  Future<QUICSession> connectDedicated(String realm, QUICDialerConfig config) {
+    return connectQUIC(DeskconnConfig.quicAddr, realm, config).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw TimeoutException('QUIC connect did not complete', const Duration(seconds: 15)),
+    );
+  }
+
   Future<void> close() async {
     final root = _root;
     _root = null;

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:xterm/core.dart';
 // ignore: implementation_imports
 import 'package:xconn/src/types.dart';
+import 'package:xconn/xconn.dart';
 import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 
 import 'blocking_queue.dart';
@@ -14,6 +15,8 @@ import 'terminal_encryption.dart';
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/desktop_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_connection_manager.dart';
+import 'package:deskconn_mobile_app/core/wamp/quic_library_path.dart';
 
 enum _StreamShellResult { started, channelUnavailable, unsupported }
 
@@ -128,6 +131,7 @@ class TerminalController {
         return;
       }
     }
+    if (await _runRoutedShell() == _StreamShellResult.started) return;
     await _runWampShell(connection);
   }
 
@@ -193,6 +197,33 @@ class TerminalController {
   Future<_StreamShellResult> _runStreamShell(web_rtc.WebRTCSession? rtc) async {
     if (rtc == null) return _StreamShellResult.unsupported;
     if (_consumedShellSessions.contains(rtc)) return _StreamShellResult.channelUnavailable;
+    return _startStreamShell(
+      (onData, onExit) => openShell(rtc, terminal.viewWidth, terminal.viewHeight, onData, onExit),
+      onAttached: () => _consumedShellSessions.add(rtc),
+    );
+  }
+
+  // A routed desktop has no WebRTC session to carry the shell channel, so the
+  // shell rides a raw QUIC stream relayed by the router instead.
+  Future<_StreamShellResult> _runRoutedShell() async {
+    if (!hasDesktopQuicLibrary) return _StreamShellResult.unsupported;
+    return _startStreamShell((onData, onExit) async {
+      final session = await QUICConnectionManager().connectDedicated(
+        config.realm,
+        QUICDialerConfig(
+          authenticator: CryptoSignAuthenticator(config.authId, config.privateKey),
+          serializer: CBORSerializer(),
+          libraryPath: desktopQuicLibraryPath(),
+        ),
+      );
+      return openRoutedShell(session, config.realm, terminal.viewWidth, terminal.viewHeight, onData, onExit);
+    });
+  }
+
+  Future<_StreamShellResult> _startStreamShell(
+    Future<ShellHandle> Function(void Function(Uint8List data) onData, void Function() onExit) open, {
+    void Function()? onAttached,
+  }) async {
     _running = true;
     _shellExited = false;
 
@@ -222,10 +253,7 @@ class TerminalController {
     };
 
     try {
-      final handle = await openShell(
-        rtc,
-        terminal.viewWidth,
-        terminal.viewHeight,
+      final handle = await open(
         (bytes) {
           if (!_disposed) _write(utf8.decode(bytes, allowMalformed: true));
         },
@@ -240,7 +268,7 @@ class TerminalController {
         return _StreamShellResult.started;
       }
 
-      _consumedShellSessions.add(rtc);
+      onAttached?.call();
       _shellHandle = handle;
       handle.resize(terminal.viewWidth, terminal.viewHeight);
       onStarted?.call();
@@ -271,19 +299,25 @@ class TerminalController {
     };
     _attachInput();
 
+    var unsupported = false;
     try {
       await connection.session.callProgressiveProgress(DeskconnProcedures.deskconndShell, _sender, _receiver);
     } catch (e) {
+      // A desktop that only serves its shell over a stream never registers
+      // this procedure, and reconnecting won't change that.
+      unsupported = e.toString().contains('wamp.error.no_such_procedure');
       // Mirrors what a real ssh client prints on a dropped connection —
       // a clean disconnect notice, not a raw exception dump.
-      if (!_disposed) terminal.write('\r\nConnection to ${config.desktopName} closed.\r\n');
+      if (!_disposed && !unsupported) terminal.write('\r\nConnection to ${config.desktopName} closed.\r\n');
       _log('shell stream error=$e');
     } finally {
       _running = false;
       _cleanup();
       final exiting = _disposed || _shellExited || !_usesSharedConnection;
       _log('shell stream finished disposed=$_disposed shellExited=$_shellExited exiting=$exiting');
-      if (exiting) {
+      if (unsupported) {
+        onError?.call(const TerminalTabException('The terminal is not available over this connection.'));
+      } else if (exiting) {
         onClosed?.call();
         _fireExit();
       } else {

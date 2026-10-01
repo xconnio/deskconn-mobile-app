@@ -80,6 +80,13 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     super.dispose();
   }
 
+  // The machines screen can swap this desktop's connection (Retry P2P / Use
+  // Routed) and pop straight back here, so the status is re-read on return.
+  Future<void> _openMachines() async {
+    await switchMachine(context, currentRealm: _realm);
+    if (mounted) unawaited(_probeDesktopConnection());
+  }
+
   void _handleConnectivityChanged() {
     if (!mounted) return;
     if (!ConnectivityService().hasConnection) {
@@ -249,7 +256,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                 ),
                 _DesktopNavBar(
                   onWallpaper: wallpaper != null,
-                  onMachineTap: () => switchMachine(context, currentRealm: _realm),
+                  onMachineTap: _openMachines,
                   onWindowsTap: () {},
                   onSettingsTap: () =>
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
@@ -311,7 +318,7 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                     appsEnabled: terminalEnabled,
                     connectionStatusLabel: _connectionStatusLabel,
                     connectionStatusColor: _connectionStatusColor(context),
-                    onMachineTap: () => switchMachine(context, currentRealm: _realm),
+                    onMachineTap: _openMachines,
                     onProfileTap: () =>
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
                     onOpen: (kind, {category}) {

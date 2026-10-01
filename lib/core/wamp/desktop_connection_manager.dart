@@ -456,6 +456,35 @@ class _PendingRemoteCandidate {
   const _PendingRemoteCandidate(this.requestID, this.candidate);
 }
 
+// flutter_webrtc's desktop plugin (Windows and Linux) never passes a data
+// channel's protocol on -- every channel goes out as "sctp" -- so the agent
+// can't recognise the WAMP channel by its subprotocol the way it does for
+// mobile, and treats it as a raw file-stream channel instead. There the
+// channel has to announce itself with a RawSocket-style handshake.
+bool get _wampChannelNeedsHandshake => !kIsWeb && (Platform.isWindows || Platform.isLinux);
+
+const int _rawSocketMagic = 0x7F;
+const int _rawSocketCborSerializer = 3;
+// Magic, then max message size (2^20, as an exponent above 2^9) and serializer.
+const List<int> _wampChannelHandshakeBytes = [_rawSocketMagic, (11 << 4) | _rawSocketCborSerializer, 0, 0];
+
+Future<void> _wampChannelHandshake(RTCDataChannel channel) async {
+  final response = Completer<Uint8List>();
+  channel.onMessage = (RTCDataChannelMessage message) {
+    if (!response.isCompleted) response.complete(message.binary);
+  };
+  await channel.send(RTCDataChannelMessage.fromBinary(Uint8List.fromList(_wampChannelHandshakeBytes)));
+
+  const timeout = Duration(seconds: 10);
+  final reply = await response.future.timeout(
+    timeout,
+    onTimeout: () => throw TimeoutException('WAMP channel handshake did not complete', timeout),
+  );
+  if (reply.length != 4 || reply[0] != _rawSocketMagic || reply[1] & 0x0F != _rawSocketCborSerializer) {
+    throw Exception('invalid WAMP channel handshake response');
+  }
+}
+
 Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config) async {
   config.validate();
 
@@ -534,6 +563,7 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     offerer.startICETrickle(config.session, offerConfig.topicAnswererOnCandidate, requestID);
     await offerer.handleAnswer(offerResponse.answer);
     final channel = await offerer.waitReady();
+    if (_wampChannelNeedsHandshake) await _wampChannelHandshake(channel);
 
     final webRtcSession = web_rtc.WebRTCSession(
       connection: offerer.connection!,
