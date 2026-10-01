@@ -18,6 +18,14 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="connectedDevice"
             tools:replace="android:foregroundServiceType" />
+        <service
+            android:name=".DeskconnVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
         <receiver
             android:name=".TerminalNotificationActionReceiver"
             android:exported="false" />
