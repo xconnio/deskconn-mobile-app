@@ -9,6 +9,7 @@ import 'package:xconn_webrtc_dart/xconn_webrtc_dart.dart' as web_rtc;
 import 'package:deskconn_mobile_app/core/constants.dart';
 import 'package:deskconn_mobile_app/core/file_explorer/file_explorer_controller.dart';
 import 'package:deskconn_mobile_app/core/network/connectivity_service.dart';
+import 'package:deskconn_mobile_app/core/vpn/vpn_tunnel.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_server.dart';
 import 'package:deskconn_mobile_app/core/wamp/file_stream_service.dart';
 import 'package:deskconn_mobile_app/core/wamp/wamp_client.dart';
@@ -77,6 +78,7 @@ class DesktopConnectionManager {
   final Set<String> _everConnectedRealms = {};
   final Map<String, int> _webRtcFailureCount = {};
   final Set<DesktopConnection> _standaloneConnections = {};
+  final Expando<String> _standaloneRealms = Expando();
 
   final ValueNotifier<bool> isReconnecting = ValueNotifier(false);
 
@@ -234,12 +236,16 @@ class DesktopConnectionManager {
       privateKey: privateKey,
     );
     _standaloneConnections.add(connection);
+    _standaloneRealms[connection] = realm;
     return connection;
   }
 
   Future<void> releaseStandalone(DesktopConnection connection) async {
     _standaloneConnections.remove(connection);
-    await connection.dispose();
+    final disposeFuture = connection.dispose();
+    final realm = _standaloneRealms[connection];
+    if (connection.isP2P && realm != null) _markWebRtcDisposed(realm, disposeFuture);
+    await disposeFuture;
   }
 
   Future<DesktopConnection> _negotiateConnection({
@@ -463,7 +469,12 @@ Future<_WampWebRTCConnection> _connectWampWithWebRTC(web_rtc.ClientConfig config
     ordered: true,
     id: 0,
     topicAnswererOnCandidate: config.topicAnswererOnCandidate,
-    additionalChannels: ['shell', ...fileStreamChannelLabels()],
+    additionalChannels: ['shell', kVpnChannelLabel, ...fileStreamChannelLabels()],
+    channelOptions: {
+      kVpnChannelLabel: RTCDataChannelInit()
+        ..ordered = false
+        ..maxRetransmits = 2,
+    },
   );
 
   offerer.waitReady().ignore();

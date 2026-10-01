@@ -1349,7 +1349,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "13c665eb0958b51fe87ede46ad73784e00be2d3b"
+      resolved-ref: "45853beeb87b673b6378672008411dd1cfd7f159"
       url: "https://github.com/xconnio/xconn-webrtc-dart.git"
     source: git
     version: "1.0.0"

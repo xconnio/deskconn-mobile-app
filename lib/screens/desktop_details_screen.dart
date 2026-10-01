@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -14,6 +15,7 @@ import 'package:deskconn_mobile_app/core/window_manager/desktop_window.dart';
 import 'package:deskconn_mobile_app/screens/account_screen.dart';
 import 'package:deskconn_mobile_app/screens/file_explorer_screen.dart';
 import 'package:deskconn_mobile_app/screens/port_forward_screen.dart';
+import 'package:deskconn_mobile_app/screens/vpn_screen.dart';
 import 'package:deskconn_mobile_app/screens/remote_control_screen.dart';
 import 'package:deskconn_mobile_app/screens/resource_monitor_screen.dart';
 import 'package:deskconn_mobile_app/theme/colors.dart';
@@ -226,6 +228,15 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
                             onWallpaper: wallpaper != null,
                             onTap: () => _openPortForward(context),
                           ),
+                          if (Platform.isAndroid)
+                            _LauncherTile(
+                              icon: Icons.vpn_lock_outlined,
+                              badgeColor: palette.osMint,
+                              title: "VPN",
+                              enabled: terminalEnabled,
+                              onWallpaper: wallpaper != null,
+                              onTap: () => _openVpn(context),
+                            ),
                         ],
                       );
                     },
@@ -583,6 +594,30 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open Port Forwarding: $e")));
+      }
+    }
+  }
+
+  Future<void> _openVpn(BuildContext context) async {
+    final realm = _realm;
+    if (realm == null ||
+        (_connectionStatus != _DesktopConnectionStatus.routed && _connectionStatus != _DesktopConnectionStatus.p2p)) {
+      return;
+    }
+
+    try {
+      final authId = await DeviceIdentity.lastEmail();
+      final privateKey = await DeviceIdentity.privateKey();
+      if (authId == null || privateKey == null) {
+        throw Exception("Missing credentials.");
+      }
+      if (!context.mounted) return;
+
+      final config = _terminalConfig(realm: realm, authId: authId, privateKey: privateKey, status: _connectionStatus);
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => VpnScreen(config: config)));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to open VPN: $e")));
       }
     }
   }

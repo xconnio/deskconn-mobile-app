@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -27,6 +28,9 @@ class MainActivity : FlutterActivity() {
     private val notifChannel = "deskconn/notification"
     private val fileChannel = "deskconn/file"
     private val shareChannel = "deskconn/share"
+    private val vpnPermissionChannel = "deskconn/vpn_permission"
+    private val vpnPermissionRequestId = 1109
+    private var pendingVpnPermission: MethodChannel.Result? = null
     private val channelId = "deskconn_session_v2"
     private val notifId = 1107
     private val storagePermissionRequestId = 1108
@@ -45,7 +49,10 @@ class MainActivity : FlutterActivity() {
             engineReused = true
             return it
         }
-        return FlutterEngine(context.applicationContext).also { cache.put(ENGINE_ID, it) }
+        return FlutterEngine(context.applicationContext).also {
+            cache.put(ENGINE_ID, it)
+            VpnBridge.attach(it, context)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,7 +110,7 @@ class MainActivity : FlutterActivity() {
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         val messenger = flutterEngine.dartExecutor.binaryMessenger
-        for (name in listOf(notifChannel, fileChannel, shareChannel)) {
+        for (name in listOf(notifChannel, fileChannel, shareChannel, vpnPermissionChannel)) {
             MethodChannel(messenger, name).setMethodCallHandler(null)
         }
         super.cleanUpFlutterEngine(flutterEngine)
@@ -152,6 +159,22 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, vpnPermissionChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "prepare") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val intent = VpnService.prepare(this)
+                if (intent == null) {
+                    result.success(true)
+                } else {
+                    pendingVpnPermission?.success(false)
+                    pendingVpnPermission = result
+                    startActivityForResult(intent, vpnPermissionRequestId)
+                }
+            }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -169,6 +192,16 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == vpnPermissionRequestId) {
+            pendingVpnPermission?.success(resultCode == RESULT_OK)
+            pendingVpnPermission = null
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onRequestPermissionsResult(
