@@ -1,9 +1,6 @@
 package io.xconn.deskconn
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -16,7 +13,6 @@ import android.os.Environment
 import android.provider.OpenableColumns
 import android.provider.MediaStore
 import android.util.Patterns
-import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -31,7 +27,6 @@ class MainActivity : FlutterActivity() {
     private val vpnPermissionChannel = "deskconn/vpn_permission"
     private val vpnPermissionRequestId = 1109
     private var pendingVpnPermission: MethodChannel.Result? = null
-    private val channelId = "deskconn_session_v2"
     private val notifId = 1107
     private val storagePermissionRequestId = 1108
     private var pendingSharedFiles: List<Map<String, Any?>> = emptyList()
@@ -58,6 +53,10 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel()
+        try {
+            startService(Intent(this, TaskRemovedService::class.java))
+        } catch (e: IllegalStateException) {
+        }
         pendingSharedFiles = extractSharedFiles(intent)
         launchedForShareOnly = pendingSharedFiles.isNotEmpty()
         if (engineReused) setFrameworkHandlesBack(true)
@@ -414,64 +413,18 @@ class MainActivity : FlutterActivity() {
         else -> "application/octet-stream"
     }
 
-    private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            try {
-                nm.deleteNotificationChannel("deskconn_session")
-            } catch (e: Exception) {
-                // Ignore
-            }
-            if (nm.getNotificationChannel(channelId) == null) {
-                nm.createNotificationChannel(
-                    NotificationChannel(channelId, "Deskconn", NotificationManager.IMPORTANCE_LOW)
-                        .apply {
-                            setShowBadge(false)
-                            setSound(null, null)
-                            enableVibration(false)
-                            enableLights(false)
-                        }
-                )
-            }
-        }
-    }
+    private fun ensureNotificationChannel() = AppNotification.ensureChannel(this)
 
     private fun showNotification() {
-        ensureNotificationChannel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notifId)
         }
-        val closePi = PendingIntent.getBroadcast(
-            this, 0,
-            Intent(this, TerminalNotificationActionReceiver::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val openIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val openPi = PendingIntent.getActivity(
-            this, 0, openIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val n = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_bg_service_small)
-            .setContentTitle("Deskconn")
-            .setContentText("Deskconn is running")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .setSilent(true)
-            .setContentIntent(openPi)
-            .addAction(0, "Close", closePi)
-            .build()
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(notifId, n)
+        AppNotification.show(this)
     }
 
-    private fun hideNotification() {
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-    }
+    private fun hideNotification() = AppNotification.hide(this)
 
     companion object {
         const val ENGINE_ID = "deskconn_main"

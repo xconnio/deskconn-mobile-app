@@ -29,6 +29,13 @@
         <receiver
             android:name=".TerminalNotificationActionReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".NotificationDismissedReceiver"
+            android:exported="false" />
+        <service
+            android:name=".TaskRemovedService"
+            android:exported="false"
+            android:stopWithTask="false" />
 
         <activity
             android:name=".MainActivity"
