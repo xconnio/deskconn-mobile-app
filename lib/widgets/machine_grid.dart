@@ -218,9 +218,6 @@ class _MachineGridState extends State<MachineGrid> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
-    // Matches deskconn-web-app's OverviewGrid: fixed 220px tiles that wrap to
-    // however many columns fit, instead of stretching to fill a wide window.
-    // Mobile keeps its existing fixed 2-up grid.
     final gridDelegate = isDesktopLayout(context)
         ? const SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 220,
@@ -362,7 +359,11 @@ class _MachineCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (wallpaperBytes != null)
-                      Image.memory(wallpaperBytes, fit: BoxFit.cover)
+                      Image.memory(
+                        wallpaperBytes,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Center(child: Icon(Icons.computer, size: 46, color: palette.subtle)),
+                      )
                     else
                       Center(child: Icon(Icons.computer, size: 46, color: palette.subtle)),
                     Positioned(

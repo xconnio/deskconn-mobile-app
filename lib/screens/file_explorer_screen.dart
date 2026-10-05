@@ -31,10 +31,6 @@ class FileExplorerScreen extends StatefulWidget {
   final String? initialPath;
   final String? initialOpenFile;
   final String? category;
-  // When embedded as a FloatingWindow's content on desktop, this widget
-  // isn't a pushed route of its own — an actual Navigator pop (the mobile
-  // "leave the screen" behavior) would instead pop the enclosing desktop
-  // session route. onRequestClose closes the window instead.
   final bool embedded;
   final VoidCallback? onRequestClose;
 
@@ -233,7 +229,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       _log('browse path=$path category=$category');
       final FileBrowseResult result;
       if (category == 'documents') {
-        // Web app merges these three categories for the 'Documents' view
         final results = await Future.wait([
           _controller!.index('pdfs'),
           _controller!.index('texts'),
@@ -243,11 +238,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         final allEntries = <FileEntry>[];
         for (final res in results) {
           allEntries.addAll(res.entries);
-          // Assuming FileBrowseResult might have a status field in the future,
-          // for now we just merge entries.
         }
 
-        // Sort by mtime descending (newest first) to match web app
         allEntries.sort((a, b) => b.mtime.compareTo(a.mtime));
 
         result = FileBrowseResult(path: 'cat:documents', homePath: '/', entries: allEntries);
@@ -276,11 +268,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         });
         return;
       }
-      // isConnected() can keep reporting true even after the session's read
-      // loop has died (a known issue in the underlying WAMP client), so a
-      // call that timed out is treated as just as dead as a closed session —
-      // otherwise every retry on this realm keeps reusing the same zombie
-      // session and timing out forever.
       final sessionAlive = (_controller?.session.isConnected() ?? false) && e is! TimeoutException;
       if (!sessionAlive) {
         _log('session lost during browse path=$path error=$e');
@@ -651,10 +638,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     final showSidebar = isDesktopLayout(context);
 
     return AppBar(
-      // A Scaffold.drawer makes AppBar default `leading` to the drawer's
-      // hamburger icon instead of a back arrow — on desktop that silently
-      // swallows the only way back to the launcher (mobile has no drawer
-      // here, so it never hits this).
       leading: const BackButton(),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [
@@ -1413,9 +1396,6 @@ class _LoadMoreIndicator extends StatelessWidget {
   }
 }
 
-/// Save [bytes] to the public Downloads folder via the native MediaStore API
-/// (Android 10+) or direct file write (Android 9). Falls back to app-specific
-/// external storage if the native channel fails.
 Future<String> saveToDevice(String filename, Uint8List bytes) async {
   try {
     final path = await const MethodChannel(
@@ -1423,7 +1403,6 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
     ).invokeMethod<String>('saveToDownloads', {'filename': filename, 'bytes': bytes});
     return path ?? 'Downloads/$filename';
   } catch (_) {
-    // Fallback: app-specific external storage
     Directory? base;
     try {
       base = await getExternalStorageDirectory();
@@ -1448,9 +1427,6 @@ Future<String> saveToDevice(String filename, Uint8List bytes) async {
   }
 }
 
-// Downloads bytes are cached to a temp file since the OS share sheet needs a
-// real file path, not raw bytes; the temp copy is cleaned up once the share
-// sheet is dismissed.
 Future<void> shareFileBytes(String filename, Uint8List bytes) async {
   final tempDir = await getTemporaryDirectory();
   final tempFile = File('${tempDir.path}/$filename');
@@ -1462,7 +1438,6 @@ Future<void> shareFileBytes(String filename, Uint8List bytes) async {
   }
 }
 
-/// Same as [shareFileBytes] but for multiple files in a single share sheet.
 Future<void> shareFileBytesList(List<(String, Uint8List)> files) async {
   final tempDir = await getTemporaryDirectory();
   final tempFiles = <File>[];
@@ -2176,7 +2151,13 @@ class _PreviewBodyState extends State<_PreviewBody> {
       if (mode == 'text') return _TextPreview(data: data);
       if (mode == 'image') {
         return _ZoomableImage(
-          child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
+          child: SizedBox.expand(
+            child: Image.memory(
+              data,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined, size: 48)),
+            ),
+          ),
         );
       }
       if (mode == 'pdf') return _PdfPreview(data: data);
@@ -2184,7 +2165,13 @@ class _PreviewBodyState extends State<_PreviewBody> {
 
     if (kImageExts.contains(ext)) {
       return _ZoomableImage(
-        child: SizedBox.expand(child: Image.memory(data, fit: BoxFit.contain)),
+        child: SizedBox.expand(
+          child: Image.memory(
+            data,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined, size: 48)),
+          ),
+        ),
       );
     }
     if (ext == 'svg') {
@@ -2845,7 +2832,12 @@ class _MediaListTile extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (thumbnail != null)
-                  Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+                  Image.memory(
+                    thumbnail,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  )
                 else
                   Center(
                     child: Icon(
@@ -2939,7 +2931,12 @@ class _MediaGalleryTile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (thumbnail != null)
-                Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+                Image.memory(
+                  thumbnail,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                )
               else
                 Center(
                   child: Icon(
@@ -3011,7 +3008,12 @@ class _FileEntryVisual extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               ColoredBox(color: palette.fileTilePlaceholder),
-              Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true),
+              Image.memory(
+                thumbnail,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
               if (isVideo)
                 const Align(
                   alignment: Alignment.center,

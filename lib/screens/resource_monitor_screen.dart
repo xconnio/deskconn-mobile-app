@@ -61,9 +61,6 @@ class ResourceMonitorScreen extends StatelessWidget {
   }
 }
 
-/// Embeddable content for the resource monitor. Used standalone inside
-/// [ResourceMonitorScreen] (mobile full-screen push) and directly as
-/// [DesktopWindowEntry.content] inside a [FloatingWindow] on desktop.
 class ResourceMonitorView extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
   final bool embedded;
@@ -177,11 +174,6 @@ class _ResourceMonitorViewState extends State<ResourceMonitorView> with SingleTi
 
   bool _reconnecting = false;
 
-  // Polling had no onDisconnected hook and never checked isConnected(), so
-  // a mid-session drop just kept re-failing every tick forever with the
-  // same "Request timed out" message until the user backed out and
-  // reopened the screen. Mirrors the reconnect DesktopConnectionManager
-  // already does the acquire() half of in _initialize().
   Future<void> _reconnect() async {
     if (_reconnecting) return;
     if (!ConnectivityService().hasConnection) {
@@ -512,6 +504,7 @@ class _ResourceMonitorViewState extends State<ResourceMonitorView> with SingleTi
           leading: CircleAvatar(
             backgroundColor: DeskconnPalette.of(context).surfaceTint,
             backgroundImage: iconBytes != null ? MemoryImage(iconBytes) : null,
+            onBackgroundImageError: iconBytes != null ? (_, _) {} : null,
             child: iconBytes == null ? const Icon(Icons.apps, size: 18) : null,
           ),
           title: Text(app.name, maxLines: 1, overflow: TextOverflow.ellipsis),
