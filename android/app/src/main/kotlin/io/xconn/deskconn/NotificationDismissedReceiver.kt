@@ -4,8 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
-class TerminalNotificationActionReceiver : BroadcastReceiver() {
+class NotificationDismissedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        AppShutdown.shutdown(context)
+        AppNotification.show(context)
     }
 }
