@@ -1340,7 +1340,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "4d1837190d2e0c38659e9636caa5dff830ad9000"
+      resolved-ref: "681f1b8e070942e3279fa2b3e0a405f4603d6515"
       url: "https://github.com/xconnio/xconn-dart"
     source: git
     version: "0.1.0"
