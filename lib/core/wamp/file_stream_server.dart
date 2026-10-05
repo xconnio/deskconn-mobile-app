@@ -22,19 +22,6 @@ class _StreamSession {
   final String mimeType;
 }
 
-// A loopback-only HTTP server that lets video_player/audioplayers (which need
-// a URL, not a raw data channel) play a desktop file progressively: each
-// distinct HTTP Range request is mapped straight to its own
-// FileStreamService.openRange WebRTC read and streamed through as chunks
-// arrive — no local buffering or ordering assumption, so an out-of-order
-// probe (e.g. a player reading a trailing MP4 "moov" atom before the start
-// of the file) is served on its own, not stuck behind a sequential
-// from-byte-zero download. Mirrors the web app's fileStream.ts, which opens
-// one data channel per range request for the same reason; this is safe here
-// because every channel it might need is pre-negotiated at connect time (see
-// desktop_connection_manager.dart's OfferConfig.additionalChannels), which is
-// also why the number of ranges a single connection can serve is capped at
-// kFileStreamChannelPoolSize.
 class FileStreamServer {
   FileStreamServer(this._service);
 
@@ -112,9 +99,14 @@ class FileStreamServer {
       }
     } catch (e) {
       debugPrint('[FileStreamServer] range read failed: $e');
-      request.response.statusCode = HttpStatus.internalServerError;
+      try {
+        request.response.statusCode = HttpStatus.internalServerError;
+        request.response.headers.contentLength = 0;
+      } catch (_) {}
     } finally {
-      await request.response.close();
+      try {
+        await request.response.close();
+      } catch (_) {}
     }
   }
 
