@@ -139,7 +139,7 @@ void main() {
       expect(disconnects, 1);
     });
 
-    test('without the adapter the close leaks as an uncaught error and the session looks alive', () async {
+    test('marks the session disconnected when the channel closes without the adapter', () async {
       final inner = _FakePeer();
       var disconnects = 0;
       late Session session;
@@ -153,9 +153,9 @@ void main() {
         await _settle();
       });
 
-      expect(errors, [isA<web_rtc.WebRTCPeerClosedException>()]);
-      expect(session.isConnected(), isTrue);
-      expect(disconnects, 0);
+      expect(errors, isEmpty);
+      expect(session.isConnected(), isFalse);
+      expect(disconnects, 1);
     });
   });
 }
