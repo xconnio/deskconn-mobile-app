@@ -141,11 +141,6 @@ class RemoteControlScreen extends StatelessWidget {
   }
 }
 
-/// Embeddable content for a connected desktop's remote-control panel. Used
-/// standalone inside [RemoteControlScreen] (mobile full-screen push) and
-/// directly as [DesktopWindowEntry.content] inside a [FloatingWindow] on
-/// desktop, where the window's titlebar already supplies the icon/title/close
-/// chrome, so this widget never needs to render its own.
 class RemoteControlView extends StatefulWidget {
   final DesktopSessionLaunchConfig config;
   final bool embedded;
@@ -184,10 +179,6 @@ class _RemoteControlViewState extends State<RemoteControlView> {
 
   Session? get _session => DesktopConnectionManager().get(widget.config.realm)?.session;
 
-  // The cached session goes null forever once the connection dies mid-screen
-  // (no reconnect hook here previously), so every action after that point
-  // failed immediately against a stale null instead of trying to reacquire
-  // the connection first, the way DesktopConnectionManager's own callers do.
   Future<Session?> _ensureSession() async {
     final cached = _session;
     if (cached != null) return cached;
@@ -208,9 +199,6 @@ class _RemoteControlViewState extends State<RemoteControlView> {
     }
   }
 
-  // User-initiated actions were previously calling _session?.call(...) and
-  // silently doing nothing when the connection was gone — no feedback at
-  // all. This routes them through one place that reports the failure.
   Future<void> _run(Future<void> Function(Session session) action) async {
     final session = await _ensureSession();
     if (session == null) {
@@ -220,11 +208,6 @@ class _RemoteControlViewState extends State<RemoteControlView> {
     try {
       await action(session);
     } catch (_) {
-      // DesktopConnectionManager doesn't always evict a dead connection
-      // right away (WebRTC's own failure detection can take well over a
-      // minute) — without releasing here, _ensureSession() keeps handing
-      // back the same stale session and every action fails silently until
-      // something else happens to evict it.
       await _releaseStaleSession();
       if (mounted) _showOffline();
     }
@@ -381,10 +364,7 @@ class _RemoteControlViewState extends State<RemoteControlView> {
     setState(() => _mprisBusy = true);
     try {
       await session.call(proc, args: playerName == null ? null : [playerName]).timeout(DeskconnConfig.callTimeout);
-    } catch (_) {
-      // MPRIS players can reject rapid or unsupported commands. Keep media
-      // controls quiet and let the scheduled refresh settle the UI.
-    }
+    } catch (_) {}
     _refreshPlayersAfterMprisAction();
   }
 
@@ -477,8 +457,6 @@ class _RemoteControlViewState extends State<RemoteControlView> {
       children: [
         if (_reconnecting) const LinearProgressIndicator(minHeight: 2),
         Expanded(child: _buildBody(context)),
-        // The dock already shows connection status + machine name on
-        // desktop, so this would just duplicate it inside the window.
         if (!widget.embedded)
           SafeArea(
             top: false,
@@ -653,13 +631,23 @@ class _ArtThumbnail extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: bytes == null
-          ? Container(
+          ? _placeholder(context)
+          : Image.memory(
+              bytes,
               width: 48,
               height: 48,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.primary),
-            )
-          : Image.memory(bytes, width: 48, height: 48, fit: BoxFit.cover),
+              fit: BoxFit.cover,
+              errorBuilder: (context, _, _) => _placeholder(context),
+            ),
+    );
+  }
+
+  Widget _placeholder(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.primary),
     );
   }
 }
@@ -777,7 +765,13 @@ class _ScreenshotPreviewScreenState extends State<_ScreenshotPreviewScreen> {
       body: InteractiveViewer(
         minScale: 1,
         maxScale: 5,
-        child: SizedBox.expand(child: Image.memory(widget.bytes, fit: BoxFit.contain)),
+        child: SizedBox.expand(
+          child: Image.memory(
+            widget.bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined, size: 48)),
+          ),
+        ),
       ),
     );
   }

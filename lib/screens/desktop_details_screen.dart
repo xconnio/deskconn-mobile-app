@@ -80,8 +80,6 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
     super.dispose();
   }
 
-  // The machines screen can swap this desktop's connection (Retry P2P / Use
-  // Routed) and pop straight back here, so the status is re-read on return.
   Future<void> _openMachines() async {
     await switchMachine(context, currentRealm: _realm);
     if (mounted) unawaited(_probeDesktopConnection());
@@ -152,7 +150,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         fit: StackFit.expand,
         children: [
           wallpaper != null
-              ? Image.memory(wallpaper, fit: BoxFit.cover)
+              ? Image.memory(
+                  wallpaper,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(color: Theme.of(context).scaffoldBackgroundColor),
+                )
               : Container(color: Theme.of(context).scaffoldBackgroundColor),
           if (wallpaper != null) Container(color: Colors.black.withValues(alpha: 0.25)),
           SafeArea(
@@ -275,7 +277,11 @@ class _DesktopDetailsScreenState extends State<DesktopDetailsScreen> {
         fit: StackFit.expand,
         children: [
           wallpaper != null
-              ? Image.memory(wallpaper, fit: BoxFit.cover)
+              ? Image.memory(
+                  wallpaper,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(color: Theme.of(context).scaffoldBackgroundColor),
+                )
               : Container(color: Theme.of(context).scaffoldBackgroundColor),
           if (wallpaper != null) Container(color: Colors.black.withValues(alpha: 0.25)),
           SafeArea(
