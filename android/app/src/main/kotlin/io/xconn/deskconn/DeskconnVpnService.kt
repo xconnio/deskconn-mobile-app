@@ -1,10 +1,13 @@
 package io.xconn.deskconn
 
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
@@ -15,6 +18,8 @@ class DeskconnVpnService : VpnService() {
     private class StartRequest(val address: String, val prefix: Int, val mtu: Int, val done: (String?) -> Unit)
 
     companion object {
+        private const val NOTIFICATION_ID = 1110
+
         @Volatile
         private var pending: StartRequest? = null
 
@@ -56,6 +61,7 @@ class DeskconnVpnService : VpnService() {
             writer = Executors.newSingleThreadExecutor()
             running = this
             startReader(fd)
+            showNotification()
             request.done(null)
         } catch (e: Exception) {
             closeTunnel()
@@ -100,7 +106,29 @@ class DeskconnVpnService : VpnService() {
         }
     }
 
+    private fun showNotification() {
+        AppNotification.ensureChannel(this)
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openPi = PendingIntent.getActivity(
+            this, 2, openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val n = NotificationCompat.Builder(this, AppNotification.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_bg_service_small)
+            .setContentTitle("Deskconn VPN")
+            .setContentText("VPN connected")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setSilent(true)
+            .setContentIntent(openPi)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, n)
+    }
+
     private fun closeTunnel() {
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
         if (running === this) running = null
         reader?.interrupt()
         reader = null
