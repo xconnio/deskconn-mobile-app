@@ -635,7 +635,7 @@ class _TerminalPaneState extends State<TerminalPane> with WidgetsBindingObserver
               child: Column(
                 children: [
                   Expanded(child: _terminalArea()),
-                  Toolbar(controller: widget.controller, onPaste: _pasteFromClipboard),
+                  Toolbar(controller: widget.controller),
                 ],
               ),
             ),

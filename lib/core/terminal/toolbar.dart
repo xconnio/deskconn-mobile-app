@@ -3,9 +3,8 @@ import 'package:flutter/services.dart';
 
 class Toolbar extends StatefulWidget {
   final dynamic controller;
-  final VoidCallback? onPaste;
 
-  const Toolbar({super.key, required this.controller, this.onPaste});
+  const Toolbar({super.key, required this.controller});
 
   @override
   State<Toolbar> createState() => _ToolbarState();
@@ -31,7 +30,6 @@ class _ToolbarState extends State<Toolbar> {
 
   @override
   Widget build(BuildContext context) {
-    final onPaste = widget.onPaste;
     return Container(
       color: Colors.black,
       child: Row(
@@ -73,15 +71,6 @@ class _ToolbarState extends State<Toolbar> {
               ],
             ),
           ),
-          if (onPaste != null)
-            SizedBox(
-              width: 48,
-              child: Semantics(
-                label: 'Paste',
-                button: true,
-                child: _KeyButton(icon: Icons.content_paste, onTap: onPaste),
-              ),
-            ),
         ],
       ),
     );
@@ -89,13 +78,11 @@ class _ToolbarState extends State<Toolbar> {
 }
 
 class _KeyButton extends StatefulWidget {
-  final String? label;
-  final IconData? icon;
+  final String label;
   final VoidCallback onTap;
   final bool active;
 
-  const _KeyButton({this.label, this.icon, required this.onTap, this.active = false})
-    : assert(label != null || icon != null, 'A key needs a label or an icon.');
+  const _KeyButton({required this.label, required this.onTap, this.active = false});
 
   @override
   State<_KeyButton> createState() => _KeyButtonState();
@@ -113,7 +100,6 @@ class _KeyButtonState extends State<_KeyButton> {
 
   @override
   Widget build(BuildContext context) {
-    final icon = widget.icon;
     return GestureDetector(
       onTapDown: (_) {
         HapticFeedback.selectionClick();
@@ -130,9 +116,7 @@ class _KeyButtonState extends State<_KeyButton> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(color: _bgColor, borderRadius: BorderRadius.circular(6)),
         child: Center(
-          child: icon != null
-              ? Icon(icon, size: 16, color: _textColor)
-              : Text(widget.label!, style: TextStyle(color: _textColor, fontSize: 13)),
+          child: Text(widget.label, style: TextStyle(color: _textColor, fontSize: 13)),
         ),
       ),
     );
