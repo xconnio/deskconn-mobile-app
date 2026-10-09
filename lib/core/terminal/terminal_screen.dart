@@ -205,6 +205,7 @@ class _TerminalTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeTab = tabs.firstWhere((t) => t.id == activeId, orElse: () => tabs.first);
     return Container(
       height: 44,
       color: Colors.black,
@@ -212,19 +213,14 @@ class _TerminalTabBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: tabs.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final tab = tabs[index];
-                return _TabChip(
-                  title: tab.title,
-                  active: tab.id == activeId,
-                  onSelect: () => onSelect(tab.id),
-                  onClose: () => onClose(tab.id),
-                );
-              },
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _TabChip(
+                title: activeTab.title,
+                active: true,
+                onSelect: () => onSelect(activeTab.id),
+                onClose: () => onClose(activeTab.id),
+              ),
             ),
           ),
           SizedBox(
